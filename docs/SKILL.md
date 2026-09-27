@@ -1,4 +1,4 @@
-# SKILL.md — TimeGuard SaaS (Workfolio-Clone) — Full Rewrite Edition
+# SKILL.md — Smart Employee Tracker — Full Architecture Edition
 > **Read this file completely before touching any code in this repo.**
 > Every other file implements a piece of what is described here.
 > This document is the source of truth for product, architecture, data model,
@@ -10,8 +10,8 @@
 
 ## 0. What this Product Is
 
-**TimeGuard** is a multi-tenant SaaS for employee time tracking, attendance,
-and productivity monitoring — feature-equivalent to **getworkfolio.com**.
+**Smart Employee Tracker** is an enterprise multi-tenant SaaS for employee time tracking, attendance,
+and productivity monitoring created by **Rsm Monaem** (https://www.linkedin.com/in/rsm-monaem/).
 
 Core feature set:
 - **Clock-in / Clock-out / Breaks** (attendance)
@@ -71,7 +71,7 @@ handler injects `tenant_id` from the JWT claim, never from a request body.
 ## 3. Monorepo Layout
 
 ```
-workfolio-clone/
+smart-employee-tracker/
 ├── Cargo.toml                   ← Cargo workspace root
 ├── package.json                 ← npm workspace root
 ├── .env.example                 ← all secrets listed here, never commit .env

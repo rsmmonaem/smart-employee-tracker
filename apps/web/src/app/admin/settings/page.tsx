@@ -77,7 +77,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 min-h-[calc(100vh-8rem)]">
-      {/* Settings Sub-Sidebar matching Workfolio design */}
+      {/* Settings Sub-Sidebar matching Smart Employee Tracker design */}
       <aside className="w-full lg:w-64 flex-shrink-0">
         <div className="rounded-xl border border-gray-200/80 bg-white shadow-xs dark:border-gray-800 dark:bg-gray-900 overflow-hidden sticky top-6">
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">

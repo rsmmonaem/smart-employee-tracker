@@ -19,8 +19,8 @@ export async function GET(req: Request) {
       const config = await PaymentGatewayService.getGatewayConfig('eps')
       const eps = new EpsClient(
         {
-          merchantId: config.credentials?.merchantId || 'EPS_M_WORKFOLIO_9921',
-          storeId: config.credentials?.storeId || 'WF_CLOUD_STORE_01',
+          merchantId: config.credentials?.merchantId || 'EPS_M_SMARTTRACKER_9921',
+          storeId: config.credentials?.storeId || 'SET_CLOUD_STORE_01',
           apiKey: config.credentials?.apiKey || 'eps_live_sec_8192a8b9c10',
           webhookSecret: config.credentials?.webhookSecret,
         },

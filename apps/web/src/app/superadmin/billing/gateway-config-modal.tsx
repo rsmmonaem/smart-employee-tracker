@@ -66,15 +66,15 @@ function GatewayConfigModalContent({
   const [credentials, setCredentials] = useState<Record<string, string>>({
     appKey: gateway.credentials?.appKey || 'bk_live_app_9a8f21908b',
     appSecret: gateway.credentials?.appSecret || 'sk_live_sec_88921a8b9',
-    username: gateway.credentials?.username || 'workfolio_mfs',
+    username: gateway.credentials?.username || 'smarttracker_mfs',
     password: gateway.credentials?.password || '••••••••••••••••',
     merchantShortCode: gateway.credentials?.merchantShortCode || '01713000000',
-    merchantId: gateway.credentials?.merchantId || 'EPS_M_WORKFOLIO_9921',
-    storeId: gateway.credentials?.storeId || 'WF_CLOUD_STORE_01',
+    merchantId: gateway.credentials?.merchantId || 'EPS_M_SMARTTRACKER_9921',
+    storeId: gateway.credentials?.storeId || 'SET_CLOUD_STORE_01',
     apiKey: gateway.credentials?.apiKey || 'eps_live_sec_8192a8b9c10',
     webhookSecret: gateway.credentials?.webhookSecret || 'whsec_8912891289128',
-    publishableKey: gateway.credentials?.publishableKey || 'pk_live_51M081WFCLOUD9281a',
-    secretKey: gateway.credentials?.secretKey || 'sk_live_51M081WFCLOUDsec8912',
+    publishableKey: gateway.credentials?.publishableKey || 'pk_live_51M081SETCLOUD9281a',
+    secretKey: gateway.credentials?.secretKey || 'sk_live_51M081SETCLOUDsec8912',
     ...(gateway.credentials || {}),
   })
 

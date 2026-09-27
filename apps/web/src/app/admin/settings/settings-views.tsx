@@ -711,7 +711,7 @@ export function ManageEmployeesView({ members: initialMembers }: { members: Empl
                 <input
                   type="email"
                   required
-                  placeholder="e.g. alex@workfolio.io"
+                  placeholder="e.g. alex@smartemployeetracker.com"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"

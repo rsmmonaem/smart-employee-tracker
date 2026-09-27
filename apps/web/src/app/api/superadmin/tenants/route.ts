@@ -62,7 +62,7 @@ export async function POST(req: Request) {
 
     const supabase = createAdminClient()
 
-    // Determine quotas based on Workfolio package specs
+    // Determine quotas based on Smart Employee Tracker package specs
     let storage_quota_mb = 10000 // 10 GB for basic
     let screenshot_interval_sec = 600 // 10 min for basic
     let retention_days = 14 // 14 days for basic

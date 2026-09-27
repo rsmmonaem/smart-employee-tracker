@@ -29,7 +29,7 @@ export const DEFAULT_GATEWAY_CONFIGS: Record<string, GatewayRecord> = {
     credentials: {
       appKey: 'bk_live_app_9a8f21908b',
       appSecret: 'sk_live_sec_88921a8b9',
-      username: 'workfolio_mfs',
+      username: 'smarttracker_mfs',
       password: '••••••••••••••••',
       merchantShortCode: '01713000000',
     },
@@ -45,8 +45,8 @@ export const DEFAULT_GATEWAY_CONFIGS: Record<string, GatewayRecord> = {
     currency: 'BDT (৳)',
     primary: false,
     credentials: {
-      merchantId: 'EPS_M_WORKFOLIO_9921',
-      storeId: 'WF_CLOUD_STORE_01',
+      merchantId: 'EPS_M_SMARTTRACKER_9921',
+      storeId: 'SET_CLOUD_STORE_01',
       apiKey: 'eps_live_sec_8192a8b9c10',
       webhookSecret: 'whsec_8912891289128',
       returnUrl: 'http://localhost:3000/api/billing/eps/callback',
@@ -184,8 +184,8 @@ export class PaymentGatewayService {
     if (gatewayId === 'eps') {
       const client = new EpsClient(
         {
-          merchantId: config.credentials?.merchantId || 'EPS_M_WORKFOLIO_9921',
-          storeId: config.credentials?.storeId || 'WF_CLOUD_STORE_01',
+          merchantId: config.credentials?.merchantId || 'EPS_M_SMARTTRACKER_9921',
+          storeId: config.credentials?.storeId || 'SET_CLOUD_STORE_01',
           apiKey: config.credentials?.apiKey || 'eps_live_sec_8192a8b9c10',
           webhookSecret: config.credentials?.webhookSecret,
         },

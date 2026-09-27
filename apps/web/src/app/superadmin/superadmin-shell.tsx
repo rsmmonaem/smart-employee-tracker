@@ -167,7 +167,7 @@ export default function SuperAdminShell({
           <div className="flex items-center space-x-4 text-xs">
             <div className="flex items-center gap-2 text-gray-300 bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-700/60">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
-              <span>{userEmail || 'superadmin@getworkfolio.com'}</span>
+              <span>{userEmail || 'superadmin@smartemployeetracker.com'}</span>
             </div>
           </div>
         </header>

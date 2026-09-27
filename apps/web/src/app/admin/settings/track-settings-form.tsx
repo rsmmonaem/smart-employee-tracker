@@ -757,9 +757,7 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
               Premium
             </span>
             <a
-              href="https://workfolio.tawk.help/article/keyboard-mouse-activity-tracking"
-              target="_blank"
-              rel="noreferrer"
+              href="#activity-tracking-docs"
               className="text-[11px] text-blue-600 hover:underline dark:text-blue-400 inline-flex items-center gap-0.5 ml-1"
             >
               (Learn more)

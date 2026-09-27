@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 const DEFAULT_TENANT_ID = '7d91b2a1-c727-4f50-83ec-4fdb9debebd3'
 
-// Pre-seeded standard apps and domains to guarantee a rich initial directory matching Workfolio screenshot
+// Pre-seeded standard apps and domains to guarantee a rich initial directory matching Smart Employee Tracker interface
 const SEED_APPS = [
   { name: 'Antigravity', type: 'APP', defaultClassification: 'PRODUCTIVE' },
   { name: 'Visual Studio Code', type: 'APP', defaultClassification: 'PRODUCTIVE' },

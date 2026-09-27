@@ -98,7 +98,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. john@workfolio.io"
+              placeholder="e.g. john@smartemployeetracker.com"
               className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
             />
           </div>

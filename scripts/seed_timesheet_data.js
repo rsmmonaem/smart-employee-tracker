@@ -17,10 +17,10 @@ async function seedTimesheet() {
   const tenantId = tenant.id;
 
   const usersToEnsure = [
-    { email: 'abdullah@workfolio.io', fullName: 'Abdullah Hossain', role: 'EMPLOYEE' },
-    { email: 'avijit@workfolio.io', fullName: 'Avijit Barua', role: 'EMPLOYEE' },
-    { email: 'farhan@workfolio.io', fullName: 'Farhan Jarif Nibir', role: 'EMPLOYEE' },
-    { email: 'tawhidul@workfolio.io', fullName: 'Tawhidul Islam', role: 'EMPLOYEE' },
+    { email: 'abdullah@smartemployeetracker.com', fullName: 'Abdullah Hossain', role: 'EMPLOYEE' },
+    { email: 'avijit@smartemployeetracker.com', fullName: 'Avijit Barua', role: 'EMPLOYEE' },
+    { email: 'farhan@smartemployeetracker.com', fullName: 'Farhan Jarif Nibir', role: 'EMPLOYEE' },
+    { email: 'tawhidul@smartemployeetracker.com', fullName: 'Tawhidul Islam', role: 'EMPLOYEE' },
   ];
 
   const userMap = {};
@@ -74,25 +74,25 @@ async function seedTimesheet() {
   // 4. Insert Yesterday Attendance Sessions (09 Sep, 2026)
   const yesterdaySessions = [
     {
-      email: 'abdullah@workfolio.io',
+      email: 'abdullah@smartemployeetracker.com',
       inTime: '2026-09-09T10:06:00.000Z',
       outTime: '2026-09-09T17:44:00.000Z', // 7h 38m work
       breakSec: 3480, // 58m
     },
     {
-      email: 'avijit@workfolio.io',
+      email: 'avijit@smartemployeetracker.com',
       inTime: '2026-09-09T10:16:00.000Z',
       outTime: '2026-09-09T18:23:00.000Z', // 8h 07m work
       breakSec: 3600, // 1h 00m
     },
     {
-      email: 'farhan@workfolio.io',
+      email: 'farhan@smartemployeetracker.com',
       inTime: '2026-09-09T10:01:00.000Z',
       outTime: '2026-09-09T18:01:00.000Z', // 8h 00m work
       breakSec: 3180, // 53m
     },
     {
-      email: 'tawhidul@workfolio.io',
+      email: 'tawhidul@smartemployeetracker.com',
       inTime: '2026-09-09T10:30:00.000Z',
       outTime: '2026-09-09T19:15:00.000Z', // 8h 45m work
       breakSec: 4500, // 1h 15m

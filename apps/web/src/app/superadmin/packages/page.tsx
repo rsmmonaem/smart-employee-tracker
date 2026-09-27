@@ -138,15 +138,9 @@ export default function SuperAdminPackagesPage() {
               <Package className="w-6 h-6 text-blue-500" />
               <span>SaaS Packages & Pricing</span>
             </h1>
-            <a
-              href="https://www.getworkfolio.com/pricing"
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-blue-950/40 px-2.5 py-1 rounded-full border border-blue-800/50"
-            >
-              <span>Synced with getworkfolio.com/pricing</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            <span className="text-xs text-blue-400 flex items-center gap-1 bg-blue-950/40 px-2.5 py-1 rounded-full border border-blue-800/50">
+              <span>Smart Employee Tracker Packages</span>
+            </span>
           </div>
           <p className="text-xs text-gray-400 mt-1">
             Configure subscription tiers, feature flags, and currency rates across the SaaS platform.

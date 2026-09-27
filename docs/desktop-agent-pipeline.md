@@ -30,7 +30,7 @@ the app/title changes.  Each event records the *previous* window's duration:
 ```rust
 ActivityEvent {
     app_name: "Visual Studio Code",
-    window_title: "main.rs — workfolio-clone",
+    window_title: "main.rs — smart-employee-tracker",
     domain: None,          // Some("github.com") if foreground is a browser
     started_at: prev_ts,
     ended_at: now,

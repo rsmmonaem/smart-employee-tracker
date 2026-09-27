@@ -51,8 +51,8 @@ interface TeamMemberCardData {
   email?: string
 }
 
-// Workfolio default members matching user screenshot
-const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
+// Smart Employee Tracker default members matching user screenshot
+const DEFAULT_SMART_TRACKER_TEAM: TeamMemberCardData[] = [
   {
     id: 'wf-1',
     name: 'Ajim Ali',
@@ -66,7 +66,7 @@ const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
     statusCategory: 'WORKING',
     cardTheme: 'green',
     role: 'Video Editor',
-    email: 'ajim@workfolio.io',
+    email: 'ajim@smartemployeetracker.com',
   },
   {
     id: 'wf-2',
@@ -81,7 +81,7 @@ const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
     statusCategory: 'NOT_INSTALLED',
     cardTheme: 'yellow',
     role: 'Designer',
-    email: 'foyz.desk@workfolio.io',
+    email: 'foyz.desk@smartemployeetracker.com',
   },
   {
     id: 'wf-3',
@@ -96,7 +96,7 @@ const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
     statusCategory: 'STOPPED',
     cardTheme: 'pink',
     role: 'Motion Designer',
-    email: 'foyz@workfolio.io',
+    email: 'foyz@smartemployeetracker.com',
   },
   {
     id: 'wf-4',
@@ -111,7 +111,7 @@ const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
     statusCategory: 'STOPPED',
     cardTheme: 'pink',
     role: 'Lead Editor',
-    email: 'masud@workfolio.io',
+    email: 'masud@smartemployeetracker.com',
   },
   {
     id: 'wf-5',
@@ -126,7 +126,7 @@ const DEFAULT_WORKFOLIO_TEAM: TeamMemberCardData[] = [
     statusCategory: 'NOT_INSTALLED',
     cardTheme: 'yellow',
     role: 'Software Engineer',
-    email: 'munayam@workfolio.io',
+    email: 'munayam@smartemployeetracker.com',
   },
 ]
 
@@ -180,8 +180,8 @@ export default function EmployeesPage() {
     fetchDbEmployees()
   }, [fetchDbEmployees, refreshTrigger])
 
-  // Merge default Workfolio members with any DB records
-  const allTeamCards: TeamMemberCardData[] = DEFAULT_WORKFOLIO_TEAM
+  // Merge default members with any DB records
+  const allTeamCards: TeamMemberCardData[] = DEFAULT_SMART_TRACKER_TEAM
 
   // Filter based on active status pill & search query
   const filteredCards = allTeamCards.filter((card) => {
@@ -372,7 +372,7 @@ export default function EmployeesPage() {
         </div>
 
         {/* ========================================================
-            VIEW MODE 1: WORKFOLIO CARDS GRID (Matches Screenshot)
+            VIEW MODE 1: SMART EMPLOYEE TRACKER CARDS GRID
             ======================================================== */}
         {viewMode === 'CARDS' && (
           <div className="space-y-8">
@@ -592,7 +592,7 @@ export default function EmployeesPage() {
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="sarah@workfolio.io"
+                  placeholder="sarah@smartemployeetracker.com"
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
                 />
               </div>

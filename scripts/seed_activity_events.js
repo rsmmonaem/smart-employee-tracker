@@ -28,7 +28,7 @@ async function seedActivities() {
 
   const rawEvents = [
     // --- ABDULLAH HOSSAIN ---
-    { user: 'abdullah', app: 'Visual Studio Code', win: 'App.tsx — workfolio-clone', class: 'PRODUCTIVE', start: '10:06', end: '10:30' },
+    { user: 'abdullah', app: 'Visual Studio Code', win: 'App.tsx — smart-employee-tracker', class: 'PRODUCTIVE', start: '10:06', end: '10:30' },
     { user: 'abdullah', app: 'System Inactive', win: 'Away from desk', class: 'NEUTRAL', start: '10:30', end: '11:40' },
     { user: 'abdullah', app: 'Google Chrome', win: 'Pull Requests · GitHub', class: 'PRODUCTIVE', start: '11:40', end: '11:58' },
     { user: 'abdullah', app: 'Slack', win: '#general — Standup', class: 'NEUTRAL', start: '11:58', end: '12:15' },
@@ -40,7 +40,7 @@ async function seedActivities() {
     { user: 'abdullah', app: 'Terminal', win: 'cargo run -p timeguard_api', class: 'PRODUCTIVE', start: '15:40', end: '16:25' },
     { user: 'abdullah', app: 'Slack', win: '#tech-discussions', class: 'NEUTRAL', start: '16:40', end: '17:10' },
     { user: 'abdullah', app: 'Visual Studio Code', win: 'App.tsx — desktop agent sync', class: 'PRODUCTIVE', start: '17:10', end: '18:20' },
-    { user: 'abdullah', app: 'GitHub Desktop', win: 'Commit: Workfolio timesheet and timeline', class: 'PRODUCTIVE', start: '18:20', end: '18:58' },
+    { user: 'abdullah', app: 'GitHub Desktop', win: 'Commit: Smart Employee Tracker timesheet and timeline', class: 'PRODUCTIVE', start: '18:20', end: '18:58' },
 
     // --- AVIJIT BARUA ---
     { user: 'avijit', app: 'Slack', win: 'Sprint Standup & Planning', class: 'NEUTRAL', start: '10:16', end: '10:46' },
@@ -57,9 +57,9 @@ async function seedActivities() {
     { user: 'farhan', app: 'Slack', win: 'Sprint Backlog & Tasks', class: 'NEUTRAL', start: '10:01', end: '10:23' },
     { user: 'farhan', app: 'Visual Studio Code', win: 'timesheet/page.tsx', class: 'PRODUCTIVE', start: '10:33', end: '11:08' },
     { user: 'farhan', app: 'Google Chrome', win: 'Next.js App Router Specs', class: 'PRODUCTIVE', start: '11:08', end: '11:58' },
-    { user: 'farhan', app: 'Figma', win: 'Workfolio Admin Design System', class: 'NEUTRAL', start: '11:58', end: '12:36' },
+    { user: 'farhan', app: 'Figma', win: 'Smart Employee Tracker Admin Design System', class: 'NEUTRAL', start: '11:58', end: '12:36' },
     { user: 'farhan', app: 'Visual Studio Code', win: 'Timeline.tsx', class: 'PRODUCTIVE', start: '12:48', end: '13:33' },
-    { user: 'farhan', app: 'Visual Studio Code', win: 'App.tsx — workfolio-clone', class: 'PRODUCTIVE', start: '14:36', end: '14:37' },
+    { user: 'farhan', app: 'Visual Studio Code', win: 'App.tsx — smart-employee-tracker', class: 'PRODUCTIVE', start: '14:36', end: '14:37' },
     { user: 'farhan', app: 'Visual Studio Code', win: 'timeline/page.tsx', class: 'PRODUCTIVE', start: '14:37', end: '15:32' },
     { user: 'farhan', app: 'Slack', win: '#frontend-crew', class: 'NEUTRAL', start: '15:52', end: '16:32' },
     { user: 'farhan', app: 'Google Chrome', win: 'TailwindCSS Documentation & Tests', class: 'PRODUCTIVE', start: '16:32', end: '17:42' },
