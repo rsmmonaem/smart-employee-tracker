@@ -1,0 +1,28 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Rust / Cargo
+target/
+Cargo.lock
+
+# Node / npm
+node_modules/
+.next/
+dist/
+apps/*/dist/
+out/
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

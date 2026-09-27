@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/shared",
+    "apps/api",
+    "apps/desktop-agent/src-tauri",
+]
+
+[workspace.dependencies]
+# Async runtime
+tokio        = { version = "1", features = ["full"] }
+
+# Web framework
+axum         = "0.7"
+tower        = "0.4"
+tower-http   = { version = "0.5", features = ["cors", "trace"] }
+
+# Database
+sqlx         = { version = "0.7", features = ["postgres", "uuid", "chrono", "runtime-tokio-rustls"] }
+
+# Serialization
+serde        = { version = "1", features = ["derive"] }
+serde_json   = "1"
+
+# Utilities
+uuid         = { version = "1", features = ["v4", "serde"] }
+chrono       = { version = "0.4", features = ["serde"] }
+anyhow       = "1"
+thiserror    = "1"
+
+# Auth
+jsonwebtoken = "9"
+bcrypt       = "0.15"
+
+# HTTP client
+reqwest      = { version = "0.11", features = ["json", "multipart"] }
+
+# Shared crate
+timeguard-shared = { path = "crates/shared" }
