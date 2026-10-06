@@ -168,6 +168,15 @@ export default function LoginForm({ initialError, redirectTo }: LoginFormProps) 
             </>
           )}
         </button>
+
+        <div className="text-center pt-2">
+          <span className="text-xs text-gray-400">
+            Company Owner?{' '}
+            <a href="/register" className="text-blue-400 hover:underline font-semibold">
+              Sign Up / Start Free Trial
+            </a>
+          </span>
+        </div>
       </form>
     </div>
   )

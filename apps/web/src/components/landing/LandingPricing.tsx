@@ -29,6 +29,8 @@ export interface PackageItem {
   }
 }
 
+import LandingSignupModal from './LandingSignupModal'
+
 interface LandingPricingProps {
   packages: PackageItem[]
   loading: boolean
@@ -46,6 +48,17 @@ export default function LandingPricing({
   const [quotePhone, setQuotePhone] = useState('')
   const [quoteCompany, setQuoteCompany] = useState('')
   const [quoteSuccess, setQuoteSuccess] = useState(false)
+
+  // Company Owner Free Trial Signup Modal State
+  const [trialModalOpen, setTrialModalOpen] = useState(false)
+  const [trialPlanId, setTrialPlanId] = useState('BASIC')
+  const [trialPlanName, setTrialPlanName] = useState('Starter')
+
+  const openTrialModal = (planId: string, planTitle: string) => {
+    setTrialPlanId(planId.toUpperCase())
+    setTrialPlanName(planTitle)
+    setTrialModalOpen(true)
+  }
 
   const openQuoteModal = (planLabel: string) => {
     setSelectedPlanForQuote(planLabel)
@@ -352,39 +365,65 @@ export default function LandingPricing({
 
                 {/* CTA Action Buttons */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
+                  {/* Primary Free Trial Button */}
                   <button
                     type="button"
                     className={`btn pc-cta-btn ${card.btnClass}`}
-                    onClick={() => openQuoteModal(card.quoteLabel)}
+                    onClick={() => openTrialModal(card.id, card.title)}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                      <line x1="16" y1="13" x2="8" y2="13"></line>
-                      <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <polyline points="16 11 18 13 22 9" />
                     </svg>
-                    <span>Get Quote</span>
+                    <span>Start 14-Day Free Trial</span>
                     <span className="pc-arrow">&rarr;</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => onSelectPlan(card.id)}
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid rgba(255,255,255,0.15)',
-                      color: '#94A3B8',
-                      fontSize: '13px',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
-                  >
-                    Subscribe Online via bKash / Card
-                  </button>
+                  {/* Secondary Get Quote & Online Payment Options */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => openQuoteModal(card.quoteLabel)}
+                      style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        color: '#E2E8F0',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'center',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                    >
+                      Get Quote
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onSelectPlan(card.id)}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: '#94A3B8',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        textAlign: 'center',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
+                    >
+                      bKash / Card
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -527,6 +566,14 @@ export default function LandingPricing({
           </div>
         </div>
       )}
+
+      {/* Company Owner Free Trial & Registration Modal */}
+      <LandingSignupModal
+        isOpen={trialModalOpen}
+        onClose={() => setTrialModalOpen(false)}
+        initialPlan={trialPlanId}
+        planName={trialPlanName}
+      />
     </section>
   )
 }
