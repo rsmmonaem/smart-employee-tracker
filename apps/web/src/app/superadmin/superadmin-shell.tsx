@@ -141,15 +141,23 @@ export default function SuperAdminShell({
             <span className="text-[10px] font-mono text-gray-400">99.98%</span>
           </div>
 
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 rounded-lg hover:bg-red-950/30 transition-colors"
-            >
-              <LogOut className="w-3.5 h-3.5 mr-2" />
-              <span>Sign Out</span>
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const { createClient } = await import('@/utils/supabase/client')
+                const supabase = createClient()
+                await supabase.auth.signOut()
+              } catch (err) {
+                console.error('Client signOut error:', err)
+              }
+              window.location.href = '/auth/signout'
+            }}
+            className="flex w-full items-center justify-center px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 rounded-lg hover:bg-red-950/30 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5 mr-2" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
 

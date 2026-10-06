@@ -133,12 +133,23 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
             {userEmail}
           </div>
         )}
-        <form action="/auth/signout" method="post">
-          <button className="flex w-full items-center px-3 py-2 text-xs font-medium text-red-600 rounded-lg hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors">
-            <LogOut className="w-4 h-4 mr-2.5" />
-            Sign Out
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              const { createClient } = await import('@/utils/supabase/client')
+              const supabase = createClient()
+              await supabase.auth.signOut()
+            } catch (err) {
+              console.error('Client signOut error:', err)
+            }
+            window.location.href = '/auth/signout'
+          }}
+          className="flex w-full items-center px-3 py-2 text-xs font-medium text-red-600 rounded-lg hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 transition-colors cursor-pointer"
+        >
+          <LogOut className="w-4 h-4 mr-2.5" />
+          Sign Out
+        </button>
       </div>
     </aside>
   )
