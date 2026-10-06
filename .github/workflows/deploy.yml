@@ -21,7 +21,7 @@ jobs:
 
       - name: Package web application
         run: |
-          tar --exclude='node_modules' --exclude='.next' --exclude='.git' -czf source.tar.gz apps/web package.json package-lock.json
+          tar --exclude='node_modules' --exclude='.next' --exclude='.git' -czf source.tar.gz apps/web ecosystem.config.js package.json package-lock.json
 
       - name: Deploy to Server via SSH
         uses: appleboy/ssh-action@v1.0.3

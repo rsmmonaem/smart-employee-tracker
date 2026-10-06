@@ -43,12 +43,12 @@ mv "${TEMP_DIR}" "${PROD_DIR}"
 chown -R ${USER}:${GROUP} "${PROD_DIR}"
 
 echo "=== [6/6] Reloading PM2 process ==="
-cd "${PROD_DIR}/apps/web"
+cd "${PROD_DIR}"
 if pm2 describe tracmatrix-app > /dev/null 2>&1; then
-    pm2 reload tracmatrix-app --update-env
+    pm2 reload ecosystem.config.js --update-env
 else
-    pm2 start npm --name "tracmatrix-app" -- start -- -p 3000
-    pm2 save
+    pm2 start ecosystem.config.js
 fi
+pm2 save
 
 echo "=== Deployment Successfully Completed! ==="
