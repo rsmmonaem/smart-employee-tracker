@@ -417,10 +417,10 @@ export default function ScreenshotsPage() {
             return (
               <div
                 key={item.id}
-                className={`group relative bg-white dark:bg-gray-800 rounded-xl border overflow-hidden shadow-2xs hover:shadow-md transition-all flex flex-col ${
+                className={`group relative bg-white dark:bg-gray-850 rounded-2xl border overflow-hidden shadow-xs hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col ${
                   isSelected
-                    ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-md'
-                    : 'border-gray-200 dark:border-gray-700'
+                    ? 'border-blue-500 ring-2 ring-blue-500/30 shadow-md'
+                    : 'border-gray-200/80 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700'
                 }`}
               >
                 {/* Multi-select Checkbox Overlay */}
@@ -430,10 +430,10 @@ export default function ScreenshotsPage() {
                   title={isSelected ? 'Deselect screenshot' : 'Select screenshot'}
                 >
                   <div
-                    className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shadow-xs ${
+                    className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all duration-150 shadow-sm ${
                       isSelected
                         ? 'bg-blue-600 text-white'
-                        : 'bg-black/50 hover:bg-black/70 text-transparent border border-white/60'
+                        : 'bg-black/40 hover:bg-black/70 text-transparent border border-white/60 hover:border-white'
                     }`}
                   >
                     <CheckSquare className={`w-3.5 h-3.5 ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
@@ -443,7 +443,7 @@ export default function ScreenshotsPage() {
                 {/* Image Preview */}
                 <div
                   onClick={() => setSelectedImage(item)}
-                  className="relative aspect-video bg-gray-900 cursor-pointer overflow-hidden"
+                  className="relative aspect-video bg-gray-950 cursor-pointer overflow-hidden group/img"
                 >
                   <img
                     src={imageUrl}
@@ -451,23 +451,23 @@ export default function ScreenshotsPage() {
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <span className="opacity-0 group-hover:opacity-100 bg-white/90 dark:bg-gray-900/90 text-gray-900 dark:text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg transition-opacity duration-200 flex items-center space-x-1">
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Click to Inspect</span>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
+                    <span className="bg-white/95 dark:bg-gray-900/95 text-gray-900 dark:text-white text-xs font-semibold px-3.5 py-1.5 rounded-full shadow-lg transition-transform duration-200 transform scale-90 group-hover:scale-100 flex items-center space-x-1.5">
+                      <ExternalLink className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>View Screenshot</span>
                     </span>
                   </div>
                 </div>
 
                 {/* Card Metadata */}
-                <div className="p-3.5 flex flex-col justify-between flex-1">
+                <div className="p-4 flex flex-col justify-between flex-1 bg-white dark:bg-gray-850">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 truncate">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0">
+                    <div className="flex items-center space-x-2.5 truncate">
+                      <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0 ring-2 ring-blue-500/10">
                         {userName.charAt(0).toUpperCase()}
                       </div>
                       <div className="truncate">
-                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
                           {userName}
                         </p>
                         <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
@@ -477,7 +477,7 @@ export default function ScreenshotsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                  <div className="mt-3.5 pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
                     <div className="flex items-center space-x-2.5">
                       <div className="flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-gray-400" />

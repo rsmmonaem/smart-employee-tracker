@@ -512,34 +512,33 @@ export default function EmployeesPage() {
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredCards.map((card) => {
-                const isGreen = card.cardTheme === 'green'
-                const isYellow = card.cardTheme === 'yellow'
-                const isPink = card.cardTheme === 'pink'
+                const isWorking = card.statusCategory === 'WORKING'
+                const isBreak = card.statusCategory === 'BREAK'
 
                 return (
                   <div
                     key={card.id}
-                    className={`rounded-2xl p-5 border transition-all duration-200 flex flex-col justify-between shadow-2xs hover:shadow-xs ${
-                      isGreen
-                        ? 'bg-[#d1fae5] dark:bg-[#064e3b]/30 border-[#86efac] dark:border-[#065f46]'
-                        : isYellow
-                        ? 'bg-[#fef9c3] dark:bg-[#713f12]/20 border-[#fde047] dark:border-[#854d0e]'
-                        : 'bg-[#fde8ef] dark:bg-[#831843]/20 border-[#fbcfe8] dark:border-[#9d174d]'
-                    }`}
+                    className="group bg-white dark:bg-gray-850 rounded-2xl p-5 border border-gray-200/80 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all duration-200 flex flex-col justify-between shadow-2xs hover:shadow-md hover:-translate-y-0.5"
                   >
                     {/* Top Row: Avatar, Name, Days & Active Time Percentage */}
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-base text-gray-800 dark:text-gray-200 shrink-0">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-xs shrink-0 ${
+                            isWorking
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 ring-2 ring-emerald-500/20'
+                              : isBreak
+                              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 ring-2 ring-amber-500/20'
+                              : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 ring-2 ring-blue-500/20'
+                          }`}>
                             {card.avatar}
                           </div>
 
                           <div>
-                            <h3 className="font-bold text-sm text-gray-900 dark:text-white leading-tight">
+                            <h3 className="font-bold text-sm text-gray-900 dark:text-white leading-tight group-hover:text-blue-600 transition-colors">
                               {card.name}
                             </h3>
-                            <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-0.5">
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                               {card.workedDaysText}
                             </p>
                           </div>
@@ -547,15 +546,15 @@ export default function EmployeesPage() {
 
                         <div className="text-right">
                           <span
-                            className={`text-xl font-black block leading-none ${
+                            className={`text-xl font-black block leading-none font-mono ${
                               card.activeTimePct > 0
-                                ? 'text-[#15803d] dark:text-[#4ade80]'
-                                : 'text-gray-700 dark:text-gray-400'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-gray-400 dark:text-gray-500'
                             }`}
                           >
                             {card.activeTimePct}%
                           </span>
-                          <span className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 block">
+                          <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 block font-medium">
                             Active Time
                           </span>
                         </div>
@@ -564,11 +563,11 @@ export default function EmployeesPage() {
                       {/* Middle Pill: Apps Used or Desktop App Not Installed */}
                       <div className="flex justify-center my-5">
                         {card.appNotInstalled ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#cbd5e1] dark:bg-slate-800 text-[#334155] dark:text-slate-300 text-xs font-semibold shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-semibold shadow-2xs">
                             Desktop app not installed
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#cffafe] dark:bg-cyan-950/70 border border-[#67e8f9] dark:border-cyan-800 text-[#0e7490] dark:text-cyan-300 text-xs font-semibold shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800/60 text-cyan-700 dark:text-cyan-300 text-xs font-semibold shadow-2xs">
                             {card.appsUsedText || 'Activity active'}
                           </span>
                         )}
@@ -576,21 +575,21 @@ export default function EmployeesPage() {
                     </div>
 
                     {/* Bottom Row: Checked-in, Progress Bar, Hours worked */}
-                    <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-3 text-xs">
+                    <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between gap-3 text-xs">
                       <div className="min-w-[65px]">
                         <span className="font-mono font-bold text-gray-900 dark:text-white block leading-tight">
                           {card.checkInTime}
                         </span>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 block">
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 block font-medium">
                           Checked-in
                         </span>
                       </div>
 
                       <div className="flex-1 px-1">
-                        <div className="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden">
+                        <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${
-                              card.progressPct > 0 ? 'bg-[#22d3ee] dark:bg-[#06b6d4]' : 'bg-transparent'
+                              card.progressPct > 0 ? 'bg-cyan-500 dark:bg-cyan-400' : 'bg-transparent'
                             }`}
                             style={{ width: `${card.progressPct}%` }}
                           />
@@ -601,7 +600,7 @@ export default function EmployeesPage() {
                         <span className="font-mono font-bold text-gray-900 dark:text-white block leading-tight">
                           {card.hoursWorked}
                         </span>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400 block">
+                        <span className="text-[10px] text-gray-400 dark:text-gray-500 block font-medium">
                           Hours worked
                         </span>
                       </div>

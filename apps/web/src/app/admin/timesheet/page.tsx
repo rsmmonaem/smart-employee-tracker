@@ -356,12 +356,12 @@ export default function TimesheetPage() {
                       </div>
                     </div>
 
-                    {/* Daily Timecard Card (Dotted border & coral background) */}
+                    {/* Daily Timecard Card */}
                     <div className="col-span-5 flex justify-center px-4">
-                      <div className="w-64 border border-dashed border-red-300 dark:border-red-900/60 bg-[#fff5f5] dark:bg-red-950/20 rounded-xl p-3.5 space-y-2 shadow-2xs">
+                      <div className="w-68 border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-600 rounded-xl p-3.5 space-y-2 shadow-2xs hover:shadow-sm transition-all duration-150">
                         {/* Card Header */}
-                        <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 pb-1 border-b border-red-100 dark:border-red-900/30">
-                          <div className="flex items-center gap-1.5 font-medium text-gray-700 dark:text-gray-300">
+                        <div className="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 pb-1.5 border-b border-gray-200/60 dark:border-gray-700">
+                          <div className="flex items-center gap-1.5 font-semibold text-gray-700 dark:text-gray-200">
                             <span>{dayLabel}</span>
                             <button
                               onClick={() => {
@@ -369,7 +369,7 @@ export default function TimesheetPage() {
                                 setEditInTime(data.inTime)
                                 setEditOutTime(data.outTime)
                               }}
-                              className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-0.5 rounded"
+                              className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                               title="Edit Timesheet"
                             >
                               <Edit2 className="w-3 h-3" />
@@ -377,23 +377,25 @@ export default function TimesheetPage() {
                             {emp.hasClockedIn && (
                               <button
                                 onClick={() => handleDeleteSession(emp)}
-                                className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-0.5 rounded"
+                                className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-1 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                                 title="Clear Timesheet Entry"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
                             )}
                           </div>
-                          <span className="text-gray-400 font-normal">{dateTag}</span>
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-200/60 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                            {data.inTime !== '00:00' ? 'RECORDED' : 'NO RECORD'}
+                          </span>
                         </div>
 
                         {/* Card Metric Rows */}
-                        <div className="space-y-1 text-xs">
+                        <div className="space-y-1.5 text-xs">
                           <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
                             <span className="font-semibold text-gray-800 dark:text-gray-200 font-mono">
                               {data.inTime}
                             </span>
-                            <span className="text-[10px] uppercase font-medium text-gray-400 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
                               IN
                             </span>
                           </div>
@@ -401,7 +403,7 @@ export default function TimesheetPage() {
                             <span className="font-semibold text-gray-800 dark:text-gray-200 font-mono">
                               {data.outTime}
                             </span>
-                            <span className="text-[10px] uppercase font-medium text-gray-400 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-gray-400 tracking-wider">
                               OUT
                             </span>
                           </div>
@@ -409,23 +411,23 @@ export default function TimesheetPage() {
                             <span className="font-semibold text-gray-800 dark:text-gray-200 font-mono">
                               {data.workDuration}
                             </span>
-                            <span className="text-[10px] uppercase font-medium text-gray-400 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-blue-500 tracking-wider">
                               WORK
                             </span>
                           </div>
                           <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
-                            <span className="font-semibold text-gray-800 dark:text-gray-200 font-mono">
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                               {data.activeDuration}
                             </span>
-                            <span className="text-[10px] uppercase font-medium text-gray-400 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-emerald-500 tracking-wider">
                               ACTIVE
                             </span>
                           </div>
                           <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
-                            <span className="font-semibold text-gray-800 dark:text-gray-200 font-mono">
+                            <span className="font-semibold text-amber-600 dark:text-amber-400 font-mono">
                               {data.idleDuration}
                             </span>
-                            <span className="text-[10px] uppercase font-medium text-gray-400 tracking-wider">
+                            <span className="text-[10px] uppercase font-semibold text-amber-500 tracking-wider">
                               IDLE
                             </span>
                           </div>
@@ -433,32 +435,32 @@ export default function TimesheetPage() {
                       </div>
                     </div>
 
-                    {/* Total Work Summary Card (Warm beige background) */}
+                    {/* Total Work Summary Card */}
                     <div className="col-span-4 pl-4 flex justify-start">
-                      <div className="w-64 bg-[#fef9ee] dark:bg-amber-950/20 border border-amber-150 dark:border-amber-900/40 rounded-xl p-3.5 space-y-1.5 text-xs shadow-2xs">
+                      <div className="w-68 bg-gray-50/70 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 rounded-xl p-3.5 space-y-2 text-xs shadow-2xs hover:shadow-sm transition-all duration-150">
                         <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
-                          <span className="font-bold text-gray-800 dark:text-gray-200 font-mono">
+                          <span className="font-bold text-gray-900 dark:text-white font-mono">
                             {data.workedHours}
                           </span>
-                          <span className="text-[11px] text-gray-400 font-normal">Worked hours</span>
+                          <span className="text-[11px] text-gray-400 font-medium">Worked hours</span>
                         </div>
                         <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
-                          <span className="font-bold text-gray-800 dark:text-gray-200 font-mono">
+                          <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">
                             {data.idleHours}
                           </span>
-                          <span className="text-[11px] text-gray-400 font-normal">Idle time</span>
+                          <span className="text-[11px] text-gray-400 font-medium">Idle time</span>
                         </div>
                         <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
-                          <span className="font-bold text-gray-800 dark:text-gray-200 font-mono">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                             {data.activeHours}
                           </span>
-                          <span className="text-[11px] text-gray-400 font-normal">Active time</span>
+                          <span className="text-[11px] text-gray-400 font-medium">Active time</span>
                         </div>
-                        <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
+                        <div className="flex justify-between items-center text-gray-700 dark:text-gray-300 pt-1 border-t border-gray-200/50 dark:border-gray-700/50">
                           <span className="font-bold text-gray-800 dark:text-gray-200 font-mono">
                             {data.workedDays}
                           </span>
-                          <span className="text-[11px] text-gray-400 font-normal">Worked days</span>
+                          <span className="text-[11px] text-gray-400 font-medium">Worked days</span>
                         </div>
                       </div>
                     </div>
