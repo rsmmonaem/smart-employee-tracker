@@ -148,6 +148,13 @@ export default function DashboardPage() {
 
   const fetchLiveScreenshots = async () => {
     try {
+      const res = await fetch('/api/admin/screenshots?limit=6', { cache: 'no-store' })
+      const json = await res.json()
+      if (json.success && json.screenshots && json.screenshots.length > 0) {
+        setDbScreenshots(json.screenshots as ScreenshotCard[])
+        return
+      }
+
       const { data } = await supabase
         .from('screenshots')
         .select('*, users(full_name, email)')

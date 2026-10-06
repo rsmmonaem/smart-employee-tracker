@@ -52,6 +52,15 @@ export default function ScreenshotsPage() {
 
   const fetchScreenshots = async () => {
     try {
+      // 1. Fetch via dedicated server API (uses admin client with bypass for reliable production queries)
+      const res = await fetch('/api/admin/screenshots', { cache: 'no-store' })
+      const json = await res.json()
+      if (json.success && json.screenshots) {
+        setScreenshots(json.screenshots as ScreenshotItem[])
+        return
+      }
+
+      // 2. Fallback to direct client
       const { data, error } = await supabase
         .from('screenshots')
         .select('*, users(full_name, email)')

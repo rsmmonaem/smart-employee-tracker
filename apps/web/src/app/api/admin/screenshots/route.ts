@@ -3,6 +3,52 @@ import { createAdminClient } from '@/utils/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
+// GET all screenshots (with user info)
+export async function GET(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const targetDate = searchParams.get('date') // optional YYYY-MM-DD
+    const userId = searchParams.get('userId') // optional filter
+    const limit = parseInt(searchParams.get('limit') || '100', 10)
+
+    const supabase = createAdminClient()
+
+    let query = supabase
+      .from('screenshots')
+      .select('id, tenant_id, user_id, storage_path, taken_at, is_blurred, created_at, users(full_name, email)')
+      .order('taken_at', { ascending: false })
+      .limit(limit)
+
+    if (userId && userId !== 'all') {
+      query = query.eq('user_id', userId)
+    }
+
+    if (targetDate) {
+      const startOfDay = `${targetDate}T00:00:00.000Z`
+      const endOfDay = `${targetDate}T23:59:59.999Z`
+      query = query.gte('taken_at', startOfDay).lte('taken_at', endOfDay)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('Error fetching screenshots from database:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      screenshots: data || [],
+      count: (data || []).length,
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('GET /api/admin/screenshots error:', err)
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+}
+
+// DELETE screenshots
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
@@ -37,7 +83,6 @@ export async function DELETE(req: Request) {
     const isBulk = ids.length > 1
 
     if (isBulk) {
-      // Fetch tenant plan
       const { data: tenant } = await supabase
         .from('tenants')
         .select('id, name, plan')
@@ -91,7 +136,6 @@ export async function DELETE(req: Request) {
     }
 
     // 3. Perform Bulk Deletion (PRO / ENTERPRISE only)
-    // If storage paths weren't passed, fetch them for all IDs
     if (storagePaths.length === 0) {
       const { data: rows } = await supabase
         .from('screenshots')
