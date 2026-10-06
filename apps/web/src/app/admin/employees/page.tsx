@@ -67,6 +67,7 @@ export default function EmployeesPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [newFullName, setNewFullName] = useState('')
   const [newEmail, setNewEmail] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [newTeam, setNewTeam] = useState('Engineering')
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false)
@@ -75,6 +76,7 @@ export default function EmployeesPage() {
   // Edit Modal State
   const [editMember, setEditMember] = useState<TeamMemberCardData | null>(null)
   const [editFullName, setEditFullName] = useState('')
+  const [editPassword, setEditPassword] = useState('')
   const [editRole, setEditRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [editTeam, setEditTeam] = useState('Engineering')
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
@@ -276,6 +278,7 @@ export default function EmployeesPage() {
         body: JSON.stringify({
           fullName: newFullName.trim(),
           email: newEmail.trim(),
+          password: newPassword.trim() || undefined,
           role: newRole,
           team: newTeam,
         }),
@@ -284,6 +287,7 @@ export default function EmployeesPage() {
       if (json.success) {
         setNewFullName('')
         setNewEmail('')
+        setNewPassword('')
         setShowAddModal(false)
         await fetchEmployeesData()
       } else {
@@ -312,11 +316,13 @@ export default function EmployeesPage() {
           fullName: editFullName.trim(),
           role: editRole,
           team: editTeam,
+          password: editPassword.trim() || undefined,
         }),
       })
       const json = await res.json()
       if (json.success) {
         setEditMember(null)
+        setEditPassword('')
         await fetchEmployeesData()
       } else {
         setEditError(json.error || 'Failed to update employee.')
@@ -757,6 +763,19 @@ export default function EmployeesPage() {
               </div>
 
               <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">
+                  Password <span className="text-gray-400 font-normal">(Default: password123)</span>
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Leave blank for password123 or enter custom"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                />
+              </div>
+
+              <div>
                 <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Role</label>
                 <select
                   value={newRole}
@@ -831,6 +850,19 @@ export default function EmployeesPage() {
                   onChange={(e) => setEditFullName(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
                   required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">
+                  New Password <span className="text-gray-400 font-normal">(Leave blank to keep unchanged)</span>
+                </label>
+                <input
+                  type="password"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Enter new password (min 6 chars)"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
                 />
               </div>
 

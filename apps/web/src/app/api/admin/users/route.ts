@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { email, fullName, role, team } = body
+    const { email, fullName, role, team, password } = body
 
     if (!email || !fullName) {
       return NextResponse.json(
@@ -80,6 +80,8 @@ export async function POST(req: Request) {
         { status: 400 }
       )
     }
+
+    const userPassword = password && password.trim().length >= 6 ? password.trim() : 'password123'
 
     const targetTenantId = session.isSuperAdmin ? (body.tenantId || session.tenantId) : session.tenantId
 
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
     // 1. Create in auth.users
     const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
       email,
-      password: 'password123',
+      password: userPassword,
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
@@ -156,7 +158,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json()
-    const { id, fullName, role, isActive, team } = body
+    const { id, fullName, role, isActive, team, password } = body
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 })
@@ -195,14 +197,24 @@ export async function PUT(req: Request) {
       }
     }
 
+    const authUpdates: Record<string, unknown> = {}
     const metaUpdates: Record<string, unknown> = {}
     if (fullName !== undefined) metaUpdates.full_name = fullName
     if (team !== undefined) metaUpdates.team = team
+    if (role !== undefined) metaUpdates.role = role
 
     if (Object.keys(metaUpdates).length > 0) {
-      await supabase.auth.admin.updateUserById(id, {
-        user_metadata: metaUpdates,
-      })
+      authUpdates.user_metadata = metaUpdates
+    }
+    if (password && password.trim().length >= 6) {
+      authUpdates.password = password.trim()
+    }
+
+    if (Object.keys(authUpdates).length > 0) {
+      const { error: authUpdateErr } = await supabase.auth.admin.updateUserById(id, authUpdates)
+      if (authUpdateErr) {
+        return NextResponse.json({ success: false, error: authUpdateErr.message }, { status: 500 })
+      }
     }
 
     return NextResponse.json({

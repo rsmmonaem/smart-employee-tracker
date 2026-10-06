@@ -12,6 +12,7 @@ interface AddUserModalProps {
 export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModalProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [role, setRole] = useState('EMPLOYEE')
   const [team, setTeam] = useState('Engineering')
   const [availableTeams, setAvailableTeams] = useState<string[]>([])
@@ -49,6 +50,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
         body: JSON.stringify({
           fullName: name,
           email,
+          password: password.trim() || undefined,
           role,
           team,
         }),
@@ -57,6 +59,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
       if (json.success) {
         setName('')
         setEmail('')
+        setPassword('')
         setRole('EMPLOYEE')
         setTeam('Engineering')
         onClose()
@@ -117,6 +120,19 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. john@smartemployeetracker.com"
+              className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              Password <span className="text-gray-400 font-normal">(Default: password123)</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Leave blank for password123 or enter custom"
               className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
             />
           </div>
