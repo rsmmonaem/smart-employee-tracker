@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Play, Square, LogOut, Clock, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap } from 'lucide-react';
+import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
 const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -586,8 +586,8 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-8 space-y-6 border border-gray-100">
           <div className="text-center">
-            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-md">
-              <Clock className="w-6 h-6 text-white" />
+            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md border border-gray-100 p-2">
+              <img src="/app-logo.png" alt="Smart Employee Tracker Logo" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Smart Employee Tracker</h1>
             <p className="text-sm text-gray-500 mt-1">Sign in as an employee to track</p>
