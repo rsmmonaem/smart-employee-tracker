@@ -3,9 +3,79 @@ import { createClient } from '@supabase/supabase-js';
 import { Play, Square, LogOut, Clock, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 
+const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  try {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const method = init?.method || (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET');
+    const headers: Record<string, string> = {};
+    if (init?.headers) {
+      if (init.headers instanceof Headers) {
+        init.headers.forEach((v, k) => {
+          headers[k] = v;
+        });
+      } else if (Array.isArray(init.headers)) {
+        init.headers.forEach(([k, v]) => {
+          headers[k] = v;
+        });
+      } else {
+        Object.assign(headers, init.headers);
+      }
+    }
+
+    let bodyBytes: number[] | undefined = undefined;
+    if (init?.body) {
+      if (typeof init.body === 'string') {
+        const encoder = new TextEncoder();
+        bodyBytes = Array.from(encoder.encode(init.body));
+      } else if (init.body instanceof ArrayBuffer) {
+        bodyBytes = Array.from(new Uint8Array(init.body));
+      } else if (ArrayBuffer.isView(init.body)) {
+        bodyBytes = Array.from(new Uint8Array(init.body.buffer, init.body.byteOffset, init.body.byteLength));
+      } else {
+        const text = await new Response(init.body).text();
+        const encoder = new TextEncoder();
+        bodyBytes = Array.from(encoder.encode(text));
+      }
+    }
+
+    const res: any = await invoke('native_request', {
+      url,
+      method,
+      headers,
+      body: bodyBytes,
+    });
+
+    let bodyData: BodyInit = '';
+    if (res.body_text !== null && res.body_text !== undefined) {
+      bodyData = res.body_text;
+    } else if (res.body_base64) {
+      const binStr = atob(res.body_base64);
+      const u8 = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) {
+        u8[i] = binStr.charCodeAt(i);
+      }
+      bodyData = u8;
+    }
+
+    return new Response(bodyData, {
+      status: res.status,
+      statusText: res.status_text || undefined,
+      headers: res.headers,
+    });
+  } catch (err) {
+    console.warn('Native fetch fallback to browser fetch:', err);
+    return window.fetch(input, init);
+  }
+};
+
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL || 'https://supabase.tracmatrix.com',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxMjY2NjM2LCJleHAiOjE5NDg5NDY2MzZ9.43d4cm4IVkAuFX03AaAGR3y4fpCeRs9b_RfX-8MIZTs'
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxMjY2NjM2LCJleHAiOjE5NDg5NDY2MzZ9.43d4cm4IVkAuFX03AaAGR3y4fpCeRs9b_RfX-8MIZTs',
+  {
+    global: {
+      fetch: nativeFetch,
+    },
+  }
 );
 
 interface TrackingPolicy {
