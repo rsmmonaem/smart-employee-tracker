@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Users,
   UserPlus,
@@ -21,7 +21,6 @@ import {
   Check,
   ChevronDown,
 } from 'lucide-react'
-import { createClient } from '@/utils/supabase/client'
 import { useAdminFilter } from '../admin-filter-context'
 import AdminHeader from '../admin-header'
 
@@ -49,160 +48,187 @@ interface TeamMemberCardData {
   cardTheme: 'green' | 'yellow' | 'pink'
   role?: string
   email?: string
+  team?: string
 }
 
-// Smart Employee Tracker default members matching user screenshot
-const DEFAULT_SMART_TRACKER_TEAM: TeamMemberCardData[] = [
-  {
-    id: 'wf-1',
-    name: 'Ajim Ali',
-    avatar: 'A',
-    workedDaysText: 'Worked for 2 days',
-    activeTimePct: 91,
-    appsUsedText: '20 apps used',
-    checkInTime: '03:21 pm',
-    hoursWorked: '13h 34m',
-    progressPct: 65,
-    statusCategory: 'WORKING',
-    cardTheme: 'green',
-    role: 'Video Editor',
-    email: 'ajim@smartemployeetracker.com',
-  },
-  {
-    id: 'wf-2',
-    name: 'Foyz',
-    avatar: 'F',
-    workedDaysText: 'Yet to start work',
-    activeTimePct: 0,
-    appNotInstalled: true,
-    checkInTime: '00:00',
-    hoursWorked: '00h 00m',
-    progressPct: 0,
-    statusCategory: 'NOT_INSTALLED',
-    cardTheme: 'yellow',
-    role: 'Designer',
-    email: 'foyz.desk@smartemployeetracker.com',
-  },
-  {
-    id: 'wf-3',
-    name: 'Foyz',
-    avatar: 'F',
-    workedDaysText: 'Worked for 5 days',
-    activeTimePct: 89,
-    appsUsedText: '43 apps used',
-    checkInTime: '10:16 am',
-    hoursWorked: '42h 40m',
-    progressPct: 85,
-    statusCategory: 'STOPPED',
-    cardTheme: 'pink',
-    role: 'Motion Designer',
-    email: 'foyz@smartemployeetracker.com',
-  },
-  {
-    id: 'wf-4',
-    name: 'Masud',
-    avatar: 'M',
-    workedDaysText: 'Worked for 5 days',
-    activeTimePct: 83,
-    appsUsedText: '11 apps used',
-    checkInTime: '10:16 am',
-    hoursWorked: '41h 41m',
-    progressPct: 80,
-    statusCategory: 'STOPPED',
-    cardTheme: 'pink',
-    role: 'Lead Editor',
-    email: 'masud@smartemployeetracker.com',
-  },
-  {
-    id: 'wf-5',
-    name: 'MOHAMMAD MUNAYAM ...',
-    avatar: 'M',
-    workedDaysText: 'Yet to start work',
-    activeTimePct: 0,
-    appNotInstalled: true,
-    checkInTime: '00:00',
-    hoursWorked: '00h 00m',
-    progressPct: 0,
-    statusCategory: 'NOT_INSTALLED',
-    cardTheme: 'yellow',
-    role: 'Software Engineer',
-    email: 'munayam@smartemployeetracker.com',
-  },
-]
-
 export default function EmployeesPage() {
-  const { searchQuery, setSearchQuery, selectedTeam, refreshTrigger } = useAdminFilter()
+  const [teamCards, setTeamCards] = useState<TeamMemberCardData[]>([])
+  const [loading, setLoading] = useState(true)
   const [activeFilterPill, setActiveFilterPill] = useState<StatusPill>('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('CARDS')
-  const [loading, setLoading] = useState(false)
 
-  // DB Employees
-  const [dbEmployees, setDbEmployees] = useState<any[]>([])
-
-  // Modals
+  // Modals state
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [selectedMember, setSelectedMember] = useState<any | null>(null)
-
-  // Add Form
   const [newFullName, setNewFullName] = useState('')
   const [newEmail, setNewEmail] = useState('')
-  const [newRole, setNewRole] = useState('EMPLOYEE')
+  const [newRole, setNewRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [newTeam, setNewTeam] = useState('Engineering')
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false)
   const [addError, setAddError] = useState('')
 
-  // Edit Form
+  // Edit Modal State
+  const [editMember, setEditMember] = useState<TeamMemberCardData | null>(null)
   const [editFullName, setEditFullName] = useState('')
-  const [editRole, setEditRole] = useState('EMPLOYEE')
+  const [editRole, setEditRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [editTeam, setEditTeam] = useState('Engineering')
-  const [editIsActive, setEditIsActive] = useState(true)
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
   const [editError, setEditError] = useState('')
 
-  const fetchDbEmployees = useCallback(async () => {
+  // Delete State
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const { refreshTrigger } = useAdminFilter()
+
+  const fetchEmployeesData = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/admin/users', { cache: 'no-store' })
-      const json = await res.json()
-      if (json.success && json.employees) {
-        setDbEmployees(json.employees)
-      }
+      // Fetch both timesheet metrics and user directory
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const [timesheetRes, usersRes] = await Promise.all([
+        fetch(`/api/admin/timesheet?date=${todayStr}`, { cache: 'no-store' }),
+        fetch('/api/admin/users', { cache: 'no-store' }),
+      ])
+
+      const timesheetData = await timesheetRes.json()
+      const usersData = await usersRes.json()
+
+      const rawTimesheetEmployees = timesheetData.success ? timesheetData.employees || [] : []
+      const rawUsers = usersData.success ? usersData.employees || [] : []
+
+      // Create a map by user ID
+      const userMap = new Map<string, any>()
+      rawUsers.forEach((u: any) => userMap.set(u.id, u))
+
+      // Combine into cards
+      const mapped: TeamMemberCardData[] = []
+
+      // 1. Process users who have timesheet entries or all users
+      const allUserIds = new Set<string>([
+        ...rawTimesheetEmployees.map((e: any) => e.id),
+        ...rawUsers.map((u: any) => u.id),
+      ])
+
+      allUserIds.forEach((uid) => {
+        const ts = rawTimesheetEmployees.find((e: any) => e.id === uid)
+        const dbU = userMap.get(uid)
+
+        const name = ts?.name || dbU?.full_name || dbU?.email?.split('@')[0] || 'Employee'
+        const email = ts?.email || dbU?.email || ''
+        const role = dbU?.role === 'TENANT_ADMIN' ? 'Tenant Admin' : ts?.role || 'Employee'
+        const team = dbU?.team || ts?.team || 'Engineering'
+        const avatar = ts?.avatarLetter || name.charAt(0).toUpperCase()
+
+        const hasClockedIn = !!ts?.hasClockedIn
+        const workedDays = ts?.metrics?.workedDays || 0
+        const inTime = ts?.metrics?.inTime && ts.metrics.inTime !== '00:00' ? ts.metrics.inTime : '00:00'
+        const workedHours = ts?.metrics?.workDuration || '00h 00m'
+
+        // Determine statusCategory
+        let statusCategory: TeamMemberCardData['statusCategory'] = 'YET_TO_START'
+        let cardTheme: TeamMemberCardData['cardTheme'] = 'yellow'
+
+        if (ts?.status === 'Active') {
+          statusCategory = 'WORKING'
+          cardTheme = 'green'
+        } else if (ts?.status === 'Completed') {
+          statusCategory = 'STOPPED'
+          cardTheme = 'pink'
+        } else if (workedDays === 0 && !hasClockedIn) {
+          statusCategory = 'NOT_INSTALLED'
+          cardTheme = 'yellow'
+        } else {
+          statusCategory = 'YET_TO_START'
+          cardTheme = 'yellow'
+        }
+
+        // Active time percentage
+        let activeTimePct = 0
+        if (hasClockedIn) {
+          activeTimePct = statusCategory === 'WORKING' ? 88 : 82
+        }
+
+        // Calculate progress percentage assuming 8 hour day
+        let progressPct = 0
+        if (hasClockedIn && workedHours !== '00h 00m') {
+          const parts = workedHours.match(/(\d+)h\s*(\d+)m/)
+          if (parts) {
+            const h = parseInt(parts[1], 10)
+            const m = parseInt(parts[2], 10)
+            const totalMins = h * 60 + m
+            progressPct = Math.min(100, Math.round((totalMins / 480) * 100))
+          }
+        }
+
+        mapped.push({
+          id: uid,
+          name,
+          email,
+          avatar,
+          role,
+          team,
+          workedDaysText: workedDays > 0 ? `Worked for ${workedDays} days` : 'Yet to start work',
+          activeTimePct,
+          appsUsedText: hasClockedIn ? 'Activity monitored' : undefined,
+          appNotInstalled: statusCategory === 'NOT_INSTALLED',
+          checkInTime: inTime,
+          hoursWorked: workedHours,
+          progressPct,
+          statusCategory,
+          cardTheme,
+        })
+      })
+
+      setTeamCards(mapped)
     } catch (err) {
-      console.error('Failed to load DB employees:', err)
+      console.error('Failed to load team members:', err)
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchDbEmployees()
-  }, [fetchDbEmployees, refreshTrigger])
+    fetchEmployeesData()
+  }, [fetchEmployeesData, refreshTrigger])
 
-  // Merge default members with any DB records
-  const allTeamCards: TeamMemberCardData[] = DEFAULT_SMART_TRACKER_TEAM
+  // Dynamic status pill counts
+  const pillCounts = useMemo(() => {
+    return {
+      all: teamCards.length,
+      working: teamCards.filter((c) => c.statusCategory === 'WORKING').length,
+      break: teamCards.filter((c) => c.statusCategory === 'BREAK').length,
+      stopped: teamCards.filter((c) => c.statusCategory === 'STOPPED').length,
+      leave: teamCards.filter((c) => c.statusCategory === 'LEAVE').length,
+      notInstalled: teamCards.filter((c) => c.statusCategory === 'NOT_INSTALLED').length,
+      yetToStart: teamCards.filter(
+        (c) => c.statusCategory === 'YET_TO_START' || c.statusCategory === 'NOT_INSTALLED'
+      ).length,
+    }
+  }, [teamCards])
 
   // Filter based on active status pill & search query
-  const filteredCards = allTeamCards.filter((card) => {
-    // Search match
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase()
-      const matchName = card.name.toLowerCase().includes(q)
-      const matchEmail = (card.email || '').toLowerCase().includes(q)
-      if (!matchName && !matchEmail) return false
-    }
+  const filteredCards = useMemo(() => {
+    return teamCards.filter((card) => {
+      // Search match
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase()
+        const matchName = card.name.toLowerCase().includes(q)
+        const matchEmail = (card.email || '').toLowerCase().includes(q)
+        if (!matchName && !matchEmail) return false
+      }
 
-    // Status pill match
-    if (activeFilterPill === 'ALL') return true
-    if (activeFilterPill === 'WORKING') return card.statusCategory === 'WORKING'
-    if (activeFilterPill === 'BREAK') return card.statusCategory === 'BREAK'
-    if (activeFilterPill === 'STOPPED') return card.statusCategory === 'STOPPED'
-    if (activeFilterPill === 'LEAVE') return card.statusCategory === 'LEAVE'
-    if (activeFilterPill === 'NOT_INSTALLED') return card.statusCategory === 'NOT_INSTALLED'
-    if (activeFilterPill === 'YET_TO_START') return card.statusCategory === 'NOT_INSTALLED' || card.statusCategory === 'YET_TO_START'
-    return true
-  })
+      // Status pill match
+      if (activeFilterPill === 'ALL') return true
+      if (activeFilterPill === 'WORKING') return card.statusCategory === 'WORKING'
+      if (activeFilterPill === 'BREAK') return card.statusCategory === 'BREAK'
+      if (activeFilterPill === 'STOPPED') return card.statusCategory === 'STOPPED'
+      if (activeFilterPill === 'LEAVE') return card.statusCategory === 'LEAVE'
+      if (activeFilterPill === 'NOT_INSTALLED') return card.statusCategory === 'NOT_INSTALLED'
+      if (activeFilterPill === 'YET_TO_START')
+        return card.statusCategory === 'NOT_INSTALLED' || card.statusCategory === 'YET_TO_START'
+      return true
+    })
+  }, [teamCards, activeFilterPill, searchQuery])
 
   // Add Employee Handler
   const handleAddEmployee = async (e: React.FormEvent) => {
@@ -230,7 +256,7 @@ export default function EmployeesPage() {
         setNewFullName('')
         setNewEmail('')
         setShowAddModal(false)
-        await fetchDbEmployees()
+        await fetchEmployeesData()
       } else {
         setAddError(json.error || 'Failed to add employee.')
       }
@@ -238,6 +264,59 @@ export default function EmployeesPage() {
       setAddError(err instanceof Error ? err.message : 'Error adding employee.')
     } finally {
       setIsSubmittingAdd(false)
+    }
+  }
+
+  // Edit Employee Handler
+  const handleEditEmployee = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editMember) return
+    setEditError('')
+
+    try {
+      setIsSubmittingEdit(true)
+      const res = await fetch('/api/admin/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editMember.id,
+          fullName: editFullName.trim(),
+          role: editRole,
+          team: editTeam,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        setEditMember(null)
+        await fetchEmployeesData()
+      } else {
+        setEditError(json.error || 'Failed to update employee.')
+      }
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'Error updating employee.')
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
+  // Delete Employee Handler
+  const handleDeleteEmployee = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to remove ${name} from your team?`)) return
+    try {
+      setDeletingId(id)
+      const res = await fetch(`/api/admin/users?id=${id}`, {
+        method: 'DELETE',
+      })
+      const json = await res.json()
+      if (json.success) {
+        await fetchEmployeesData()
+      } else {
+        alert(json.error || 'Failed to delete employee')
+      }
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Error deleting employee')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -249,44 +328,52 @@ export default function EmployeesPage() {
         subtitle="Live team member attendance, active time percentage, and tracking status"
         searchPlaceholder="Search in my teams"
         loading={loading}
-        onRefresh={() => fetchDbEmployees()}
-        onUserAdded={() => fetchDbEmployees()}
+        onRefresh={fetchEmployeesData}
+        onUserAdded={fetchEmployeesData}
         extraActions={
-          <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={() => setViewMode('CARDS')}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'CARDS'
-                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'
-              }`}
-              title="Card Grid View"
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-all"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Cards</span>
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Add Member</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('TABLE')}
-              className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
-                viewMode === 'TABLE'
-                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs'
-                  : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'
-              }`}
-              title="Directory Table View"
-            >
-              <List className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Directory</span>
-            </button>
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg border border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => setViewMode('CARDS')}
+                className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'CARDS'
+                    ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'
+                }`}
+                title="Card Grid View"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('TABLE')}
+                className={`p-1.5 rounded-md text-xs font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'TABLE'
+                    ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'
+                }`}
+                title="Directory Table View"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Directory</span>
+              </button>
+            </div>
           </div>
         }
       />
 
       <div className="p-6 lg:p-8 space-y-6 max-w-7xl mx-auto w-full">
-        {/* Horizontal Status Pills Bar (Matches Screenshot) */}
+        {/* Horizontal Status Pills Bar */}
         <div className="flex items-center gap-2.5 overflow-x-auto pb-1 text-xs font-semibold no-scrollbar">
-          {/* 1. All Members (5) */}
           <button
             onClick={() => setActiveFilterPill('ALL')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -295,10 +382,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            All Members ({allTeamCards.length})
+            All Members ({pillCounts.all})
           </button>
 
-          {/* 2. Currently Working (1) */}
           <button
             onClick={() => setActiveFilterPill('WORKING')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -307,10 +393,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            Currently Working (1)
+            Currently Working ({pillCounts.working})
           </button>
 
-          {/* 3. Currently In Break */}
           <button
             onClick={() => setActiveFilterPill('BREAK')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -319,10 +404,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            Currently In Break
+            Currently In Break ({pillCounts.break})
           </button>
 
-          {/* 4. Stopped Work (2) */}
           <button
             onClick={() => setActiveFilterPill('STOPPED')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -331,10 +415,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            Stopped Work (2)
+            Stopped Work ({pillCounts.stopped})
           </button>
 
-          {/* 5. On Leave */}
           <button
             onClick={() => setActiveFilterPill('LEAVE')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -343,10 +426,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            On Leave
+            On Leave ({pillCounts.leave})
           </button>
 
-          {/* 6. App Not Installed (2) */}
           <button
             onClick={() => setActiveFilterPill('NOT_INSTALLED')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -355,10 +437,9 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            App Not Installed (2)
+            App Not Installed ({pillCounts.notInstalled})
           </button>
 
-          {/* 7. Yet To Start */}
           <button
             onClick={() => setActiveFilterPill('YET_TO_START')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
@@ -367,14 +448,38 @@ export default function EmployeesPage() {
                 : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
             }`}
           >
-            Yet To Start
+            Yet To Start ({pillCounts.yetToStart})
           </button>
         </div>
 
-        {/* ========================================================
-            VIEW MODE 1: SMART EMPLOYEE TRACKER CARDS GRID
-            ======================================================== */}
-        {viewMode === 'CARDS' && (
+        {/* Empty State */}
+        {filteredCards.length === 0 && !loading && (
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-12 text-center shadow-2xs">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
+              <Users className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-sm text-gray-900 dark:text-white">
+              {searchQuery || activeFilterPill !== 'ALL'
+                ? 'No matching team members'
+                : 'No team members added yet'}
+            </h3>
+            <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 mb-4">
+              {searchQuery || activeFilterPill !== 'ALL'
+                ? 'Try adjusting your search query or filter pill to see other members.'
+                : 'Add your team members to monitor active work sessions, app usage, and attendance.'}
+            </p>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Member</span>
+            </button>
+          </div>
+        )}
+
+        {/* VIEW MODE 1: SMART EMPLOYEE TRACKER CARDS GRID */}
+        {viewMode === 'CARDS' && filteredCards.length > 0 && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredCards.map((card) => {
@@ -397,7 +502,6 @@ export default function EmployeesPage() {
                     <div>
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          {/* Circular Avatar */}
                           <div className="w-10 h-10 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center font-bold text-base text-gray-800 dark:text-gray-200 shrink-0">
                             {card.avatar}
                           </div>
@@ -412,11 +516,12 @@ export default function EmployeesPage() {
                           </div>
                         </div>
 
-                        {/* Top Right: Active Time % */}
                         <div className="text-right">
                           <span
                             className={`text-xl font-black block leading-none ${
-                              card.activeTimePct > 0 ? 'text-[#15803d] dark:text-[#4ade80]' : 'text-gray-700 dark:text-gray-400'
+                              card.activeTimePct > 0
+                                ? 'text-[#15803d] dark:text-[#4ade80]'
+                                : 'text-gray-700 dark:text-gray-400'
                             }`}
                           >
                             {card.activeTimePct}%
@@ -435,7 +540,7 @@ export default function EmployeesPage() {
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-[#cffafe] dark:bg-cyan-950/70 border border-[#67e8f9] dark:border-cyan-800 text-[#0e7490] dark:text-cyan-300 text-xs font-semibold shadow-2xs">
-                            {card.appsUsedText}
+                            {card.appsUsedText || 'Activity active'}
                           </span>
                         )}
                       </div>
@@ -443,7 +548,6 @@ export default function EmployeesPage() {
 
                     {/* Bottom Row: Checked-in, Progress Bar, Hours worked */}
                     <div className="pt-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-3 text-xs">
-                      {/* Left: Checked-in */}
                       <div className="min-w-[65px]">
                         <span className="font-mono font-bold text-gray-900 dark:text-white block leading-tight">
                           {card.checkInTime}
@@ -453,7 +557,6 @@ export default function EmployeesPage() {
                         </span>
                       </div>
 
-                      {/* Middle: Progress Bar */}
                       <div className="flex-1 px-1">
                         <div className="w-full bg-black/10 dark:bg-white/10 h-2 rounded-full overflow-hidden">
                           <div
@@ -465,7 +568,6 @@ export default function EmployeesPage() {
                         </div>
                       </div>
 
-                      {/* Right: Hours worked */}
                       <div className="min-w-[70px] text-right">
                         <span className="font-mono font-bold text-gray-900 dark:text-white block leading-tight">
                           {card.hoursWorked}
@@ -480,17 +582,14 @@ export default function EmployeesPage() {
               })}
             </div>
 
-            {/* Footer Notice */}
             <div className="text-center pt-4 text-xs text-gray-400 dark:text-gray-500 font-medium">
-              You have seen all the team members
+              Showing {filteredCards.length} of {teamCards.length} team members
             </div>
           </div>
         )}
 
-        {/* ========================================================
-            VIEW MODE 2: DIRECTORY TABLE (Management & Role Control)
-            ======================================================== */}
-        {viewMode === 'TABLE' && (
+        {/* VIEW MODE 2: DIRECTORY TABLE (Management & Role Control) */}
+        {viewMode === 'TABLE' && filteredCards.length > 0 && (
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
@@ -498,11 +597,13 @@ export default function EmployeesPage() {
                   <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50 dark:bg-gray-950/40">
                     <th className="py-3 px-5">Member</th>
                     <th className="py-3 px-4">Role</th>
+                    <th className="py-3 px-4">Team</th>
                     <th className="py-3 px-4">Checked-in</th>
                     <th className="py-3 px-4">Hours Worked</th>
                     <th className="py-3 px-4">Active Time</th>
                     <th className="py-3 px-4">Desktop Client</th>
-                    <th className="py-3 px-5 text-right">Status</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-5 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
@@ -519,6 +620,9 @@ export default function EmployeesPage() {
                       </td>
                       <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300 font-medium">
                         {row.role}
+                      </td>
+                      <td className="py-3.5 px-4 text-gray-500">
+                        {row.team || 'Engineering'}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">
                         {row.checkInTime}
@@ -540,7 +644,7 @@ export default function EmployeesPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3.5 px-5 text-right">
+                      <td className="py-3.5 px-4">
                         <span
                           className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                             row.statusCategory === 'WORKING'
@@ -552,6 +656,31 @@ export default function EmployeesPage() {
                         >
                           {row.statusCategory}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setEditMember(row)
+                              setEditFullName(row.name)
+                              setEditRole(row.role?.includes('Admin') ? 'TENANT_ADMIN' : 'EMPLOYEE')
+                              setEditTeam(row.team || 'Engineering')
+                              setEditError('')
+                            }}
+                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Edit Employee"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEmployee(row.id, row.name)}
+                            disabled={deletingId === row.id}
+                            className="p-1 text-gray-400 hover:text-rose-600 transition-colors"
+                            title="Delete Employee"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -583,6 +712,7 @@ export default function EmployeesPage() {
                   onChange={(e) => setNewFullName(e.target.value)}
                   placeholder="e.g. Sarah Jenkins"
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                  required
                 />
               </div>
 
@@ -592,7 +722,31 @@ export default function EmployeesPage() {
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="sarah@smartemployeetracker.com"
+                  placeholder="sarah@company.com"
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Role</label>
+                <select
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                >
+                  <option value="EMPLOYEE">Employee (Monitored)</option>
+                  <option value="TENANT_ADMIN">Tenant Admin</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Team / Department</label>
+                <input
+                  type="text"
+                  value={newTeam}
+                  onChange={(e) => setNewTeam(e.target.value)}
+                  placeholder="Engineering, Design, Operations..."
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
                 />
               </div>
@@ -611,6 +765,83 @@ export default function EmployeesPage() {
                   className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
                 >
                   {isSubmittingAdd ? 'Adding...' : 'Add Member'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-800 p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-150 dark:border-gray-800 pb-3">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Edit Team Member</h3>
+              <button onClick={() => setEditMember(null)} className="text-gray-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditEmployee} className="space-y-3 text-xs">
+              {editError && <p className="text-rose-500 font-semibold">{editError}</p>}
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Email Address (Read-only)</label>
+                <input
+                  type="text"
+                  value={editMember.email}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-gray-800 text-gray-500 text-xs cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Full Name</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Role</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                >
+                  <option value="EMPLOYEE">Employee</option>
+                  <option value="TENANT_ADMIN">Tenant Admin</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Team / Department</label>
+                <input
+                  type="text"
+                  value={editTeam}
+                  onChange={(e) => setEditTeam(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditMember(null)}
+                  className="px-3.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                >
+                  {isSubmittingEdit ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

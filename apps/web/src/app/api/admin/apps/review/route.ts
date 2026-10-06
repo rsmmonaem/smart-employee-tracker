@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_TENANT_ID = '7d91b2a1-c727-4f50-83ec-4fdb9debebd3'
-
-// Pre-seeded standard apps and domains to guarantee a rich initial directory matching Smart Employee Tracker interface
+// Pre-seeded standard apps and domains for initial directory
 const SEED_APPS = [
   { name: 'Antigravity', type: 'APP', defaultClassification: 'PRODUCTIVE' },
   { name: 'Visual Studio Code', type: 'APP', defaultClassification: 'PRODUCTIVE' },
@@ -16,32 +15,33 @@ const SEED_APPS = [
   { name: 'YouTube', type: 'DOMAIN', defaultClassification: 'UNPRODUCTIVE' },
   { name: 'admin.truckpointbd.com', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
   { name: 'admin.wajobab.chat', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'agnes.jobab.chat', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'aichat-backend.npms.pro', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'aichatbot-frontend-six.vercel.app', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'android-studio-quail3-patch1-windows', type: 'APP', defaultClassification: 'PRODUCTIVE' },
   { name: 'accounts.google.com', type: 'DOMAIN', defaultClassification: null },
-  { name: '0.0.0.1', type: 'DOMAIN', defaultClassification: null },
-  { name: '0.0.0.10', type: 'DOMAIN', defaultClassification: null },
-  { name: '0.0.1.44', type: 'DOMAIN', defaultClassification: null },
-  { name: '10.10.10.160', type: 'DOMAIN', defaultClassification: null },
-  { name: '127.0.0.1', type: 'DOMAIN', defaultClassification: null },
-  { name: '7zG', type: 'APP', defaultClassification: null },
   { name: 'Notion', type: 'APP', defaultClassification: 'PRODUCTIVE' },
   { name: 'Zoom', type: 'APP', defaultClassification: 'PRODUCTIVE' },
 ]
 
 export async function GET(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
     const { searchParams } = new URL(req.url)
     const query = (searchParams.get('q') || '').toLowerCase().trim()
     const supabase = createAdminClient()
 
     // 1. Fetch current productivity rules
-    const { data: initialRules, error: rulesErr } = await supabase
+    let rulesQuery = supabase
       .from('productivity_rules')
       .select('*')
-      .eq('tenant_id', DEFAULT_TENANT_ID)
+
+    if (!session.isSuperAdmin) {
+      rulesQuery = rulesQuery.eq('tenant_id', tenantId)
+    }
+
+    const { data: initialRules, error: rulesErr } = await rulesQuery
 
     if (rulesErr) {
       console.error('Error fetching productivity_rules:', rulesErr)
@@ -49,10 +49,10 @@ export async function GET(req: Request) {
 
     let rules = initialRules
 
-    // Auto-seed initial reviewed rules if table is empty
+    // Auto-seed initial reviewed rules for this tenant if table is empty
     if (!rules || rules.length === 0) {
       const initialInserts = SEED_APPS.filter((a) => a.defaultClassification !== null).map((a) => ({
-        tenant_id: DEFAULT_TENANT_ID,
+        tenant_id: tenantId,
         match_type: a.type,
         pattern: a.name,
         classification: a.defaultClassification,
@@ -71,10 +71,16 @@ export async function GET(req: Request) {
 
     const ruleMap = new Map((rules || []).map((r) => [r.pattern.toLowerCase(), r]))
 
-    // 2. Fetch all activity events to discover recorded apps
-    const { data: events } = await supabase
+    // 2. Fetch activity events strictly for this tenant
+    let eventsQuery = supabase
       .from('activity_events')
       .select('app_name, domain, started_at, ended_at')
+
+    if (!session.isSuperAdmin) {
+      eventsQuery = eventsQuery.eq('tenant_id', tenantId)
+    }
+
+    const { data: events } = await eventsQuery
 
     // Aggregate app usage counts and total duration in seconds
     const appStatsMap = new Map<string, { count: number; totalSeconds: number; type: 'APP' | 'DOMAIN' }>()
@@ -192,7 +198,7 @@ export async function GET(req: Request) {
     const { data: idleExclusionData } = await supabase
       .from('platform_settings')
       .select('value')
-      .eq('key', `idle_exclusions_${DEFAULT_TENANT_ID}`)
+      .eq('key', `idle_exclusions_${tenantId}`)
       .maybeSingle()
 
     const idleExcluded: string[] = idleExclusionData?.value?.apps || [
@@ -223,6 +229,12 @@ export async function GET(req: Request) {
 // POST: Classify an app, update rule, or toggle idle exclusion
 export async function POST(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
     const body = await req.json()
     const { action, pattern, classification, matchType, appName, excluded } = body
     const supabase = createAdminClient()
@@ -232,7 +244,7 @@ export async function POST(req: Request) {
       const { data: existing } = await supabase
         .from('platform_settings')
         .select('value')
-        .eq('key', `idle_exclusions_${DEFAULT_TENANT_ID}`)
+        .eq('key', `idle_exclusions_${tenantId}`)
         .maybeSingle()
 
       let list: string[] = existing?.value?.apps || [
@@ -251,7 +263,7 @@ export async function POST(req: Request) {
       }
 
       await supabase.from('platform_settings').upsert({
-        key: `idle_exclusions_${DEFAULT_TENANT_ID}`,
+        key: `idle_exclusions_${tenantId}`,
         value: { apps: list },
         updated_at: new Date().toISOString(),
       })
@@ -270,12 +282,16 @@ export async function POST(req: Request) {
     const type = matchType || (pattern.includes('.') ? 'DOMAIN' : 'APP')
 
     // 1. Check if rule exists
-    const { data: existingRule } = await supabase
+    let ruleLookup = supabase
       .from('productivity_rules')
       .select('id')
-      .eq('tenant_id', DEFAULT_TENANT_ID)
       .ilike('pattern', pattern)
-      .maybeSingle()
+
+    if (!session.isSuperAdmin) {
+      ruleLookup = ruleLookup.eq('tenant_id', tenantId)
+    }
+
+    const { data: existingRule } = await ruleLookup.maybeSingle()
 
     let ruleId: string
 
@@ -296,7 +312,7 @@ export async function POST(req: Request) {
       const { data: inserted, error } = await supabase
         .from('productivity_rules')
         .insert({
-          tenant_id: DEFAULT_TENANT_ID,
+          tenant_id: tenantId,
           pattern,
           classification,
           match_type: type,
@@ -309,11 +325,17 @@ export async function POST(req: Request) {
       ruleId = inserted.id
     }
 
-    // 2. Retroactively update activity_events for this pattern
-    await supabase
+    // 2. Retroactively update activity_events for this pattern strictly within this tenant
+    let updateEventsQuery = supabase
       .from('activity_events')
       .update({ classification })
       .or(`app_name.ilike.${pattern},domain.ilike.${pattern}`)
+
+    if (!session.isSuperAdmin) {
+      updateEventsQuery = updateEventsQuery.eq('tenant_id', tenantId)
+    }
+
+    await updateEventsQuery
 
     return NextResponse.json({
       success: true,
@@ -332,6 +354,12 @@ export async function POST(req: Request) {
 // DELETE: Remove classification rule, moving app back to unreviewed
 export async function DELETE(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
     const { searchParams } = new URL(req.url)
     let ruleId = searchParams.get('id')
     let pattern = searchParams.get('pattern')
@@ -349,14 +377,21 @@ export async function DELETE(req: Request) {
     const supabase = createAdminClient()
 
     if (ruleId) {
-      const { error } = await supabase.from('productivity_rules').delete().eq('id', ruleId)
+      let deleteQuery = supabase.from('productivity_rules').delete().eq('id', ruleId)
+      if (!session.isSuperAdmin) {
+        deleteQuery = deleteQuery.eq('tenant_id', tenantId)
+      }
+      const { error } = await deleteQuery
       if (error) throw error
     } else if (pattern) {
-      const { error } = await supabase
+      let deleteQuery = supabase
         .from('productivity_rules')
         .delete()
-        .eq('tenant_id', DEFAULT_TENANT_ID)
         .ilike('pattern', pattern)
+      if (!session.isSuperAdmin) {
+        deleteQuery = deleteQuery.eq('tenant_id', tenantId)
+      }
+      const { error } = await deleteQuery
       if (error) throw error
     } else {
       return NextResponse.json(

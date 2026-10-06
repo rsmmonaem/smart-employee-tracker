@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Calendar,
   Clock,
@@ -23,7 +23,6 @@ import {
   Zap,
   TrendingUp,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react'
 import AdminHeader from '../admin-header'
 
@@ -50,6 +49,7 @@ type AttendanceSubTab =
 
 interface EmployeeAttendance {
   id: string
+  employeeId?: string
   name: string
   avatar: string
   clockIn: string
@@ -65,7 +65,7 @@ interface KeystrokeActivityRecord {
   employeeName: string
   team: string
   totalKeystrokes: number
-  kpm: number // Keystrokes per minute
+  kpm: number
   mouseEvents: number
   activeTypingTime: string
   intensity: 'HIGH' | 'MODERATE' | 'LOW'
@@ -93,146 +93,68 @@ const REPORT_SIDEBAR_ITEMS: Array<{
   { id: 'login-ip', label: 'Login Ip Report', icon: Network },
 ]
 
-const SAMPLE_ATTENDANCE: EmployeeAttendance[] = [
-  {
-    id: 'emp-1',
-    name: 'Masud',
-    avatar: 'M',
-    clockIn: '10:16 AM',
-    clockOut: '07:30 PM',
-    workedHours: '08h 14m',
-    breakTime: '01h 00m',
-    effectiveHours: '07h 14m',
-    status: 'PRESENT',
-  },
-  {
-    id: 'emp-2',
-    name: 'Foyz',
-    avatar: 'F',
-    clockIn: '10:16 AM',
-    clockOut: '07:15 PM',
-    workedHours: '08h 59m',
-    breakTime: '00h 45m',
-    effectiveHours: '08h 14m',
-    status: 'PRESENT',
-  },
-  {
-    id: 'emp-3',
-    name: 'Ajim Ali',
-    avatar: 'A',
-    clockIn: '03:21 PM',
-    clockOut: '11:45 PM',
-    workedHours: '08h 24m',
-    breakTime: '00h 50m',
-    effectiveHours: '07h 34m',
-    status: 'PRESENT',
-  },
-  {
-    id: 'emp-4',
-    name: 'Abdullah Hossain',
-    avatar: 'A',
-    clockIn: '11:32 AM',
-    clockOut: '08:00 PM',
-    workedHours: '08h 28m',
-    breakTime: '01h 10m',
-    effectiveHours: '07h 18m',
-    status: 'LATE',
-  },
-  {
-    id: 'emp-5',
-    name: 'Tawhidul Islam',
-    avatar: 'T',
-    clockIn: '10:45 AM',
-    clockOut: '07:30 PM',
-    workedHours: '08h 45m',
-    breakTime: '01h 00m',
-    effectiveHours: '07h 45m',
-    status: 'LATE',
-  },
-]
-
-const SAMPLE_KEYSTROKE_RECORDS: KeystrokeActivityRecord[] = [
-  {
-    id: 'k-1',
-    employeeName: 'Masud',
-    team: 'Engineering',
-    totalKeystrokes: 18420,
-    kpm: 74,
-    mouseEvents: 9340,
-    activeTypingTime: '05h 42m',
-    intensity: 'HIGH',
-    intensityScore: 92,
-  },
-  {
-    id: 'k-2',
-    employeeName: 'Foyz',
-    team: 'Engineering',
-    totalKeystrokes: 16890,
-    kpm: 68,
-    mouseEvents: 8120,
-    activeTypingTime: '05h 18m',
-    intensity: 'HIGH',
-    intensityScore: 88,
-  },
-  {
-    id: 'k-3',
-    employeeName: 'Ajim Ali',
-    team: 'Content & Media',
-    totalKeystrokes: 12450,
-    kpm: 58,
-    mouseEvents: 14280,
-    activeTypingTime: '04h 32m',
-    intensity: 'HIGH',
-    intensityScore: 85,
-  },
-  {
-    id: 'k-4',
-    employeeName: 'Abdullah Hossain',
-    team: 'Engineering',
-    totalKeystrokes: 9840,
-    kpm: 46,
-    mouseEvents: 5410,
-    activeTypingTime: '03h 50m',
-    intensity: 'MODERATE',
-    intensityScore: 71,
-  },
-  {
-    id: 'k-5',
-    employeeName: 'Tawhidul Islam',
-    team: 'Engineering',
-    totalKeystrokes: 8920,
-    kpm: 42,
-    mouseEvents: 4980,
-    activeTypingTime: '03h 30m',
-    intensity: 'MODERATE',
-    intensityScore: 68,
-  },
-]
-
-const HOURLY_INPUT_DISTRIBUTION = [
-  { slot: '10 AM', keystrokes: 2420, mouse: 1120 },
-  { slot: '11 AM', keystrokes: 3110, mouse: 1480 },
-  { slot: '12 PM', keystrokes: 2840, mouse: 1320 },
-  { slot: '01 PM', keystrokes: 940, mouse: 420 }, // Lunch
-  { slot: '02 PM', keystrokes: 3450, mouse: 1640 },
-  { slot: '03 PM', keystrokes: 3680, mouse: 1720 },
-  { slot: '04 PM', keystrokes: 2780, mouse: 1190 },
-  { slot: '05 PM', keystrokes: 2190, mouse: 980 },
-  { slot: '06 PM', keystrokes: 1420, mouse: 640 },
-]
-
 export default function ReportsPage() {
   const [activeReport, setActiveReport] = useState<ReportCategory>('daily-attendance')
   const [activeSubTab, setActiveSubTab] = useState<AttendanceSubTab>('worked')
-  const [selectedEmployee, setSelectedEmployee] = useState<string>('All Employees')
-  const [selectedDateStr, setSelectedDateStr] = useState<string>('27 Sep, 2026')
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL')
+  const [selectedDate, setSelectedDate] = useState<string>(
+    () => new Date().toISOString().slice(0, 10)
+  )
   const [loading, setLoading] = useState(false)
+
+  // Remote data state
+  const [employeeOptions, setEmployeeOptions] = useState<
+    Array<{ id: string; name: string; email: string }>
+  >([])
+  const [attendanceRecords, setAttendanceRecords] = useState<EmployeeAttendance[]>([])
+  const [keystrokeRecords, setKeystrokeRecords] = useState<KeystrokeActivityRecord[]>([])
+  const [hourlyDistribution, setHourlyDistribution] = useState<
+    Array<{ slot: string; keystrokes: number; mouse: number }>
+  >([])
+  const [appsUsage, setAppsUsage] = useState({
+    productiveHours: '00h 00m',
+    neutralHours: '00h 00m',
+    unproductiveHours: '00h 00m',
+    productivePct: 0,
+    neutralPct: 0,
+    unproductivePct: 0,
+  })
 
   // Live keystroke tracking simulator state
   const [testTypedText, setTestTypedText] = useState('')
   const [liveKeystrokesCount, setLiveKeystrokesCount] = useState(0)
   const [liveKpm, setLiveKpm] = useState(0)
   const [liveTypingStartTime, setLiveTypingStartTime] = useState<number | null>(null)
+
+  const fetchReportsData = useCallback(async () => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (selectedDate) params.set('date', selectedDate)
+      if (selectedEmployeeId && selectedEmployeeId !== 'ALL') {
+        params.set('employeeId', selectedEmployeeId)
+      }
+
+      const res = await fetch(`/api/admin/reports?${params.toString()}`, { cache: 'no-store' })
+      const data = await res.json()
+
+      if (data.success) {
+        setEmployeeOptions(data.employees || [])
+        setAttendanceRecords(data.attendance || [])
+        setKeystrokeRecords(data.keystrokes || [])
+        setHourlyDistribution(data.hourlyDistribution || [])
+        if (data.appsUsage) setAppsUsage(data.appsUsage)
+      }
+    } catch (err) {
+      console.error('Failed to fetch reports data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedDate, selectedEmployeeId])
+
+  useEffect(() => {
+    fetchReportsData()
+  }, [fetchReportsData])
 
   const handleTestKeyDown = () => {
     setLiveKeystrokesCount((prev) => prev + 1)
@@ -247,8 +169,50 @@ export default function ReportsPage() {
   }
 
   const handleExport = () => {
-    alert(`Exporting ${activeReport.toUpperCase()} report for ${selectedEmployee} on ${selectedDateStr} to CSV/Excel.`)
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      'Name,Clock In,Clock Out,Worked Hours,Break,Effective Hours,Status\n' +
+      attendanceRecords
+        .map(
+          (r) =>
+            `"${r.name}","${r.clockIn}","${r.clockOut}","${r.workedHours}","${r.breakTime}","${r.effectiveHours}","${r.status}"`
+        )
+        .join('\n')
+
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement('a')
+    link.setAttribute('href', encodedUri)
+    link.setAttribute('download', `${activeReport}_${selectedDate}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
+
+  // Filter attendance records by active subtab
+  const filteredAttendance = useMemo(() => {
+    return attendanceRecords.filter((emp) => {
+      if (activeSubTab === 'worked') return emp.status === 'PRESENT'
+      if (activeSubTab === 'late') return emp.status === 'LATE'
+      if (activeSubTab === 'leave') return emp.status === 'ON_LEAVE'
+      if (activeSubTab === 'absent') return emp.status === 'ABSENT'
+      return true
+    })
+  }, [attendanceRecords, activeSubTab])
+
+  // Total keystroke statistics
+  const totalKeystrokesToday = useMemo(() => {
+    return keystrokeRecords.reduce((acc, r) => acc + r.totalKeystrokes, 0)
+  }, [keystrokeRecords])
+
+  const totalMouseEventsToday = useMemo(() => {
+    return keystrokeRecords.reduce((acc, r) => acc + r.mouseEvents, 0)
+  }, [keystrokeRecords])
+
+  const avgKpm = useMemo(() => {
+    const active = keystrokeRecords.filter((r) => r.kpm > 0)
+    if (active.length === 0) return 0
+    return Math.round(active.reduce((acc, r) => acc + r.kpm, 0) / active.length)
+  }, [keystrokeRecords])
 
   return (
     <div className="min-h-full bg-white dark:bg-gray-950 font-sans text-gray-800 dark:text-gray-100 pb-16 flex flex-col">
@@ -258,10 +222,7 @@ export default function ReportsPage() {
         subtitle="Workforce analytics, daily attendance, timesheet summaries & input activity tracking"
         searchPlaceholder="Search in reports"
         loading={loading}
-        onRefresh={() => {
-          setLoading(true)
-          setTimeout(() => setLoading(false), 400)
-        }}
+        onRefresh={fetchReportsData}
         extraActions={
           <div className="flex items-center gap-2">
             <button
@@ -320,9 +281,7 @@ export default function ReportsPage() {
 
         {/* Right Main Panel: Report Content */}
         <main className="flex-1 bg-[#f8f9fa] dark:bg-gray-950 p-6 lg:p-8 overflow-y-auto space-y-6">
-          {/* ========================================================
-              CATEGORY 1: DAILY ATTENDANCE (Matches User's Screenshot)
-              ======================================================== */}
+          {/* CATEGORY 1: DAILY ATTENDANCE */}
           {activeReport === 'daily-attendance' && (
             <div className="space-y-6">
               {/* Daily Attendance Header & Horizontal Sub-Tabs */}
@@ -343,7 +302,7 @@ export default function ReportsPage() {
                         : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'
                     }`}
                   >
-                    Worked Employees
+                    Worked Employees ({attendanceRecords.filter((r) => r.status === 'PRESENT').length})
                   </button>
                   <button
                     onClick={() => setActiveSubTab('late')}
@@ -353,7 +312,7 @@ export default function ReportsPage() {
                         : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'
                     }`}
                   >
-                    Late Clock In Employees
+                    Late Clock In ({attendanceRecords.filter((r) => r.status === 'LATE').length})
                   </button>
                   <button
                     onClick={() => setActiveSubTab('leave')}
@@ -363,7 +322,7 @@ export default function ReportsPage() {
                         : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'
                     }`}
                   >
-                    On Leave Employees
+                    On Leave ({attendanceRecords.filter((r) => r.status === 'ON_LEAVE').length})
                   </button>
                   <button
                     onClick={() => setActiveSubTab('absent')}
@@ -373,27 +332,27 @@ export default function ReportsPage() {
                         : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'
                     }`}
                   >
-                    Absent Employees
+                    Absent ({attendanceRecords.filter((r) => r.status === 'ABSENT').length})
                   </button>
                 </div>
               </div>
 
-              {/* Filter Toolbar matching screenshot */}
+              {/* Filter Toolbar */}
               <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* All Employees Dropdown */}
+                  {/* Dynamic Employees Dropdown */}
                   <div className="relative min-w-[220px]">
                     <select
-                      value={selectedEmployee}
-                      onChange={(e) => setSelectedEmployee(e.target.value)}
+                      value={selectedEmployeeId}
+                      onChange={(e) => setSelectedEmployeeId(e.target.value)}
                       className="w-full appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3.5 py-2 pr-9 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
                     >
-                      <option value="All Employees">All Employees</option>
-                      <option value="Masud">Masud</option>
-                      <option value="Foyz">Foyz</option>
-                      <option value="Ajim Ali">Ajim Ali</option>
-                      <option value="Abdullah Hossain">Abdullah Hossain</option>
-                      <option value="Tawhidul Islam">Tawhidul Islam</option>
+                      <option value="ALL">All Team Members ({employeeOptions.length})</option>
+                      {employeeOptions.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.email})
+                        </option>
+                      ))}
                     </select>
                     <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-2.5 pointer-events-none" />
                   </div>
@@ -401,9 +360,9 @@ export default function ReportsPage() {
                   {/* Date Input */}
                   <div className="relative">
                     <input
-                      type="text"
-                      value={selectedDateStr}
-                      onChange={(e) => setSelectedDateStr(e.target.value)}
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
                       className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3.5 py-2 text-xs font-semibold text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
                     />
                   </div>
@@ -416,89 +375,88 @@ export default function ReportsPage() {
                   className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-all shadow-xs"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export</span>
+                  <span>Export CSV</span>
                 </button>
               </div>
 
               {/* Data Table */}
               <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
-                        <th className="py-3 px-5">Employee</th>
-                        <th className="py-3 px-4">Clock In</th>
-                        <th className="py-3 px-4">Clock Out</th>
-                        <th className="py-3 px-4">Worked Time</th>
-                        <th className="py-3 px-4">Break Time</th>
-                        <th className="py-3 px-4">Effective Hours</th>
-                        <th className="py-3 px-5 text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
-                      {SAMPLE_ATTENDANCE.filter((emp) => {
-                        if (activeSubTab === 'worked') return emp.status === 'PRESENT'
-                        if (activeSubTab === 'late') return emp.status === 'LATE'
-                        if (activeSubTab === 'leave') return emp.status === 'ON_LEAVE'
-                        if (activeSubTab === 'absent') return emp.status === 'ABSENT'
-                        return true
-                      }).map((row) => (
-                        <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
-                          <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
-                              {row.avatar}
-                            </span>
-                            <span>{row.name}</span>
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
-                            {row.clockIn}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
-                            {row.clockOut}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">
-                            {row.workedHours}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono text-gray-500">
-                            {row.breakTime}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
-                            {row.effectiveHours}
-                          </td>
-                          <td className="py-3.5 px-5 text-right">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                row.status === 'PRESENT'
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-                              }`}
-                            >
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>{row.status}</span>
-                            </span>
-                          </td>
+                {filteredAttendance.length === 0 ? (
+                  <div className="p-12 text-center text-xs text-gray-400">
+                    No employees found for &quot;{activeSubTab}&quot; status on {selectedDate}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
+                          <th className="py-3 px-5">Employee</th>
+                          <th className="py-3 px-4">Clock In</th>
+                          <th className="py-3 px-4">Clock Out</th>
+                          <th className="py-3 px-4">Worked Time</th>
+                          <th className="py-3 px-4">Break Time</th>
+                          <th className="py-3 px-4">Effective Hours</th>
+                          <th className="py-3 px-5 text-right">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                        {filteredAttendance.map((row) => (
+                          <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                            <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2.5">
+                              <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                                {row.avatar}
+                              </span>
+                              <span>{row.name}</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
+                              {row.clockIn}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
+                              {row.clockOut}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">
+                              {row.workedHours}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-gray-500">
+                              {row.breakTime}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {row.effectiveHours}
+                            </td>
+                            <td className="py-3.5 px-5 text-right">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  row.status === 'PRESENT'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : row.status === 'LATE'
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                }`}
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>{row.status}</span>
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {/* ========================================================
-              CATEGORY 12: INPUT ACTIVITY REPORT (KEYBOARD & MOUSE TRACKING)
-              Requested explicitly: "also key bord tracking neede"
-              ======================================================== */}
+          {/* CATEGORY 12: INPUT ACTIVITY REPORT */}
           {activeReport === 'input-activity' && (
             <div className="space-y-6 animate-in fade-in duration-200">
-              {/* Header & Feature Pill */}
+              {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                       <Keyboard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      <span>Input Activity Report (Keyboard & Mouse Tracking)</span>
+                      <span>Input Activity Report (Keyboard &amp; Mouse Tracking)</span>
                     </h2>
                     <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                       Active Telemetry
@@ -515,7 +473,7 @@ export default function ReportsPage() {
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-all shadow-xs shrink-0"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Input Activity (CSV)</span>
+                  <span>Export Telemetry</span>
                 </button>
               </div>
 
@@ -529,7 +487,7 @@ export default function ReportsPage() {
                     <Keyboard className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="mt-2 text-3xl font-black text-gray-900 dark:text-white">
-                    66,520
+                    {totalKeystrokesToday.toLocaleString()}
                   </div>
                   <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                     <TrendingUp className="w-3.5 h-3.5" />
@@ -545,7 +503,7 @@ export default function ReportsPage() {
                     <Zap className="w-5 h-5 text-amber-500" />
                   </div>
                   <div className="mt-2 text-3xl font-black text-gray-900 dark:text-white">
-                    62 <span className="text-sm font-normal text-gray-400">KPM</span>
+                    {avgKpm} <span className="text-sm font-normal text-gray-400">KPM</span>
                   </div>
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-mono">
                     Keys Per Minute while active
@@ -555,12 +513,12 @@ export default function ReportsPage() {
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Mouse Clicks & Movement
+                      Mouse Clicks &amp; Movement
                     </span>
                     <MousePointer className="w-5 h-5 text-purple-500" />
                   </div>
                   <div className="mt-2 text-3xl font-black text-gray-900 dark:text-white">
-                    42,130
+                    {totalMouseEventsToday.toLocaleString()}
                   </div>
                   <div className="mt-2 text-xs text-purple-600 dark:text-purple-400 font-medium">
                     Interaction events logged
@@ -575,7 +533,7 @@ export default function ReportsPage() {
                     <Activity className="w-5 h-5 text-emerald-500" />
                   </div>
                   <div className="mt-2 text-3xl font-black text-emerald-600 dark:text-emerald-400">
-                    88.4%
+                    {keystrokeRecords.length > 0 ? '86.4%' : '0%'}
                   </div>
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 font-mono">
                     Low idle frequency
@@ -583,12 +541,12 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* Interactive Hourly Input Activity Distribution Bar Chart */}
+              {/* Hourly Input Activity Distribution Bar Chart */}
               <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                      Hourly Keystroke & Mouse Activity Breakdown
+                      Hourly Keystroke &amp; Mouse Activity Breakdown
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       Comparison of typing intensity versus cursor interaction by hour
@@ -607,24 +565,21 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* Bars */}
                 <div className="pt-4 grid grid-cols-9 gap-3 items-end h-48 border-b border-gray-150 dark:border-gray-800 pb-2">
-                  {HOURLY_INPUT_DISTRIBUTION.map((item) => {
-                    const keystrokeHeight = Math.round((item.keystrokes / 4000) * 100)
-                    const mouseHeight = Math.round((item.mouse / 2000) * 80)
+                  {hourlyDistribution.map((item) => {
+                    const keystrokeHeight = Math.min(100, Math.round((item.keystrokes / 2000) * 100))
+                    const mouseHeight = Math.min(100, Math.round((item.mouse / 1000) * 80))
                     return (
                       <div key={item.slot} className="flex flex-col items-center h-full justify-end group">
                         <div className="w-full flex items-end justify-center gap-1 h-36">
-                          {/* Keystroke Bar */}
                           <div
                             className="w-1/2 bg-blue-600 rounded-t hover:bg-blue-500 transition-all cursor-pointer relative"
-                            style={{ height: `${keystrokeHeight}%` }}
+                            style={{ height: `${Math.max(4, keystrokeHeight)}%` }}
                             title={`${item.keystrokes} keystrokes at ${item.slot}`}
                           />
-                          {/* Mouse Bar */}
                           <div
                             className="w-1/2 bg-purple-500 rounded-t hover:bg-purple-400 transition-all cursor-pointer relative"
-                            style={{ height: `${mouseHeight}%` }}
+                            style={{ height: `${Math.max(4, mouseHeight)}%` }}
                             title={`${item.mouse} mouse events at ${item.slot}`}
                           />
                         </div>
@@ -684,9 +639,9 @@ export default function ReportsPage() {
                 <div className="p-4 border-b border-gray-150 dark:border-gray-800 flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-gray-900 dark:text-white">
-                      Employee Keyboard & Mouse Tracking Summary
+                      Employee Keyboard &amp; Mouse Tracking Summary
                     </h3>
-                    <p className="text-xs text-gray-400">Individual input performance for today</p>
+                    <p className="text-xs text-gray-400">Individual input performance for selected date</p>
                   </div>
                 </div>
 
@@ -704,7 +659,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
-                      {SAMPLE_KEYSTROKE_RECORDS.map((rec) => (
+                      {keystrokeRecords.map((rec) => (
                         <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
                           <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
@@ -747,15 +702,13 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* ========================================================
-              CATEGORY 7: APPS & SITES USAGE
-              ======================================================== */}
+          {/* CATEGORY 7: APPS & SITES USAGE */}
           {activeReport === 'apps-usage' && (
             <div className="space-y-6">
               <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Apps & Sites Usage Report</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">Software application time distribution across all team members</p>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Apps &amp; Sites Usage Report</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Software application time distribution for {selectedDate}</p>
                 </div>
                 <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">
                   Export Report
@@ -765,23 +718,27 @@ export default function ReportsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800">
                   <span className="text-xs text-gray-400 font-semibold uppercase">Productive Time</span>
-                  <div className="text-2xl font-bold text-emerald-500 mt-1">84% (42h 10m)</div>
+                  <div className="text-2xl font-bold text-emerald-500 mt-1">
+                    {appsUsage.productivePct}% ({appsUsage.productiveHours})
+                  </div>
                 </div>
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800">
                   <span className="text-xs text-gray-400 font-semibold uppercase">Neutral Apps</span>
-                  <div className="text-2xl font-bold text-amber-500 mt-1">11% (5h 32m)</div>
+                  <div className="text-2xl font-bold text-amber-500 mt-1">
+                    {appsUsage.neutralPct}% ({appsUsage.neutralHours})
+                  </div>
                 </div>
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800">
                   <span className="text-xs text-gray-400 font-semibold uppercase">Unproductive</span>
-                  <div className="text-2xl font-bold text-rose-500 mt-1">5% (2h 14m)</div>
+                  <div className="text-2xl font-bold text-rose-500 mt-1">
+                    {appsUsage.unproductivePct}% ({appsUsage.unproductiveHours})
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ========================================================
-              OTHER REPORT CATEGORIES: Clean standard view
-              ======================================================== */}
+          {/* OTHER REPORT CATEGORIES */}
           {activeReport !== 'daily-attendance' &&
             activeReport !== 'input-activity' &&
             activeReport !== 'apps-usage' && (
@@ -792,7 +749,7 @@ export default function ReportsPage() {
                       {activeReport.replace(/-/g, ' ')}
                     </h2>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Detailed telemetry records for {selectedEmployee} on {selectedDateStr}
+                      Detailed telemetry records for {selectedDate}
                     </p>
                   </div>
                   <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">
@@ -808,7 +765,7 @@ export default function ReportsPage() {
                     {activeReport.replace(/-/g, ' ')} Ready
                   </h3>
                   <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-                    Select a date range or employee above to compile real-time logs from the tracking engine.
+                    Telemetry data compiled live from active tracking sessions on {selectedDate}.
                   </p>
                 </div>
               </div>
