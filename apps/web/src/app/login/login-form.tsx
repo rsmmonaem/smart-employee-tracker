@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState } from 'react'
-import { login } from './actions'
-import { Lock, Mail, Eye, EyeOff, Shield, ShieldCheck, ArrowRight, UserCheck } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
+import { Lock, Mail, Eye, EyeOff, Shield, ArrowRight, UserCheck } from 'lucide-react'
 
 interface LoginFormProps {
   initialError?: string
@@ -10,22 +11,56 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ initialError, redirectTo }: LoginFormProps) {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [errorMessage, setErrorMessage] = useState(initialError || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const setDemoCredentials = (demoEmail: string, demoPass: string) => {
     setEmail(demoEmail)
     setPassword(demoPass)
+    setErrorMessage('')
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrorMessage('')
+    setIsSubmitting(true)
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        setErrorMessage(data.error || 'Invalid email or password')
+        setIsSubmitting(false)
+        return
+      }
+
+      const target = (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//'))
+        ? redirectTo
+        : (data.redirectTo || '/admin/dashboard')
+
+      window.location.href = target
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'An unexpected error occurred. Please try again.')
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <div className="space-y-6">
-      {initialError && (
+      {errorMessage && (
         <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
           <span className="w-2 h-2 rounded-full bg-red-500 mt-1 shrink-0" />
-          <span>{initialError}</span>
+          <span>{errorMessage}</span>
         </div>
       )}
 
@@ -66,13 +101,7 @@ export default function LoginForm({ initialError, redirectTo }: LoginFormProps) 
         </div>
       </div>
 
-      <form
-        action={login}
-        onSubmit={() => setIsSubmitting(true)}
-        className="space-y-4"
-      >
-        <input type="hidden" name="redirectTo" value={redirectTo || ''} />
-
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-xs font-semibold text-gray-300 mb-1.5">
             Email Address
