@@ -163,6 +163,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchLiveScreenshots()
+
+    const channel = supabase
+      .channel('dashboard_recent_screenshots')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'screenshots' },
+        () => {
+          fetchLiveScreenshots()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const maxHours = 79860
@@ -380,7 +395,16 @@ export default function DashboardPage() {
 
             {/* Horizontal Scrolling Thumbnails */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 overflow-x-auto pb-2">
-              {SIMULATED_RECENT_SCREENSHOTS.map((sc) => (
+              {(dbScreenshots.length > 0
+                ? dbScreenshots.map((sc: any) => ({
+                    id: sc.id,
+                    user: sc.users?.full_name || sc.users?.email || 'Employee',
+                    time: new Date(sc.taken_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    task: 'Screen Capture',
+                    img: `${baseUrl}/storage/v1/object/public/screenshots/${sc.storage_path}`,
+                  }))
+                : SIMULATED_RECENT_SCREENSHOTS
+              ).map((sc) => (
                 <Link
                   key={sc.id}
                   href="/admin/screenshots"
@@ -393,7 +417,7 @@ export default function DashboardPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="absolute top-1 right-1 px-1 rounded bg-black/60 text-[9px] font-mono text-white">
-                      HD
+                      LIVE
                     </div>
                   </div>
                   <div className="p-2">

@@ -146,11 +146,14 @@ export default function AdminHeader({
     return d
   }
 
+  const todayActual = new Date().toISOString().slice(0, 10)
+  const yesterdayActual = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+
   const dateTag = formatDateLabel(selectedDate)
   const dateLabel =
-    selectedDate === '2026-09-10'
+    selectedDate === todayActual || selectedDate === '2026-09-10'
       ? 'Today'
-      : selectedDate === '2026-09-09'
+      : selectedDate === yesterdayActual || selectedDate === '2026-09-09'
       ? 'Yesterday'
       : dateTag
 
@@ -164,39 +167,37 @@ export default function AdminHeader({
 
     setSelectedDate(nextDate)
     setSelectedCalendarDays([d.getDate()])
-    if (nextDate === '2026-09-10') setSelectedPreset('Today')
-    else if (nextDate === '2026-09-09') setSelectedPreset('Yesterday')
+    if (nextDate === todayActual || nextDate === '2026-09-10') setSelectedPreset('Today')
+    else if (nextDate === yesterdayActual || nextDate === '2026-09-09') setSelectedPreset('Yesterday')
     else setSelectedPreset('Custom')
   }
 
   const handleSelectPreset = (preset: PeriodPreset) => {
     setSelectedPreset(preset)
+    const now = new Date()
     if (preset === 'Today') {
-      setSelectedCalendarDays([10])
+      setSelectedCalendarDays([now.getDate()])
     } else if (preset === 'Yesterday') {
-      setSelectedCalendarDays([9])
+      const yest = new Date(Date.now() - 86400000)
+      setSelectedCalendarDays([yest.getDate()])
     } else if (preset === 'Last 7 Days' || preset === 'This Week') {
-      setSelectedCalendarDays([4, 5, 6, 7, 8, 9, 10])
+      setSelectedCalendarDays([now.getDate()])
     } else if (preset === 'This Month') {
-      setSelectedCalendarDays(Array.from({ length: 10 }, (_, i) => i + 1))
+      setSelectedCalendarDays([now.getDate()])
     }
   }
 
   const handleApplyDateRange = () => {
-    if (
-      selectedPreset === 'Yesterday' ||
-      (selectedCalendarDays.length === 1 && selectedCalendarDays[0] === 9)
-    ) {
-      setSelectedDate('2026-09-09')
-    } else if (
-      selectedPreset === 'Today' ||
-      (selectedCalendarDays.length === 1 && selectedCalendarDays[0] === 10)
-    ) {
-      setSelectedDate('2026-09-10')
+    if (selectedPreset === 'Yesterday') {
+      setSelectedDate(yesterdayActual)
+    } else if (selectedPreset === 'Today') {
+      setSelectedDate(todayActual)
     } else if (selectedCalendarDays.length > 0) {
+      const now = new Date()
       const day = selectedCalendarDays[0]
       const dayPad = day.toString().padStart(2, '0')
-      setSelectedDate(`2026-09-${dayPad}`)
+      const mPad = (now.getMonth() + 1).toString().padStart(2, '0')
+      setSelectedDate(`${now.getFullYear()}-${mPad}-${dayPad}`)
     }
     setIsDatePickerOpen(false)
   }

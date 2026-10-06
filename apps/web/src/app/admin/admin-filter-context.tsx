@@ -41,8 +41,8 @@ const AdminFilterContext = createContext<AdminFilterContextType | undefined>(und
 
 export function AdminFilterProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('')
-  // Default to 2026-09-10 to match existing seed and mock attendance data
-  const [selectedDate, setSelectedDate] = useState('2026-09-10')
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [selectedDate, setSelectedDate] = useState(todayStr)
   const [selectedPreset, setSelectedPreset] = useState<PeriodPreset>('Today')
   const [selectedTeam, setSelectedTeam] = useState('All Team')
   const [teams, setTeams] = useState<string[]>(DEFAULT_TEAMS)
