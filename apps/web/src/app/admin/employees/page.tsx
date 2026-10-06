@@ -21,6 +21,7 @@ import {
   Check,
   ChevronDown,
 } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
 import { useAdminFilter } from '../admin-filter-context'
 import AdminHeader from '../admin-header'
 
@@ -51,12 +52,16 @@ interface TeamMemberCardData {
   team?: string
 }
 
+// In-memory cache for instant navigation transitions
+let cachedEmployeesCards: TeamMemberCardData[] | null = null
+
 export default function EmployeesPage() {
-  const [teamCards, setTeamCards] = useState<TeamMemberCardData[]>([])
-  const [loading, setLoading] = useState(true)
+  const [teamCards, setTeamCards] = useState<TeamMemberCardData[]>(cachedEmployeesCards || [])
+  const [loading, setLoading] = useState(!cachedEmployeesCards)
   const [activeFilterPill, setActiveFilterPill] = useState<StatusPill>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('CARDS')
+  const supabase = useMemo(() => createClient(), [])
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false)
@@ -80,9 +85,11 @@ export default function EmployeesPage() {
 
   const { refreshTrigger } = useAdminFilter()
 
-  const fetchEmployeesData = useCallback(async () => {
+  const fetchEmployeesData = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true)
+      if (!isBackground && !cachedEmployeesCards) {
+        setLoading(true)
+      }
       // Fetch both timesheet metrics and user directory
       const todayStr = new Date().toISOString().slice(0, 10)
       const [timesheetRes, usersRes] = await Promise.all([
@@ -179,6 +186,7 @@ export default function EmployeesPage() {
         })
       })
 
+      cachedEmployeesCards = mapped
       setTeamCards(mapped)
     } catch (err) {
       console.error('Failed to load team members:', err)
@@ -188,8 +196,29 @@ export default function EmployeesPage() {
   }, [])
 
   useEffect(() => {
-    fetchEmployeesData()
+    fetchEmployeesData(!!cachedEmployeesCards)
   }, [fetchEmployeesData, refreshTrigger])
+
+  // Realtime subscription on attendance and user changes
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-employees-page')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_sessions' },
+        () => fetchEmployeesData(true)
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users' },
+        () => fetchEmployeesData(true)
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, fetchEmployeesData])
 
   // Dynamic status pill counts
   const pillCounts = useMemo(() => {

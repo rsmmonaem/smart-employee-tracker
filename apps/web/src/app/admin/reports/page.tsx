@@ -24,6 +24,7 @@ import {
   TrendingUp,
   RefreshCw,
 } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
 
 type ReportCategory =
@@ -154,6 +155,28 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReportsData()
+  }, [fetchReportsData])
+
+  // Supabase Realtime subscription
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('realtime-reports-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_sessions' },
+        () => fetchReportsData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'activity_events' },
+        () => fetchReportsData()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [fetchReportsData])
 
   const handleTestKeyDown = () => {

@@ -48,7 +48,7 @@ export default function ScreenshotsPage() {
   const [showProModal, setShowProModal] = useState(false)
 
   const supabase = createClient()
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
 
   const fetchScreenshots = async () => {
     try {
@@ -81,17 +81,22 @@ export default function ScreenshotsPage() {
     fetchScreenshots()
     fetchTenantPlan()
 
-    let interval: ReturnType<typeof setInterval> | undefined
-    if (autoRefresh) {
-      interval = setInterval(() => {
-        fetchScreenshots()
-      }, 8000)
-    }
+    // Realtime Postgres Changes Subscription
+    const channel = supabase
+      .channel('realtime-screenshots-grid')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'screenshots' },
+        () => {
+          fetchScreenshots()
+        }
+      )
+      .subscribe()
 
     return () => {
-      if (interval) clearInterval(interval)
+      supabase.removeChannel(channel)
     }
-  }, [autoRefresh, refreshTrigger])
+  }, [supabase, refreshTrigger])
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()

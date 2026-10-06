@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import {
   Users,
@@ -19,7 +19,9 @@ import {
   Monitor,
   CheckCircle2,
   AppWindow,
+  Radio,
 } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
 
 type ScreenshotCard = {
@@ -84,38 +86,62 @@ function formatDuration(totalSeconds: number): string {
   return `${minutes}m`
 }
 
+// In-memory module cache for instant (0ms) render on return navigation
+let cachedDashboardState: {
+  stats: {
+    totalMembers: number
+    currentlyWorking: number
+    currentlyOnBreak: number
+    currentlyStopped: number
+    appNotInstalled: number
+  }
+  workHoursList: Array<{
+    id: string
+    name: string
+    hoursWorked: string
+    clockIn: string
+    color: string
+  }>
+  topAppsList: TopAppItem[]
+  screenshots: ScreenshotCard[]
+} | null = null
+
 export default function DashboardPage() {
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(!cachedDashboardState)
   const [activeAppPill, setActiveAppPill] = useState<string>('')
-  const [dbScreenshots, setDbScreenshots] = useState<ScreenshotCard[]>([])
+  const [isRealtimeActive, setIsRealtimeActive] = useState(false)
 
-  // Live Stats State
-  const [stats, setStats] = useState({
-    totalMembers: 0,
-    currentlyWorking: 0,
-    currentlyOnBreak: 0,
-    currentlyStopped: 0,
-    appNotInstalled: 0,
-  })
+  // Live Stats State initialized from cache if available
+  const [stats, setStats] = useState(
+    cachedDashboardState?.stats || {
+      totalMembers: 0,
+      currentlyWorking: 0,
+      currentlyOnBreak: 0,
+      currentlyStopped: 0,
+      appNotInstalled: 0,
+    }
+  )
 
-  // Live Work Hours & Apps State
-  const [workHoursList, setWorkHoursList] = useState<
-    Array<{
-      id: string
-      name: string
-      hoursWorked: string
-      clockIn: string
-      color: string
-    }>
-  >([])
+  const [workHoursList, setWorkHoursList] = useState(
+    cachedDashboardState?.workHoursList || []
+  )
 
-  const [topAppsList, setTopAppsList] = useState<TopAppItem[]>([])
+  const [topAppsList, setTopAppsList] = useState<TopAppItem[]>(
+    cachedDashboardState?.topAppsList || []
+  )
 
-  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
+  const [dbScreenshots, setDbScreenshots] = useState<ScreenshotCard[]>(
+    cachedDashboardState?.screenshots || []
+  )
 
-  const fetchDashboardData = useCallback(async () => {
+  const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
+  const supabase = useMemo(() => createClient(), [])
+
+  const fetchDashboardData = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true)
+      if (!isBackground && !cachedDashboardState) {
+        setLoading(true)
+      }
       const todayStr = new Date().toISOString().slice(0, 10)
 
       const [timesheetRes, appsRes, screenshotsRes] = await Promise.all([
@@ -128,6 +154,25 @@ export default function DashboardPage() {
       const appsJson = await appsRes.json()
       const screenshotsJson = await screenshotsRes.json()
 
+      let newStats = {
+        totalMembers: 0,
+        currentlyWorking: 0,
+        currentlyOnBreak: 0,
+        currentlyStopped: 0,
+        appNotInstalled: 0,
+      }
+
+      let newWorkHours: Array<{
+        id: string
+        name: string
+        hoursWorked: string
+        clockIn: string
+        color: string
+      }> = []
+
+      let newTopApps: TopAppItem[] = []
+      let newScreenshots: ScreenshotCard[] = []
+
       // 1. Process Timesheet
       if (timesheetJson.success && Array.isArray(timesheetJson.employees)) {
         const emps = timesheetJson.employees
@@ -137,23 +182,24 @@ export default function DashboardPage() {
           (e: any) => e.status === 'Yet to start work' && (!e.metrics.workedDays || e.metrics.workedDays === 0)
         ).length
 
-        setStats({
+        newStats = {
           totalMembers: emps.length,
           currentlyWorking: working,
           currentlyOnBreak: 0,
           currentlyStopped: stopped,
           appNotInstalled: notInstalled,
-        })
+        }
 
-        setWorkHoursList(
-          emps.map((e: any, idx: number) => ({
-            id: e.id,
-            name: e.name,
-            hoursWorked: e.metrics?.workDuration || '00h 00m',
-            clockIn: e.metrics?.inTime !== '00:00' ? e.metrics.inTime : 'Not clocked in',
-            color: e.avatarColor || COLOR_SCHEMES[idx % COLOR_SCHEMES.length].bgClass,
-          }))
-        )
+        newWorkHours = emps.map((e: any, idx: number) => ({
+          id: e.id,
+          name: e.name,
+          hoursWorked: e.metrics?.workDuration || '00h 00m',
+          clockIn: e.metrics?.inTime !== '00:00' ? e.metrics.inTime : 'Not clocked in',
+          color: e.avatarColor || COLOR_SCHEMES[idx % COLOR_SCHEMES.length].bgClass,
+        }))
+
+        setStats(newStats)
+        setWorkHoursList(newWorkHours)
       }
 
       // 2. Process Top Apps
@@ -162,7 +208,7 @@ export default function DashboardPage() {
           (a: any) => a.totalSeconds > 0 || a.count > 0
         )
 
-        const mappedApps: TopAppItem[] = rawApps.slice(0, 6).map((app: any, idx: number) => {
+        newTopApps = rawApps.slice(0, 6).map((app: any, idx: number) => {
           const scheme = COLOR_SCHEMES[idx % COLOR_SCHEMES.length]
           return {
             id: `app-${idx}`,
@@ -176,33 +222,69 @@ export default function DashboardPage() {
           }
         })
 
-        setTopAppsList(mappedApps)
-        if (mappedApps.length > 0 && !activeAppPill) {
-          setActiveAppPill(mappedApps[0].id)
-        }
+        setTopAppsList(newTopApps)
       }
 
       // 3. Process Screenshots
       if (screenshotsJson.success && screenshotsJson.screenshots) {
-        setDbScreenshots(screenshotsJson.screenshots as ScreenshotCard[])
+        newScreenshots = screenshotsJson.screenshots as ScreenshotCard[]
+        setDbScreenshots(newScreenshots)
+      }
+
+      // Save to cache for instant return visits
+      cachedDashboardState = {
+        stats: newStats,
+        workHoursList: newWorkHours,
+        topAppsList: newTopApps,
+        screenshots: newScreenshots,
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
     } finally {
       setLoading(false)
     }
-  }, [activeAppPill])
+  }, [])
 
+  // 1. Initial Load & Background Revalidation
   useEffect(() => {
-    fetchDashboardData()
-
-    // Poll every 15 seconds for live sync
-    const interval = setInterval(() => {
-      fetchDashboardData()
-    }, 15000)
-
-    return () => clearInterval(interval)
+    fetchDashboardData(!!cachedDashboardState)
   }, [fetchDashboardData])
+
+  // 2. Supabase Realtime Subscriptions (Screenshots, Attendance, Activity)
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime-dashboard-overview')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'screenshots' },
+        () => {
+          fetchDashboardData(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance_sessions' },
+        () => {
+          fetchDashboardData(true)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'activity_events' },
+        () => {
+          fetchDashboardData(true)
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          setIsRealtimeActive(true)
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, fetchDashboardData])
 
   const maxRawHours = useMemo(() => {
     if (topAppsList.length === 0) return 1
@@ -217,8 +299,14 @@ export default function DashboardPage() {
         subtitle="Live team tracking status, top used apps, and productivity overview"
         searchPlaceholder="Search in overview"
         loading={loading}
-        onRefresh={fetchDashboardData}
-        onUserAdded={fetchDashboardData}
+        onRefresh={() => fetchDashboardData(false)}
+        onUserAdded={() => fetchDashboardData(true)}
+        extraActions={
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-semibold shadow-2xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+            <span>{isRealtimeActive ? 'Realtime Connected' : 'Live Syncing'}</span>
+          </div>
+        }
       />
 
       <div className="p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
@@ -363,7 +451,6 @@ export default function DashboardPage() {
                               </div>
                             </div>
 
-                            {/* Progress Bar in middle */}
                             <div className="hidden sm:block flex-1 max-w-xs">
                               <div className="w-full bg-gray-100 dark:bg-gray-800 h-2 rounded-full overflow-hidden">
                                 <div
@@ -497,9 +584,9 @@ export default function DashboardPage() {
             <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs text-gray-400">
               <span className="flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>Synced via Smart Employee Tracker Agent</span>
+                <span>Synced via Supabase Realtime</span>
               </span>
-              <span className="font-mono text-[11px]">Interval automated capture</span>
+              <span className="font-mono text-[11px]">Instant live stream</span>
             </div>
           </div>
         </div>
