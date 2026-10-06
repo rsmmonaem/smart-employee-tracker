@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_TENANT_ID = '7d91b2a1-c727-4f50-83ec-4fdb9debebd3'
-
-const INITIAL_TEAMS = [
+const DEFAULT_TEAMS = [
   {
     name: 'Engineering',
     description: 'Core product engineers, frontend and backend developers',
@@ -18,30 +17,47 @@ const INITIAL_TEAMS = [
     name: 'Product & QA',
     description: 'Quality assurance, product specs, and release verification',
   },
+  {
+    name: 'Marketing',
+    description: 'Growth marketing, acquisition and product promotion',
+  },
+  {
+    name: 'Management',
+    description: 'Executive operations and resource planning',
+  },
 ]
 
-// GET all teams
+// GET all teams for the active company tenant
 export async function GET() {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const tenantId = session.tenantId
+    if (!tenantId && !session.isSuperAdmin) {
+      return NextResponse.json({ success: true, teams: [] })
+    }
+
     const supabase = createAdminClient()
 
-    // 1. Fetch teams
-    const { data: initialTeams, error } = await supabase
-      .from('teams')
-      .select('*')
-      .order('created_at', { ascending: true })
+    let query = supabase.from('teams').select('*').order('created_at', { ascending: true })
+    if (!session.isSuperAdmin && tenantId) {
+      query = query.eq('tenant_id', tenantId)
+    }
+
+    let { data: teams, error } = await query
 
     if (error) {
       console.error('Error fetching teams:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
-    let teams = initialTeams
-
-    // Auto-seed if empty
-    if (!teams || teams.length === 0) {
-      const inserts = INITIAL_TEAMS.map((t) => ({
-        tenant_id: DEFAULT_TENANT_ID,
+    // Auto-seed default initial teams if empty for this tenant
+    if ((!teams || teams.length === 0) && tenantId) {
+      const inserts = DEFAULT_TEAMS.map((t) => ({
+        tenant_id: tenantId,
         name: t.name,
         description: t.description,
       }))
@@ -55,21 +71,41 @@ export async function GET() {
       }
     }
 
-    // Get member counts from auth users metadata
+    // Fetch tenant users to compute exact member counts per team
+    let userQuery = supabase
+      .from('users')
+      .select('id, full_name, email, role, is_active')
+    if (!session.isSuperAdmin && tenantId) {
+      userQuery = userQuery.eq('tenant_id', tenantId)
+    }
+    const { data: dbUsers } = await userQuery
+
     const { data: authData } = await supabase.auth.admin.listUsers()
-    const allUsers = authData?.users || []
+    const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
+
+    const tenantEmployees = (dbUsers || []).map((u) => {
+      const meta = authMap.get(u.id) || {}
+      return {
+        id: u.id,
+        name: u.full_name || u.email?.split('@')[0] || 'User',
+        email: u.email,
+        role: u.role,
+        team: meta.team || 'Engineering',
+      }
+    })
 
     const teamList = (teams || []).map((t) => {
-      const count = allUsers.filter(
-        (u) => (u.user_metadata?.team || 'Engineering').toLowerCase() === t.name.toLowerCase()
-      ).length
+      const members = tenantEmployees.filter(
+        (u) => (u.team || '').trim().toLowerCase() === t.name.trim().toLowerCase()
+      )
 
       return {
         id: t.id,
         name: t.name,
-        description: t.description,
-        lead: 'Admin User',
-        membersCount: count > 0 ? count : 1,
+        description: t.description || '',
+        lead: members[0]?.name || 'Admin',
+        membersCount: members.length,
+        members: members.map((m) => ({ id: m.id, name: m.name, email: m.email, role: m.role })),
         createdAt: t.created_at,
       }
     })
@@ -88,6 +124,16 @@ export async function GET() {
 // POST create team
 export async function POST(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
+    const tenantId = session.tenantId
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: 'Tenant context required' }, { status: 400 })
+    }
+
     const body = await req.json()
     const { name, description } = body
 
@@ -97,10 +143,22 @@ export async function POST(req: Request) {
 
     const supabase = createAdminClient()
 
+    // Check if team with same name already exists in this tenant
+    const { data: existing } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .ilike('name', name.trim())
+      .maybeSingle()
+
+    if (existing) {
+      return NextResponse.json({ success: false, error: 'A team with this name already exists' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('teams')
       .insert({
-        tenant_id: DEFAULT_TENANT_ID,
+        tenant_id: tenantId,
         name: name.trim(),
         description: description ? description.trim() : null,
       })
@@ -126,6 +184,11 @@ export async function POST(req: Request) {
 // PUT update team
 export async function PUT(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { id, name, description } = body
 
@@ -138,11 +201,29 @@ export async function PUT(req: Request) {
 
     const supabase = createAdminClient()
 
+    // Fetch team to verify tenant ownership
+    const { data: teamRec } = await supabase
+      .from('teams')
+      .select('id, name, tenant_id')
+      .eq('id', id)
+      .single()
+
+    if (!teamRec) {
+      return NextResponse.json({ success: false, error: 'Team not found' }, { status: 404 })
+    }
+
+    if (!session.isSuperAdmin && teamRec.tenant_id !== session.tenantId) {
+      return NextResponse.json({ success: false, error: 'Forbidden: Cannot edit other company teams' }, { status: 403 })
+    }
+
+    const oldName = teamRec.name
+    const newName = name.trim()
+
     const { data, error } = await supabase
       .from('teams')
       .update({
-        name: name.trim(),
-        description: description !== undefined ? description.trim() : null,
+        name: newName,
+        description: description !== undefined ? (description ? description.trim() : null) : undefined,
       })
       .eq('id', id)
       .select('*')
@@ -151,6 +232,31 @@ export async function PUT(req: Request) {
     if (error) {
       console.error('Error updating team:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    // If the name changed, migrate employees assigned to the old team name to the new team name
+    if (oldName.toLowerCase() !== newName.toLowerCase()) {
+      const { data: authData } = await supabase.auth.admin.listUsers()
+      const { data: dbUsers } = await supabase
+        .from('users')
+        .select('id')
+        .eq('tenant_id', teamRec.tenant_id)
+
+      const tenantUserIds = new Set((dbUsers || []).map((u) => u.id))
+
+      for (const u of authData?.users || []) {
+        if (tenantUserIds.has(u.id)) {
+          const currentTeam = u.user_metadata?.team || ''
+          if (currentTeam.trim().toLowerCase() === oldName.trim().toLowerCase()) {
+            await supabase.auth.admin.updateUserById(u.id, {
+              user_metadata: {
+                ...u.user_metadata,
+                team: newName,
+              },
+            })
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -167,6 +273,11 @@ export async function PUT(req: Request) {
 // DELETE team
 export async function DELETE(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(req.url)
     let teamId = searchParams.get('id')
 
@@ -184,6 +295,21 @@ export async function DELETE(req: Request) {
     }
 
     const supabase = createAdminClient()
+
+    // Verify tenant ownership
+    const { data: teamRec } = await supabase
+      .from('teams')
+      .select('id, name, tenant_id')
+      .eq('id', teamId)
+      .single()
+
+    if (!teamRec) {
+      return NextResponse.json({ success: false, error: 'Team not found' }, { status: 404 })
+    }
+
+    if (!session.isSuperAdmin && teamRec.tenant_id !== session.tenantId) {
+      return NextResponse.json({ success: false, error: 'Forbidden: Cannot delete other company teams' }, { status: 403 })
+    }
 
     const { error } = await supabase.from('teams').delete().eq('id', teamId)
 

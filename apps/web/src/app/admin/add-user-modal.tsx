@@ -14,8 +14,26 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('EMPLOYEE')
   const [team, setTeam] = useState('Engineering')
+  const [availableTeams, setAvailableTeams] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch('/api/admin/teams')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.teams) && data.teams.length > 0) {
+            const names = data.teams.map((t: any) => t.name)
+            setAvailableTeams(names)
+            if (!names.includes(team)) {
+              setTeam(names[0])
+            }
+          }
+        })
+        .catch(() => {})
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -126,10 +144,11 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
               onChange={(e) => setTeam(e.target.value)}
               className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
             >
-              <option value="Engineering">Engineering</option>
-              <option value="Design">Design</option>
-              <option value="Marketing">Marketing</option>
-              <option value="Management">Management</option>
+              {(availableTeams.length > 0 ? availableTeams : ['Engineering', 'Design', 'Marketing', 'Management']).map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
             </select>
           </div>
 

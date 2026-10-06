@@ -23,6 +23,7 @@ import {
   CreditCard,
   LogOut,
   Shield,
+  FolderKanban,
 } from 'lucide-react'
 
 export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
@@ -34,6 +35,7 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
       items: [
         { label: 'Overview', href: '/admin/dashboard', icon: LayoutDashboard },
         { label: 'My Team', href: '/admin/employees', icon: Users },
+        { label: 'Teams', href: '/admin/teams', icon: FolderKanban },
       ],
     },
     {
