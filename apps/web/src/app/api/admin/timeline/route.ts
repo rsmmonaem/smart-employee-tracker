@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,56 +44,80 @@ function formatDuration(totalSec: number): string {
 
 export async function GET(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || '2026-09-09' // default yesterday or today
+    const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
     const supabase = createAdminClient()
 
-    // 1. Fetch real users
-    const { data: dbUsers, error: usersErr } = await supabase
+    // 1. Fetch real users filtered strictly by tenant
+    let usersQuery = supabase
       .from('users')
       .select('id, full_name, email, role, tenant_id')
       .order('full_name', { ascending: true })
 
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({ success: true, timelines: [], totalUsers: 0 })
+      }
+      usersQuery = usersQuery.eq('tenant_id', session.tenantId)
+
+      if (session.role === 'EMPLOYEE') {
+        usersQuery = usersQuery.eq('id', session.userId)
+      }
+    }
+
+    const { data: dbUsers, error: usersErr } = await usersQuery
+
     if (usersErr) {
-      console.error('Error fetching users for timeline:', usersErr)
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
 
     const startOfDay = `${targetDate}T00:00:00.000Z`
     const endOfDay = `${targetDate}T23:59:59.999Z`
 
-    // 2. Fetch real activity events for targetDate
-    const { data: events, error: evErr } = await supabase
+    const userIds = (dbUsers || []).map((u) => u.id)
+
+    if (userIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        date: targetDate,
+        totalUsers: 0,
+        timelines: [],
+      })
+    }
+
+    // 2. Fetch real activity events strictly for those userIds
+    const { data: events } = await supabase
       .from('activity_events')
       .select('*')
+      .in('user_id', userIds)
       .gte('started_at', startOfDay)
       .lte('started_at', endOfDay)
       .order('started_at', { ascending: true })
 
-    if (evErr) {
-      console.warn('Error fetching activity events:', evErr)
-    }
-
-    // 3. Fetch attendance sessions for targetDate to know clock in/out
+    // 3. Fetch attendance sessions strictly for those userIds
     const { data: sessions } = await supabase
       .from('attendance_sessions')
       .select('*')
+      .in('user_id', userIds)
       .gte('clocked_in_at', startOfDay)
       .lte('clocked_in_at', endOfDay)
 
-    // Build timeline rows for each user
+    // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {
       const userEvents = (events || []).filter((e) => e.user_id === user.id)
       const userSession = (sessions || []).find((s) => s.user_id === user.id)
 
       const segments: Segment[] = []
 
-      // If user has consecutive events, merge or map them
       userEvents.forEach((ev, idx) => {
         const startD = new Date(ev.started_at)
         const endD = new Date(ev.ended_at)
 
-        // Calculate minutes from 10:00 AM (UTC or local)
         const startH = startD.getUTCHours()
         const startM = startD.getUTCMinutes()
         const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
@@ -116,7 +141,6 @@ export async function GET(req: Request) {
           type = 'UNPRODUCTIVE'
         }
 
-        // Check if we can merge with previous segment if same app and type within 2 mins
         const prev = segments[segments.length - 1]
         if (prev && prev.type === type && prev.appName === ev.app_name && startMinFromTen <= prev.startMin + prev.durationMin + 1) {
           prev.durationMin += durationMin

@@ -1,25 +1,40 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
-// GET all users/employees
+// GET all users/employees (STRICT MULTI-TENANT ISOLATED)
 export async function GET() {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const supabase = createAdminClient()
 
-    // 1. Fetch public.users
-    const { data: dbUsers, error: usersErr } = await supabase
+    let query = supabase
       .from('users')
       .select('id, full_name, email, role, is_active, created_at, avatar_url, tenant_id')
       .order('created_at', { ascending: false })
+
+    // Strict Tenant Isolation
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({ success: true, employees: [], total: 0 })
+      }
+      query = query.eq('tenant_id', session.tenantId)
+    }
+
+    const { data: dbUsers, error: usersErr } = await query
 
     if (usersErr) {
       console.error('Error fetching users:', usersErr)
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
 
-    // 2. Fetch auth users to get team metadata
+    // Auth metadata for teams
     const { data: authData } = await supabase.auth.admin.listUsers()
     const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
 
@@ -48,9 +63,14 @@ export async function GET() {
   }
 }
 
-// POST create employee
+// POST create employee (STRICT MULTI-TENANT ISOLATED)
 export async function POST(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden: Admin access required' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { email, fullName, role, team } = body
 
@@ -61,23 +81,25 @@ export async function POST(req: Request) {
       )
     }
 
+    const targetTenantId = session.isSuperAdmin ? (body.tenantId || session.tenantId) : session.tenantId
+
+    if (!targetTenantId) {
+      return NextResponse.json({ success: false, error: 'No tenant workspace configured' }, { status: 400 })
+    }
+
     const supabase = createAdminClient()
 
-    // 1. Get default tenant
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('id')
-      .eq('slug', 'test-tenant')
-      .single()
-
-    const tenantId = tenant?.id || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3'
-
-    // 2. Create in auth.users
+    // 1. Create in auth.users
     const { data: authUser, error: authErr } = await supabase.auth.admin.createUser({
       email,
       password: 'password123',
       email_confirm: true,
-      user_metadata: { full_name: fullName, team: team || 'Engineering' },
+      user_metadata: {
+        full_name: fullName,
+        team: team || 'Engineering',
+        tenant_id: targetTenantId,
+        role: role || 'EMPLOYEE',
+      },
     })
 
     if (authErr) {
@@ -92,10 +114,10 @@ export async function POST(req: Request) {
 
     const userId = authUser.user.id
 
-    // 3. Insert into public.users
+    // 2. Insert into public.users bound to this tenant
     const { error: insertErr } = await supabase.from('users').insert({
       id: userId,
-      tenant_id: tenantId,
+      tenant_id: targetTenantId,
       email,
       full_name: fullName,
       role: role || 'EMPLOYEE',
@@ -125,9 +147,14 @@ export async function POST(req: Request) {
   }
 }
 
-// PUT update employee details (Name, Role, is_active, team)
+// PUT update employee (STRICT MULTI-TENANT ISOLATED)
 export async function PUT(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await req.json()
     const { id, fullName, role, isActive, team } = body
 
@@ -137,7 +164,21 @@ export async function PUT(req: Request) {
 
     const supabase = createAdminClient()
 
-    // Build update object for public.users
+    // Verify target user belongs to caller's company
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('id, tenant_id')
+      .eq('id', id)
+      .single()
+
+    if (!targetUser) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
+    }
+
+    if (!session.isSuperAdmin && targetUser.tenant_id !== session.tenantId) {
+      return NextResponse.json({ success: false, error: 'Forbidden: Cannot edit other companies employees' }, { status: 403 })
+    }
+
     const updatePayload: Record<string, unknown> = {}
     if (fullName !== undefined) updatePayload.full_name = fullName
     if (role !== undefined) updatePayload.role = role
@@ -150,12 +191,10 @@ export async function PUT(req: Request) {
         .eq('id', id)
 
       if (updateErr) {
-        console.error('Error updating public.users:', updateErr)
         return NextResponse.json({ success: false, error: updateErr.message }, { status: 500 })
       }
     }
 
-    // Update auth metadata if fullName or team changed
     const metaUpdates: Record<string, unknown> = {}
     if (fullName !== undefined) metaUpdates.full_name = fullName
     if (team !== undefined) metaUpdates.team = team
@@ -177,9 +216,14 @@ export async function PUT(req: Request) {
   }
 }
 
-// DELETE employee
+// DELETE employee (STRICT MULTI-TENANT ISOLATED)
 export async function DELETE(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(req.url)
     let userId = searchParams.get('id')
 
@@ -187,9 +231,7 @@ export async function DELETE(req: Request) {
       try {
         const body = await req.json()
         userId = body.id || body.userId
-      } catch {
-        // no body
-      }
+      } catch {}
     }
 
     if (!userId) {
@@ -198,18 +240,23 @@ export async function DELETE(req: Request) {
 
     const supabase = createAdminClient()
 
-    // 1. Delete from public.users (foreign keys have ON DELETE CASCADE)
-    const { error: dbErr } = await supabase.from('users').delete().eq('id', userId)
-    if (dbErr) {
-      console.error('Error deleting from public.users:', dbErr)
-      return NextResponse.json({ success: false, error: dbErr.message }, { status: 500 })
+    // Verify tenant ownership
+    const { data: targetUser } = await supabase
+      .from('users')
+      .select('id, tenant_id')
+      .eq('id', userId)
+      .single()
+
+    if (!targetUser) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 })
     }
 
-    // 2. Delete from auth.users
-    const { error: authErr } = await supabase.auth.admin.deleteUser(userId)
-    if (authErr) {
-      console.warn('Warning: Could not delete from auth.users:', authErr.message)
+    if (!session.isSuperAdmin && targetUser.tenant_id !== session.tenantId) {
+      return NextResponse.json({ success: false, error: 'Forbidden: Cannot delete other companies employees' }, { status: 403 })
     }
+
+    await supabase.from('users').delete().eq('id', userId)
+    await supabase.auth.admin.deleteUser(userId)
 
     return NextResponse.json({
       success: true,

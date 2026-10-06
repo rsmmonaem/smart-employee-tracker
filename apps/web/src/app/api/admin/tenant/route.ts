@@ -1,41 +1,56 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request) {
+// GET tenant info for current logged-in company (STRICT MULTI-TENANT ISOLATED)
+export async function GET() {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const supabase = createAdminClient()
 
-    // Fetch the primary active tenant or first tenant
-    const { data: tenant, error } = await supabase
-      .from('tenants')
-      .select('*')
+    let query = supabase.from('tenants').select('*')
+
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({
+          success: true,
+          tenant: {
+            id: 'unassigned',
+            name: 'Company Workspace',
+            plan: 'BASIC',
+            status: 'ACTIVE',
+          },
+        })
+      }
+      query = query.eq('id', session.tenantId)
+    }
+
+    const { data: tenant, error } = await query
       .order('created_at', { ascending: true })
       .limit(1)
-      .single()
+      .maybeSingle()
 
     if (error || !tenant) {
       return NextResponse.json({
         success: true,
         tenant: {
-          id: 'default',
-          name: 'Demo Company',
+          id: session.tenantId || 'default',
+          name: 'My Company',
           plan: 'BASIC',
           status: 'ACTIVE',
-          max_seats: 10,
-          max_teams: 2,
-          storage_quota_mb: 10000,
-          screenshot_interval_sec: 600,
-          retention_days: 14,
-        }
+        },
       })
     }
 
-    // Get count of employees and screenshots
     const [usersCount, screenshotsCount] = await Promise.all([
       supabase.from('users').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
-      supabase.from('screenshots').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id)
+      supabase.from('screenshots').select('id', { count: 'exact', head: true }).eq('tenant_id', tenant.id),
     ])
 
     return NextResponse.json({
@@ -44,7 +59,7 @@ export async function GET(req: Request) {
         ...tenant,
         active_employees: usersCount.count || 0,
         total_screenshots: screenshotsCount.count || 0,
-      }
+      },
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -52,44 +67,49 @@ export async function GET(req: Request) {
   }
 }
 
+// POST upgrade tenant plan
 export async function POST(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
+
     const body = await req.json()
-    const { action, plan, tenantId } = body
+    const { action, plan } = body
 
-    const supabase = createAdminClient()
-
-    // If upgrading tenant plan
     if (action === 'upgrade') {
       const targetPlan = plan || 'PRO'
-      const query = tenantId 
-        ? supabase.from('tenants').update({ 
-            plan: targetPlan, 
-            storage_quota_mb: targetPlan === 'PRO' ? 500000 : 10000,
-            screenshot_interval_sec: targetPlan === 'PRO' ? 60 : 600,
-            retention_days: targetPlan === 'PRO' ? 365 : 14,
-            updated_at: new Date().toISOString()
-          }).eq('id', tenantId)
-        : supabase.from('tenants').update({ 
-            plan: targetPlan,
-            storage_quota_mb: targetPlan === 'PRO' ? 500000 : 10000,
-            screenshot_interval_sec: targetPlan === 'PRO' ? 60 : 600,
-            retention_days: targetPlan === 'PRO' ? 365 : 14,
-            updated_at: new Date().toISOString()
-          }).eq('slug', 'test-tenant')
+      const targetTenantId = session.tenantId
 
-      const { data, error } = await query.select().single()
+      if (!targetTenantId) {
+        return NextResponse.json({ success: false, error: 'No tenant found to upgrade' }, { status: 400 })
+      }
+
+      const supabase = createAdminClient()
+
+      const { data, error } = await supabase
+        .from('tenants')
+        .update({
+          plan: targetPlan,
+          storage_quota_mb: targetPlan === 'ENTERPRISE' ? 50000 : targetPlan === 'PRO' ? 20000 : 5000,
+          screenshot_interval_sec: targetPlan === 'ENTERPRISE' ? 30 : targetPlan === 'PRO' ? 60 : 300,
+          retention_days: targetPlan === 'ENTERPRISE' ? 365 : targetPlan === 'PRO' ? 90 : 30,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetTenantId)
+        .select()
+        .single()
 
       if (error) {
-        // Fallback update all or first
-        await supabase.from('tenants').update({ plan: targetPlan }).neq('id', '00000000-0000-0000-0000-000000000000')
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 })
       }
 
       return NextResponse.json({
         success: true,
         message: `Plan successfully upgraded to ${targetPlan}!`,
         plan: targetPlan,
-        tenant: data
+        tenant: data,
       })
     }
 
