@@ -114,8 +114,8 @@ export async function POST(req: Request) {
 
     const userId = authUser.user.id
 
-    // 2. Insert into public.users bound to this tenant
-    const { error: insertErr } = await supabase.from('users').insert({
+    // 2. Ensure public.users has updated tenant and team attributes (trigger handles insertion, upsert guarantees correct state)
+    const { error: insertErr } = await supabase.from('users').upsert({
       id: userId,
       tenant_id: targetTenantId,
       email,

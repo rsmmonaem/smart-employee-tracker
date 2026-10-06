@@ -107,8 +107,8 @@ export async function POST(req: NextRequest) {
 
     const userId = authData.user.id
 
-    // 6. Create record in public.users as TENANT_ADMIN
-    const { error: userProfileErr } = await adminSupabase.from('users').insert({
+    // 6. Ensure record in public.users is aligned as TENANT_ADMIN
+    const { error: userProfileErr } = await adminSupabase.from('users').upsert({
       id: userId,
       tenant_id: tenant.id,
       email,
