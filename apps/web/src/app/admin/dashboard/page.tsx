@@ -150,41 +150,23 @@ export default function DashboardPage() {
     try {
       const res = await fetch('/api/admin/screenshots?limit=6', { cache: 'no-store' })
       const json = await res.json()
-      if (json.success && json.screenshots && json.screenshots.length > 0) {
+      if (json.success && json.screenshots) {
         setDbScreenshots(json.screenshots as ScreenshotCard[])
-        return
-      }
-
-      const { data } = await supabase
-        .from('screenshots')
-        .select('*, users(full_name, email)')
-        .order('taken_at', { ascending: false })
-        .limit(6)
-      if (data && data.length > 0) {
-        setDbScreenshots(data as ScreenshotCard[])
       }
     } catch {
-      // Fallback
+      // Fallback silent
     }
   }
 
   useEffect(() => {
     fetchLiveScreenshots()
 
-    const channel = supabase
-      .channel('dashboard_recent_screenshots')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'screenshots' },
-        () => {
-          fetchLiveScreenshots()
-        }
-      )
-      .subscribe()
+    // Poll every 10 seconds for live updates without client-side websocket overhead
+    const interval = setInterval(() => {
+      fetchLiveScreenshots()
+    }, 10000)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => clearInterval(interval)
   }, [])
 
   const maxHours = 79860

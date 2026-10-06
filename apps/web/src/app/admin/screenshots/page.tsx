@@ -57,17 +57,6 @@ export default function ScreenshotsPage() {
       const json = await res.json()
       if (json.success && json.screenshots) {
         setScreenshots(json.screenshots as ScreenshotItem[])
-        return
-      }
-
-      // 2. Fallback to direct client
-      const { data, error } = await supabase
-        .from('screenshots')
-        .select('*, users(full_name, email)')
-        .order('taken_at', { ascending: false })
-
-      if (!error && data) {
-        setScreenshots(data as ScreenshotItem[])
       }
     } catch (err) {
       console.error('Failed to fetch screenshots:', err)
@@ -92,19 +81,6 @@ export default function ScreenshotsPage() {
     fetchScreenshots()
     fetchTenantPlan()
 
-    // Realtime channel for new screenshots
-    const channel = supabase
-      .channel('realtime_screenshots')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'screenshots' },
-        () => {
-          fetchScreenshots()
-        }
-      )
-      .subscribe()
-
-    // Polling fallback every 8 seconds if autoRefresh is enabled
     let interval: ReturnType<typeof setInterval> | undefined
     if (autoRefresh) {
       interval = setInterval(() => {
@@ -113,7 +89,6 @@ export default function ScreenshotsPage() {
     }
 
     return () => {
-      supabase.removeChannel(channel)
       if (interval) clearInterval(interval)
     }
   }, [autoRefresh, refreshTrigger])
