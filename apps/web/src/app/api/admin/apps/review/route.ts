@@ -79,7 +79,17 @@ export async function GET(req: Request) {
       }
     }
 
-    const ruleMap = new Map((rules || []).map((r) => [r.pattern.toLowerCase(), r]))
+    // Build rule map: global rules first, then user-specific overrides if a specific user is selected
+    const ruleMap = new Map<string, any>()
+    ;(rules || []).filter((r) => !r.user_id).forEach((r) => {
+      ruleMap.set(r.pattern.toLowerCase(), { ...r, isUserSpecific: false })
+    })
+
+    if (userId && userId !== 'ALL') {
+      ;(rules || []).filter((r) => r.user_id === userId).forEach((r) => {
+        ruleMap.set(r.pattern.toLowerCase(), { ...r, isUserSpecific: true })
+      })
+    }
 
     // 2. Fetch activity events strictly for this tenant, optionally filtered by employee
     let eventsQuery = supabase
@@ -185,6 +195,7 @@ export async function GET(req: Request) {
       usageCount: number
       totalSeconds: number
       usedBy: string[]
+      isUserSpecific?: boolean
     }> = []
 
     allKnownApps.forEach((item, key) => {
@@ -201,6 +212,7 @@ export async function GET(req: Request) {
           usageCount: item.count,
           totalSeconds: item.totalSeconds,
           usedBy: item.usedBy,
+          isUserSpecific: !!rule.isUserSpecific,
         })
       } else {
         unreviewed.push({
@@ -281,7 +293,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Tenant ID required' }, { status: 400 })
     }
 
-    const { action, pattern, classification, matchType, appName, excluded } = body
+    const { action, pattern, classification, matchType, appName, excluded, userId } = body
 
     // Action 1: Toggle Idle Exclusion
     if (action === 'toggle_idle_exclusion' && appName) {
@@ -315,7 +327,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, idleExcluded: list })
     }
 
-    // Action 2: Classify / Review App
+    // Action 2: Classify / Review App (Global or Employee Specific)
     if (!pattern || !classification) {
       return NextResponse.json(
         { success: false, error: 'pattern and classification are required' },
@@ -324,6 +336,7 @@ export async function POST(req: Request) {
     }
 
     const type = matchType || (pattern.includes('.') ? 'DOMAIN' : 'APP')
+    const targetUserId = userId && userId !== 'ALL' ? userId : null
 
     // 1. Check if rule exists
     let ruleLookup = supabase
@@ -333,6 +346,12 @@ export async function POST(req: Request) {
 
     if (!session.isSuperAdmin) {
       ruleLookup = ruleLookup.eq('tenant_id', tenantId)
+    }
+
+    if (targetUserId) {
+      ruleLookup = ruleLookup.eq('user_id', targetUserId)
+    } else {
+      ruleLookup = ruleLookup.is('user_id', null)
     }
 
     const { data: existingRule } = await ruleLookup.maybeSingle()
@@ -353,15 +372,20 @@ export async function POST(req: Request) {
       if (error) throw error
       ruleId = updated.id
     } else {
+      const insertPayload: any = {
+        tenant_id: tenantId,
+        pattern,
+        classification,
+        match_type: type,
+        priority: targetUserId ? 10 : 1,
+      }
+      if (targetUserId) {
+        insertPayload.user_id = targetUserId
+      }
+
       const { data: inserted, error } = await supabase
         .from('productivity_rules')
-        .insert({
-          tenant_id: tenantId,
-          pattern,
-          classification,
-          match_type: type,
-          priority: 1,
-        })
+        .insert(insertPayload)
         .select('*')
         .single()
 
@@ -369,7 +393,7 @@ export async function POST(req: Request) {
       ruleId = inserted.id
     }
 
-    // 2. Retroactively update activity_events for this pattern strictly within this tenant
+    // 2. Retroactively update activity_events for this pattern
     let updateEventsQuery = supabase
       .from('activity_events')
       .update({ classification })
@@ -379,14 +403,19 @@ export async function POST(req: Request) {
       updateEventsQuery = updateEventsQuery.eq('tenant_id', tenantId)
     }
 
+    if (targetUserId) {
+      updateEventsQuery = updateEventsQuery.eq('user_id', targetUserId)
+    }
+
     await updateEventsQuery
 
     return NextResponse.json({
       success: true,
-      message: `App ${pattern} successfully classified as ${classification}`,
+      message: `App ${pattern} successfully classified as ${classification}${targetUserId ? ' (Employee Specific)' : ' (Organization-wide)'}`,
       ruleId,
       pattern,
       classification,
+      isUserSpecific: !!targetUserId,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -417,16 +446,20 @@ export async function DELETE(req: Request) {
 
     let ruleId = searchParams.get('id')
     let pattern = searchParams.get('pattern')
+    let userId = searchParams.get('userId')
 
     if (!ruleId && !pattern) {
       try {
         const body = await req.json()
         ruleId = body.id || body.ruleId
         pattern = body.pattern
+        if (body.userId) userId = body.userId
       } catch {
         // no body
       }
     }
+
+    const targetUserId = userId && userId !== 'ALL' ? userId : null
 
     if (ruleId) {
       let deleteQuery = supabase.from('productivity_rules').delete().eq('id', ruleId)
@@ -442,6 +475,11 @@ export async function DELETE(req: Request) {
         .ilike('pattern', pattern)
       if (!session.isSuperAdmin) {
         deleteQuery = deleteQuery.eq('tenant_id', tenantId)
+      }
+      if (targetUserId) {
+        deleteQuery = deleteQuery.eq('user_id', targetUserId)
+      } else {
+        deleteQuery = deleteQuery.is('user_id', null)
       }
       const { error } = await deleteQuery
       if (error) throw error

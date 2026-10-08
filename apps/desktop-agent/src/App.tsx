@@ -496,10 +496,34 @@ export default function App() {
     try {
       const { data } = await supabase
         .from('productivity_rules')
-        .select('pattern, classification, match_type');
-      if (data) {
-        setRules(data as ProductivityRule[]);
-        rulesRef.current = data as ProductivityRule[];
+        .select('pattern, classification, match_type, user_id, tenant_id');
+      if (data && Array.isArray(data)) {
+        const currentUserId = sessionRef.current?.user?.id;
+        const ruleMap = new Map<string, ProductivityRule>();
+
+        // 1. First pass: Apply organization-wide global rules (user_id is null)
+        data.filter((r: any) => !r.user_id).forEach((r: any) => {
+          ruleMap.set(r.pattern.toLowerCase().trim(), {
+            pattern: r.pattern,
+            classification: r.classification,
+            match_type: r.match_type,
+          });
+        });
+
+        // 2. Second pass: Override with employee-specific rules if logged in
+        if (currentUserId) {
+          data.filter((r: any) => r.user_id === currentUserId).forEach((r: any) => {
+            ruleMap.set(r.pattern.toLowerCase().trim(), {
+              pattern: r.pattern,
+              classification: r.classification,
+              match_type: r.match_type,
+            });
+          });
+        }
+
+        const mergedRules = Array.from(ruleMap.values());
+        setRules(mergedRules);
+        rulesRef.current = mergedRules;
       }
     } catch (e) {
       console.warn('Failed to load productivity rules:', e);

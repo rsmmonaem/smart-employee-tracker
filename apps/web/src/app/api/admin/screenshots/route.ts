@@ -24,7 +24,7 @@ export async function GET(req: Request) {
     let query = supabase
       .from('screenshots')
       .select('id, tenant_id, user_id, storage_path, taken_at, is_blurred, created_at, users(full_name, email)', { count: 'exact' })
-      .order('taken_at', { ascending: false })
+      .order('created_at', { ascending: false })
 
     // Strict Tenant Isolation: Non-superadmin users can ONLY see their own company's screenshots
     if (!session.isSuperAdmin) {

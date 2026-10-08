@@ -30,6 +30,7 @@ interface AppItem {
   usageCount: number
   totalSeconds: number
   usedBy?: string[]
+  isUserSpecific?: boolean
 }
 
 interface TopAppItem {
@@ -118,10 +119,11 @@ export default function ReviewAppsPage() {
     fetchReviewData()
   }, [fetchReviewData])
 
-  // Classify App
+  // Classify App (Organization-wide or for selected Employee)
   const handleClassify = async (item: AppItem, classification: Classification) => {
     try {
       setActionLoading(item.name)
+      const isSpecific = selectedEmployee !== 'ALL'
 
       // Optimistic state transition
       if (activeTab === 'unreviewed') {
@@ -130,13 +132,14 @@ export default function ReviewAppsPage() {
           {
             ...item,
             classification,
+            isUserSpecific: isSpecific,
             id: `rev-${item.name.toLowerCase()}`,
           },
           ...prev.filter((a) => a.name !== item.name),
         ])
       } else {
         setReviewedApps((prev) =>
-          prev.map((a) => (a.name === item.name ? { ...a, classification } : a))
+          prev.map((a) => (a.name === item.name ? { ...a, classification, isUserSpecific: isSpecific } : a))
         )
       }
 
@@ -147,6 +150,7 @@ export default function ReviewAppsPage() {
           pattern: item.name,
           classification,
           matchType: item.type,
+          userId: isSpecific ? selectedEmployee : undefined,
         }),
       })
 
@@ -176,12 +180,17 @@ export default function ReviewAppsPage() {
         {
           ...item,
           classification: undefined,
+          isUserSpecific: false,
           id: `unrev-${item.name.toLowerCase()}`,
         },
         ...prev,
       ])
 
-      const res = await fetch(`/api/admin/apps/review?pattern=${encodeURIComponent(item.name)}`, {
+      const url = selectedEmployee && selectedEmployee !== 'ALL'
+        ? `/api/admin/apps/review?pattern=${encodeURIComponent(item.name)}&userId=${encodeURIComponent(selectedEmployee)}`
+        : `/api/admin/apps/review?pattern=${encodeURIComponent(item.name)}`
+
+      const res = await fetch(url, {
         method: 'DELETE',
       })
       const json = await res.json()
@@ -589,6 +598,11 @@ export default function ReviewAppsPage() {
                             {app.totalSeconds > 0 && (
                               <span className="font-mono text-gray-500 dark:text-gray-400 font-medium">
                                 ⏱ {formatDuration(app.totalSeconds)}
+                              </span>
+                            )}
+                            {app.isUserSpecific && (
+                              <span className="bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-purple-200 dark:border-purple-800">
+                                👤 Custom for {employees.find((e) => e.id === selectedEmployee)?.name || 'Employee'}
                               </span>
                             )}
                             {app.usedBy && app.usedBy.length > 0 && (
