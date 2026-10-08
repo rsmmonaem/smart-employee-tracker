@@ -83,21 +83,54 @@ export async function GET() {
     const { data: authData } = await supabase.auth.admin.listUsers()
     const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
 
+    // Also fetch team_members table if present
+    let dbTeamMembers: { team_id: string; user_id: string }[] = []
+    try {
+      let tmQuery = supabase.from('team_members').select('team_id, user_id')
+      if (!session.isSuperAdmin && tenantId) {
+        tmQuery = tmQuery.eq('tenant_id', tenantId)
+      }
+      const { data: tmData } = await tmQuery
+      if (tmData) {
+        dbTeamMembers = tmData
+      }
+    } catch {
+      // team_members table optional / fallback to auth metadata
+    }
+
     const tenantEmployees = (dbUsers || []).map((u) => {
       const meta = authMap.get(u.id) || {}
+      let userTeams: string[] = []
+      if (Array.isArray(meta.teams)) {
+        userTeams = meta.teams.map((t: any) => String(t).trim()).filter(Boolean)
+      } else if (typeof meta.teams === 'string' && meta.teams.trim()) {
+        userTeams = meta.teams.split(',').map((t: string) => t.trim()).filter(Boolean)
+      }
+      if (userTeams.length === 0 && meta.team) {
+        userTeams = [String(meta.team).trim()]
+      }
+      if (userTeams.length === 0) {
+        userTeams = ['Engineering']
+      }
+
       return {
         id: u.id,
         name: u.full_name || u.email?.split('@')[0] || 'User',
         email: u.email,
         role: u.role,
-        team: meta.team || 'Engineering',
+        teams: userTeams,
       }
     })
 
     const teamList = (teams || []).map((t) => {
-      const members = tenantEmployees.filter(
-        (u) => (u.team || '').trim().toLowerCase() === t.name.trim().toLowerCase()
-      )
+      // User belongs to this team if listed in relational team_members OR team name is present in their teams array
+      const members = tenantEmployees.filter((u) => {
+        const inDb = dbTeamMembers.some((tm) => tm.team_id === t.id && tm.user_id === u.id)
+        const inMeta = u.teams.some(
+          (teamName) => teamName.trim().toLowerCase() === t.name.trim().toLowerCase()
+        )
+        return inDb || inMeta
+      })
 
       return {
         id: t.id,
@@ -246,12 +279,39 @@ export async function PUT(req: Request) {
 
       for (const u of authData?.users || []) {
         if (tenantUserIds.has(u.id)) {
-          const currentTeam = u.user_metadata?.team || ''
-          if (currentTeam.trim().toLowerCase() === oldName.trim().toLowerCase()) {
+          const meta = u.user_metadata || {}
+          let changed = false
+          let userTeams: string[] = []
+          if (Array.isArray(meta.teams)) {
+            userTeams = meta.teams.map((t: any) => {
+              if (String(t).trim().toLowerCase() === oldName.trim().toLowerCase()) {
+                changed = true
+                return newName
+              }
+              return String(t).trim()
+            }).filter(Boolean)
+          } else if (typeof meta.teams === 'string' && meta.teams.trim()) {
+            userTeams = meta.teams.split(',').map((t: string) => {
+              if (t.trim().toLowerCase() === oldName.trim().toLowerCase()) {
+                changed = true
+                return newName
+              }
+              return t.trim()
+            }).filter(Boolean)
+          }
+
+          let singleTeam = meta.team
+          if (typeof singleTeam === 'string' && singleTeam.trim().toLowerCase() === oldName.trim().toLowerCase()) {
+            singleTeam = newName
+            changed = true
+          }
+
+          if (changed) {
             await supabase.auth.admin.updateUserById(u.id, {
               user_metadata: {
-                ...u.user_metadata,
-                team: newName,
+                ...meta,
+                team: singleTeam || userTeams[0] || newName,
+                teams: userTeams.length > 0 ? userTeams : [singleTeam || newName],
               },
             })
           }

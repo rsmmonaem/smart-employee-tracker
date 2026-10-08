@@ -62,6 +62,9 @@ export default function TeamsManagementPage() {
   const [deleteConfirmTeam, setDeleteConfirmTeam] = useState<TeamItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // View Members Modal State
+  const [viewMembersTeam, setViewMembersTeam] = useState<TeamItem | null>(null)
+
   // Fetch teams from multi-tenant API
   const fetchTeams = useCallback(async () => {
     try {
@@ -366,29 +369,35 @@ export default function TeamsManagementPage() {
                     {team.description || 'No description provided for this team.'}
                   </p>
 
-                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs">
+                  <div 
+                    onClick={() => setViewMembersTeam(team)}
+                    className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-xs cursor-pointer hover:bg-gray-50/60 dark:hover:bg-gray-800/40 p-1.5 -mx-1.5 rounded-lg transition-colors"
+                    title="Click to view all team members"
+                  >
                     <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                       <Users className="w-3.5 h-3.5 text-blue-500" />
-                      <span>{team.membersCount} Members</span>
+                      <span className="font-medium text-gray-700 dark:text-gray-300">{team.membersCount} {team.membersCount === 1 ? 'Member' : 'Members'}</span>
                     </div>
 
-                    {team.members && team.members.length > 0 && (
+                    {team.members && team.members.length > 0 ? (
                       <div className="flex -space-x-1.5 overflow-hidden">
                         {team.members.slice(0, 4).map((m) => (
                           <div
                             key={m.id}
                             title={`${m.name} (${m.email})`}
-                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-gray-900 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-[10px] font-bold flex items-center justify-center"
+                            className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-gray-900 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold flex items-center justify-center shadow-2xs"
                           >
                             {m.name.charAt(0).toUpperCase()}
                           </div>
                         ))}
                         {team.members.length > 4 && (
-                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-gray-900 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[9px] font-semibold flex items-center justify-center">
+                          <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-gray-900 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[9px] font-semibold flex items-center justify-center shadow-2xs">
                             +{team.members.length - 4}
                           </div>
                         )}
                       </div>
+                    ) : (
+                      <span className="text-[11px] text-gray-400 italic">No members yet</span>
                     )}
                   </div>
                 </div>
@@ -579,6 +588,75 @@ export default function TeamsManagementPage() {
               >
                 {isDeleting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                 <span>{isDeleting ? 'Deleting...' : 'Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW MEMBERS MODAL */}
+      {viewMembersTeam && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-800 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+                  {viewMembersTeam.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                    {viewMembersTeam.name} Members
+                  </h3>
+                  <p className="text-[11px] text-gray-400">
+                    {viewMembersTeam.membersCount} {viewMembersTeam.membersCount === 1 ? 'employee assigned' : 'employees assigned'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewMembersTeam(null)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 max-h-[360px] overflow-y-auto space-y-2 divide-y divide-gray-50 dark:divide-gray-800/60">
+              {(!viewMembersTeam.members || viewMembersTeam.members.length === 0) ? (
+                <div className="py-8 text-center text-gray-400 text-xs">
+                  No members are currently assigned to this team.
+                </div>
+              ) : (
+                viewMembersTeam.members.map((member) => (
+                  <div key={member.id} className="pt-2 first:pt-0 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold text-xs flex items-center justify-center shrink-0">
+                        {member.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-900 dark:text-gray-100 truncate">
+                          {member.name}
+                        </p>
+                        <p className="text-[11px] text-gray-400 truncate">
+                          {member.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">
+                      {member.role || 'Member'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-5 pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewMembersTeam(null)}
+                className="px-4 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
