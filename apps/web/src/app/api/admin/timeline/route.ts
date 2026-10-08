@@ -76,8 +76,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
 
-    const startOfDay = `${targetDate}T00:00:00.000Z`
-    const endOfDay = `${targetDate}T23:59:59.999Z`
+    // 24-hour timezone offset buffer (+/- 24h) so events in ANY client local timezone are fetched
+    const startOfDay = new Date(new Date(targetDate).getTime() - 24 * 3600 * 1000).toISOString()
+    const endOfDay = new Date(new Date(targetDate).getTime() + 48 * 3600 * 1000).toISOString()
 
     const userIds = (dbUsers || []).map((u) => u.id)
 
@@ -133,7 +134,7 @@ export async function GET(req: Request) {
         const startD = new Date(ev.started_at)
         const endD = new Date(ev.ended_at)
 
-        // Use local hours to accurately match the employee's work day (10:00 - 19:30)
+        // Use local hours to accurately match the employee's work day
         const startH = startD.getHours()
         const startM = startD.getMinutes()
         const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
@@ -189,7 +190,16 @@ export async function GET(req: Request) {
         hasClockedIn: !!userSession,
         clockedInAt: userSession?.clocked_in_at || null,
         clockedOutAt: userSession?.clocked_out_at || null,
-        hasEvents: segments.length > 0,
+        hasEvents: userEvents.length > 0,
+        rawEvents: userEvents.map((ev) => ({
+          id: ev.id,
+          appName: ev.app_name,
+          windowTitle: ev.window_title || 'Application Window',
+          startedAt: ev.started_at,
+          endedAt: ev.ended_at,
+          classification: ev.classification,
+          domain: ev.domain,
+        })),
         segments,
       }
     })

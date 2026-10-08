@@ -15,9 +15,19 @@ type ActivityType =
   | 'NOT_IN_WORK'
   | 'UNTRACKED'
 
+interface RawEvent {
+  id: string
+  appName: string
+  windowTitle?: string
+  startedAt: string
+  endedAt: string
+  classification: string
+  domain?: string | null
+}
+
 interface TimelineSegment {
   id: string
-  startMin: number // minutes from 10:00 AM (0 to 570)
+  startMin: number // minutes from axis start
   durationMin: number
   type: ActivityType
   appName: string
@@ -36,6 +46,7 @@ interface EmployeeTimelineRow {
   teams?: string[]
   hasClockedIn: boolean
   hasEvents: boolean
+  rawEvents?: RawEvent[]
   segments: TimelineSegment[]
 }
 
@@ -76,30 +87,41 @@ const TYPE_CONFIG: Record<
   },
 }
 
-// Total timeline width represents 10:00 AM to 19:30 PM = 9.5 hours = 570 mins
-const TOTAL_MINUTES = 570
-
-// Axis ticks: 10:30, 11:00, 11:30 ... 19:00
-const TIME_TICKS = [
-  { min: 30, label: ':30' },
-  { min: 60, label: '11:00' },
-  { min: 90, label: ':30' },
-  { min: 120, label: '12:00' },
-  { min: 150, label: ':30' },
-  { min: 180, label: '13:00' },
-  { min: 210, label: ':30' },
-  { min: 240, label: '14:00' },
-  { min: 270, label: ':30' },
-  { min: 300, label: '15:00' },
-  { min: 330, label: ':30' },
-  { min: 360, label: '16:00' },
-  { min: 390, label: ':30' },
-  { min: 420, label: '17:00' },
-  { min: 450, label: ':30' },
-  { min: 480, label: '18:00' },
-  { min: 510, label: ':30' },
-  { min: 540, label: '19:00' },
+// Standard 24 Hours Timeline (00:00 to 24:00 = 1440 mins)
+const TOTAL_MINUTES_24H = 1440
+const TIME_TICKS_24H = [
+  { min: 0, label: '00:00' },
+  { min: 120, label: '02:00' },
+  { min: 240, label: '04:00' },
+  { min: 360, label: '06:00' },
+  { min: 480, label: '08:00' },
+  { min: 600, label: '10:00' },
+  { min: 720, label: '12:00' },
+  { min: 840, label: '14:00' },
+  { min: 960, label: '16:00' },
+  { min: 1080, label: '18:00' },
+  { min: 1200, label: '20:00' },
+  { min: 1320, label: '22:00' },
+  { min: 1440, label: '24:00' },
 ]
+
+function formatClockTime(d: Date): string {
+  return d.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+function formatDurationSec(totalSec: number): string {
+  const hours = Math.floor(totalSec / 3600)
+  const minutes = Math.floor((totalSec % 3600) / 60)
+  const seconds = totalSec % 60
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+  }
+  return `${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+}
 
 export default function TimelinePage() {
   const { searchQuery, selectedDate, selectedTeam, refreshTrigger, currentUser } = useAdminFilter()
@@ -114,6 +136,80 @@ export default function TimelinePage() {
     y: number
   } | null>(null)
 
+  // Compute Client-Local Timezone Segments for full 24h day accurately
+  const processEmployeeSegments = useCallback(
+    (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
+      if (!emp.rawEvents || emp.rawEvents.length === 0) {
+        return emp.segments || []
+      }
+
+      const clientSegments: TimelineSegment[] = []
+
+      // Filter events that fall on the targetDate in user's browser local timezone
+      const matchingEvents = emp.rawEvents.filter((ev) => {
+        const d = new Date(ev.startedAt)
+        // Match local date (YYYY-MM-DD)
+        const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        return localDateStr === targetDateStr
+      })
+
+      const eventsToUse = matchingEvents.length > 0 ? matchingEvents : emp.rawEvents
+
+      eventsToUse.forEach((ev, idx) => {
+        const startD = new Date(ev.startedAt)
+        const endD = new Date(ev.endedAt)
+
+        // Exact minutes in client's local timezone from 00:00 (0 to 1440)
+        const startMin = startD.getHours() * 60 + startD.getMinutes()
+        const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
+        const durationMin = Math.max(1, Math.round(diffSec / 60))
+
+        let type: ActivityType = 'NEUTRAL'
+        const appLower = (ev.appName || '').toLowerCase()
+        const winLower = (ev.windowTitle || '').toLowerCase()
+
+        if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+          type = 'UNTRACKED'
+        } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+          type = 'NOT_IN_WORK'
+        } else if (appLower.includes('idle') || winLower.includes('idle')) {
+          type = 'IDLE'
+        } else if (ev.classification === 'PRODUCTIVE') {
+          type = 'PRODUCTIVE'
+        } else if (ev.classification === 'UNPRODUCTIVE') {
+          type = 'UNPRODUCTIVE'
+        }
+
+        const prev = clientSegments[clientSegments.length - 1]
+        if (
+          prev &&
+          prev.type === type &&
+          prev.appName === ev.appName &&
+          startMin <= prev.startMin + prev.durationMin + 2
+        ) {
+          prev.durationMin += durationMin
+          prev.endTimeStr = formatClockTime(endD)
+          prev.durationStr = formatDurationSec(prev.durationMin * 60)
+        } else {
+          clientSegments.push({
+            id: ev.id || `seg-${idx}`,
+            startMin,
+            durationMin,
+            type,
+            appName: ev.appName,
+            windowTitle: ev.windowTitle || 'Application Window',
+            startTimeStr: formatClockTime(startD),
+            endTimeStr: formatClockTime(endD),
+            durationStr: formatDurationSec(diffSec),
+          })
+        }
+      })
+
+      return clientSegments
+    },
+    []
+  )
+
   // Fetch real timeline data from API
   const fetchTimelineData = useCallback(async (date: string) => {
     try {
@@ -121,14 +217,18 @@ export default function TimelinePage() {
       const res = await fetch(`/api/admin/timeline?date=${date}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.success && json.timelines) {
-        setTimelines(json.timelines)
+        const computed = json.timelines.map((emp: EmployeeTimelineRow) => ({
+          ...emp,
+          segments: processEmployeeSegments(emp, date),
+        }))
+        setTimelines(computed)
       }
     } catch (err) {
       console.error('Failed to fetch timeline data:', err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [processEmployeeSegments])
 
   useEffect(() => {
     fetchTimelineData(selectedDate)
@@ -182,6 +282,26 @@ export default function TimelinePage() {
       ? 'Yesterday Activities'
       : `${selectedDate} Activities`
 
+  const [timelineMode, setTimelineMode] = useState<'24H' | 'OFFICE'>('24H')
+
+  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 600
+  const activeTicks =
+    timelineMode === '24H'
+      ? TIME_TICKS_24H
+      : [
+          { min: 0, label: '10:00' },
+          { min: 60, label: '11:00' },
+          { min: 120, label: '12:00' },
+          { min: 180, label: '13:00' },
+          { min: 240, label: '14:00' },
+          { min: 300, label: '15:00' },
+          { min: 360, label: '16:00' },
+          { min: 420, label: '17:00' },
+          { min: 480, label: '18:00' },
+          { min: 540, label: '19:00' },
+          { min: 600, label: '20:00' },
+        ]
+
   return (
     <div className="min-h-full bg-white dark:bg-gray-900 pb-16">
       {/* Top Header Bar */}
@@ -199,6 +319,30 @@ export default function TimelinePage() {
         loading={loading}
         onRefresh={() => fetchTimelineData(selectedDate)}
         onUserAdded={() => fetchTimelineData(selectedDate)}
+        extraActions={
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs">
+            <button
+              onClick={() => setTimelineMode('24H')}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                timelineMode === '24H'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              24 Hours
+            </button>
+            <button
+              onClick={() => setTimelineMode('OFFICE')}
+              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+                timelineMode === 'OFFICE'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              Office (10-20h)
+            </button>
+          </div>
+        }
       />
 
       {/* Subheader & Activity Legend Row (Screenshot 4) */}
@@ -250,8 +394,12 @@ export default function TimelinePage() {
                             </div>
                           ) : (
                             emp.segments.map((seg) => {
-                              const leftPct = (seg.startMin / TOTAL_MINUTES) * 100
-                              const widthPct = Math.max(0.6, (seg.durationMin / TOTAL_MINUTES) * 100)
+                              const calculatedMin =
+                                timelineMode === '24H'
+                                  ? seg.startMin
+                                  : Math.max(0, Math.min(600, seg.startMin - 600))
+                              const leftPct = (calculatedMin / activeTotalMinutes) * 100
+                              const widthPct = Math.max(0.6, (seg.durationMin / activeTotalMinutes) * 100)
                               const color = TYPE_CONFIG[seg.type]?.bgHex || '#3b82f6'
 
                               return (
@@ -289,9 +437,9 @@ export default function TimelinePage() {
             <div className="grid grid-cols-12 items-center gap-4 mt-6 pt-3 border-t border-gray-150 dark:border-gray-800">
               <div className="col-span-2" />
               <div className="col-span-10 relative h-6">
-                {TIME_TICKS.map((tick, idx) => {
-                  const leftPct = (tick.min / TOTAL_MINUTES) * 100
-                  const isHour = tick.label !== ':30'
+                {activeTicks.map((tick, idx) => {
+                  const leftPct = (tick.min / activeTotalMinutes) * 100
+                  const isHour = !tick.label.startsWith(':')
                   return (
                     <div
                       key={idx}
