@@ -11,18 +11,77 @@ function formatDuration(totalSeconds: number): string {
   return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m`
 }
 
-function formatClockTime(isoStr?: string | null): string {
+function formatClockTime(isoStr?: string | null, timeZone: string = 'Asia/Dhaka'): string {
   if (!isoStr) return '00:00'
   try {
     const d = new Date(isoStr)
     if (isNaN(d.getTime())) return '00:00'
     return d.toLocaleTimeString('en-US', {
+      timeZone,
       hour: '2-digit',
       minute: '2-digit',
       hour12: true,
     }).toLowerCase()
   } catch {
     return '00:00'
+  }
+}
+
+function getLocalDateString(isoStr?: string | null, timeZone: string = 'Asia/Dhaka'): string {
+  if (!isoStr) return ''
+  try {
+    const d = new Date(isoStr)
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  } catch {
+    return (isoStr || '').slice(0, 10)
+  }
+}
+
+function getTargetTimeMs(dateStr: string, minutesFromMidnight: number, timeZone: string = 'Asia/Dhaka'): number {
+  try {
+    const testDate = new Date(`${dateStr}T12:00:00Z`)
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    })
+    const parts = dtf.formatToParts(testDate)
+    const tzPart = parts.find((p) => p.type === 'timeZoneName')?.value
+    let offsetMinutes = 0
+    if (tzPart) {
+      const match = tzPart.match(/GMT([+-])(\d{1,2}):(\d{2})/)
+      if (match) {
+        const sign = match[1] === '+' ? 1 : -1
+        offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
+      }
+    }
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const totalUtcMinutes = minutesFromMidnight - offsetMinutes
+    return new Date(Date.UTC(y, m - 1, d, 0, totalUtcMinutes, 0)).getTime()
+  } catch {
+    return new Date(`${dateStr}T10:00:00Z`).getTime()
+  }
+}
+
+function parseClockInMinutes(str: string, defaultMinutes: number = 600): number {
+  try {
+    const cleaned = str.trim().toUpperCase()
+    const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)
+    const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/)
+    let hours = 0, minutes = 0
+    if (ampmMatch) {
+      hours = parseInt(ampmMatch[1], 10)
+      minutes = parseInt(ampmMatch[2], 10)
+      if (ampmMatch[3] === 'PM' && hours !== 12) hours += 12
+      if (ampmMatch[3] === 'AM' && hours === 12) hours = 0
+      return hours * 60 + minutes
+    } else if (h24Match) {
+      hours = parseInt(h24Match[1], 10)
+      minutes = parseInt(h24Match[2], 10)
+      return hours * 60 + minutes
+    }
+    return defaultMinutes
+  } catch {
+    return defaultMinutes
   }
 }
 
@@ -71,8 +130,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
 
-    const startOfDay = new Date(`${targetDate}T00:00:00.000Z`).toISOString()
-    const endOfDay = new Date(`${targetDate}T23:59:59.999Z`).toISOString()
+    // Buffer by ±24h so events in ANY timezone are fetched
+    const startOfDay = new Date(new Date(targetDate).getTime() - 24 * 3600 * 1000).toISOString()
+    const endOfDay = new Date(new Date(targetDate).getTime() + 48 * 3600 * 1000).toISOString()
 
     const userIds = (dbUsers || []).map((u) => u.id)
 
@@ -85,14 +145,31 @@ export async function GET(req: Request) {
       })
     }
 
-    // 2. Fetch attendance sessions strictly for those userIds
+    // 2. Fetch platform settings for expected clock-in/out and timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
+    const expectedClockInStr: string = settingsRow?.value?.expectedClockIn || '10:00'
+    const expectedClockOutStr: string = settingsRow?.value?.expectedClockOut || '19:00'
+
+    const expectedInMinutes = parseClockInMinutes(expectedClockInStr, 600) // 10:00 AM = 600
+    const expectedOutMinutes = parseClockInMinutes(expectedClockOutStr, 1140) // 07:00 PM = 1140
+
+    const expectedClockInMs = getTargetTimeMs(targetDate, expectedInMinutes, orgTimezone)
+    const expectedClockOutMs = getTargetTimeMs(targetDate, expectedOutMinutes, orgTimezone)
+
+    // 3. Fetch attendance sessions strictly for those userIds
     const { data: allSessions } = await supabase
       .from('attendance_sessions')
       .select('*')
       .in('user_id', userIds)
-      .order('clocked_in_at', { ascending: false })
+      .order('clocked_in_at', { ascending: true })
 
-    // 3. Fetch activity events strictly for those userIds
+    // 4. Fetch activity events strictly for those userIds
     const { data: activityEvents } = await supabase
       .from('activity_events')
       .select('user_id, started_at, ended_at, classification')
@@ -111,19 +188,29 @@ export async function GET(req: Request) {
 
     const employees = (dbUsers || []).map((user, idx) => {
       const userSessions = (allSessions || []).filter((s) => s.user_id === user.id)
-      const targetSession = userSessions.find((s) => {
-        const inStr = s.clocked_in_at?.slice(0, 10)
-        return inStr === targetDate
-      })
 
-      const inTimeStr = targetSession?.clocked_in_at
-        ? formatClockTime(targetSession.clocked_in_at)
+      // Filter sessions for targetDate in the organization's local timezone
+      const todaySessions = userSessions.filter(
+        (s) => getLocalDateString(s.clocked_in_at, orgTimezone) === targetDate
+      )
+
+      const targetSession = todaySessions.length > 0 ? todaySessions[todaySessions.length - 1] : null
+      const firstSession = todaySessions.length > 0 ? todaySessions[0] : null
+      const hasOpenSession = todaySessions.some((s) => s.status === 'OPEN' && !s.clocked_out_at)
+
+      const inTimeStr = firstSession?.clocked_in_at
+        ? formatClockTime(firstSession.clocked_in_at, orgTimezone)
         : '00:00'
-      const outTimeStr = targetSession?.clocked_out_at
-        ? formatClockTime(targetSession.clocked_out_at)
+      const outTimeStr = hasOpenSession
+        ? 'Active'
+        : targetSession?.clocked_out_at
+        ? formatClockTime(targetSession.clocked_out_at, orgTimezone)
         : '00:00'
 
-      const userEvents = (activityEvents || []).filter((e) => e.user_id === user.id)
+      // Filter activity events for targetDate in local timezone
+      const userEvents = (activityEvents || []).filter(
+        (e) => e.user_id === user.id && getLocalDateString(e.started_at, orgTimezone) === targetDate
+      )
       let activeSeconds = 0
       let idleSeconds = 0
 
@@ -141,16 +228,44 @@ export async function GET(req: Request) {
         }
       })
 
-      const totalWorkSec = targetSession
-        ? targetSession.total_work_seconds || activeSeconds + idleSeconds
-        : 0
+      // Multi-session Pause-Resume duration accumulation
+      // Work hour counter only counts from expectedClockInMs onwards
+      // Work after expectedClockOutMs is classified as Overtime
+      let totalRegularWorkSec = 0
+      let totalOvertimeSec = 0
+
+      todaySessions.forEach((s) => {
+        const rawStart = new Date(s.clocked_in_at).getTime()
+        const rawEnd = s.clocked_out_at
+          ? new Date(s.clocked_out_at).getTime()
+          : s.status === 'OPEN'
+          ? Date.now()
+          : rawStart
+
+        // 1. Regular shift window: max(rawStart, expectedClockInMs) up to min(rawEnd, expectedClockOutMs)
+        const regularStart = Math.max(rawStart, expectedClockInMs)
+        const regularEnd = Math.min(rawEnd, expectedClockOutMs)
+        if (regularEnd > regularStart) {
+          totalRegularWorkSec += Math.floor((regularEnd - regularStart) / 1000)
+        }
+
+        // 2. Overtime window: work performed after expectedClockOutMs
+        const overtimeStart = Math.max(rawStart, expectedClockOutMs)
+        if (rawEnd > overtimeStart) {
+          totalOvertimeSec += Math.floor((rawEnd - overtimeStart) / 1000)
+        }
+      })
+
+      const totalWorkSec = totalRegularWorkSec + totalOvertimeSec
 
       const workDurationStr = formatDuration(totalWorkSec)
+      const regularHoursStr = formatDuration(totalRegularWorkSec)
+      const overtimeHoursStr = formatDuration(totalOvertimeSec)
       const activeDurationStr = formatDuration(activeSeconds || Math.round(totalWorkSec * 0.82))
       const idleDurationStr = formatDuration(idleSeconds || Math.round(totalWorkSec * 0.18))
 
       const workedDaysCount = new Set(
-        userSessions.map((s) => s.clocked_in_at?.slice(0, 10)).filter(Boolean)
+        userSessions.map((s) => getLocalDateString(s.clocked_in_at, orgTimezone)).filter(Boolean)
       ).size
 
       const name = user.full_name || user.email.split('@')[0]
@@ -166,11 +281,11 @@ export async function GET(req: Request) {
         team: 'Engineering',
         avatarLetter,
         avatarColor,
-        hasClockedIn: !!targetSession,
-        status: targetSession?.clocked_out_at
-          ? 'Completed'
-          : targetSession
+        hasClockedIn: todaySessions.length > 0,
+        status: hasOpenSession
           ? 'Active'
+          : todaySessions.length > 0
+          ? 'Completed'
           : 'Yet to start work',
         metrics: {
           inTime: inTimeStr,
@@ -181,6 +296,8 @@ export async function GET(req: Request) {
           workedHours: workDurationStr,
           idleHours: idleDurationStr,
           activeHours: activeDurationStr,
+          regularHours: regularHoursStr,
+          overtimeHours: overtimeHoursStr,
           workedDays: workedDaysCount,
         },
       }

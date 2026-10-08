@@ -36,6 +36,8 @@ type EmployeeRecord = {
     workedHours: string
     idleHours: string
     activeHours: string
+    regularHours?: string
+    overtimeHours?: string
     workedDays: number
   }
 }
@@ -431,6 +433,16 @@ export default function TimesheetPage() {
                               IDLE
                             </span>
                           </div>
+                          {data.overtimeHours && data.overtimeHours !== '00h 00m' && (
+                            <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
+                              <span className="font-semibold text-purple-600 dark:text-purple-400 font-mono">
+                                {data.overtimeHours}
+                              </span>
+                              <span className="text-[10px] uppercase font-semibold text-purple-500 tracking-wider">
+                                OVERTIME
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -444,6 +456,14 @@ export default function TimesheetPage() {
                           </span>
                           <span className="text-[11px] text-gray-400 font-medium">Worked hours</span>
                         </div>
+                        {data.overtimeHours && data.overtimeHours !== '00h 00m' && (
+                          <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
+                            <span className="font-bold text-purple-600 dark:text-purple-400 font-mono">
+                              {data.overtimeHours}
+                            </span>
+                            <span className="text-[11px] text-purple-600 dark:text-purple-400 font-medium">Overtime (Post-shift)</span>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center text-gray-700 dark:text-gray-300">
                           <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">
                             {data.idleHours}

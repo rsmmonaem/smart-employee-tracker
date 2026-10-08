@@ -109,6 +109,7 @@ interface TrackSettings {
   expectedActiveTime?: string
   timezone?: string
   expectedClockIn?: string
+  expectedClockOut?: string
   enableProjectManagement?: boolean
   allowTeamAddEditDeleteTasks?: boolean
   allowTeamCompleteAndHoldTasks?: boolean
@@ -518,15 +519,33 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
           {/* Expected Clock-in */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              Expected Clock-in
+              Expected Clock-in Time
             </label>
             <input
-              type="text"
-              value={settings.expectedClockIn || '09:00 AM'}
+              type="time"
+              value={settings.expectedClockIn || '10:00'}
               onChange={(e) => handleChange('expectedClockIn', e.target.value)}
-              placeholder="09:00 AM"
               className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
             />
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+              Work time is only counted from this time onwards. Early sessions won't count until this threshold.
+            </p>
+          </div>
+
+          {/* Expected Clock-out / Overtime Threshold */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Expected Clock-out Time (Overtime Threshold)
+            </label>
+            <input
+              type="time"
+              value={settings.expectedClockOut || '19:00'}
+              onChange={(e) => handleChange('expectedClockOut', e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 shadow-xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            />
+            <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+              Work performed after this time (e.g. 07:00 PM) is automatically classified as Overtime.
+            </p>
           </div>
         </div>
       </section>

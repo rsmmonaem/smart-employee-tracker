@@ -86,6 +86,7 @@ interface TrackingPolicy {
   screenshotIntervalMs: number;
   idleTimeoutStr: string;
   lastSyncedAt: string | null;
+  expectedClockIn?: string; // e.g. "09:00" or "10:00 AM"
 }
 
 interface ProductivityRule {
@@ -312,6 +313,7 @@ export default function App() {
     const blurCapture = override?.blurScreenCapture ?? val.blurScreenCapture ?? false;
     const intervalStr = override?.screenshotInterval ?? val.screenshotInterval ?? 'Every 1 min';
     const idleStr = override?.idleTimeout ?? val.idleTimeout ?? '1 min';
+    const expectedClockIn = val.expectedClockIn ?? '09:00';
 
     const intervalMs = parseIntervalToMs(intervalStr);
 
@@ -322,6 +324,7 @@ export default function App() {
       screenshotIntervalMs: intervalMs,
       idleTimeoutStr: idleStr,
       lastSyncedAt: new Date().toLocaleTimeString(),
+      expectedClockIn,
     });
     setLastSyncStatus(`⚡ Realtime: ${intervalStr} ${blurCapture ? '(Blur ON)' : ''}`);
   };
@@ -417,8 +420,9 @@ export default function App() {
 
     // 2. Fetch ground-truth sessions from Supabase for today
     try {
-      const startOfDay = `${todayStr}T00:00:00.000Z`;
-      const endOfDay = `${todayStr}T23:59:59.999Z`;
+      const localNow = new Date();
+      const startOfDay = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 0, 0, 0, 0).toISOString();
+      const endOfDay = new Date(localNow.getFullYear(), localNow.getMonth(), localNow.getDate(), 23, 59, 59, 999).toISOString();
 
       const { data: sessions } = await supabase
         .from('attendance_sessions')
@@ -427,19 +431,47 @@ export default function App() {
         .gte('clocked_in_at', startOfDay)
         .lte('clocked_in_at', endOfDay);
 
+      // Compute expectedClockIn threshold for today (in local date)
+      const expectedClockInStr = policyRef.current.expectedClockIn || '09:00';
+      const expectedClockInMs = (() => {
+        try {
+          // Normalize format: "09:00 AM" or "09:00" → hours/minutes
+          const cleaned = expectedClockInStr.trim().toUpperCase();
+          let hours = 0, minutes = 0;
+          const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+          const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+          if (ampmMatch) {
+            hours = parseInt(ampmMatch[1], 10);
+            minutes = parseInt(ampmMatch[2], 10);
+            if (ampmMatch[3] === 'PM' && hours !== 12) hours += 12;
+            if (ampmMatch[3] === 'AM' && hours === 12) hours = 0;
+          } else if (h24Match) {
+            hours = parseInt(h24Match[1], 10);
+            minutes = parseInt(h24Match[2], 10);
+          }
+          const today = new Date();
+          const threshold = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes, 0, 0);
+          return threshold.getTime();
+        } catch {
+          return 0;
+        }
+      })();
+
       let totalSec = 0;
       let existingOpenSessionId: string | null = null;
 
       if (sessions && Array.isArray(sessions)) {
         sessions.forEach((s) => {
-          const start = new Date(s.clocked_in_at).getTime();
+          const rawStart = new Date(s.clocked_in_at).getTime();
+          // Apply expected clock-in cutoff: only count time from max(clocked_in_at, expectedClockIn)
+          const effectiveStart = expectedClockInMs > 0 ? Math.max(rawStart, expectedClockInMs) : rawStart;
           if (s.clocked_out_at) {
             const end = new Date(s.clocked_out_at).getTime();
-            totalSec += Math.max(0, Math.floor((end - start) / 1000));
+            totalSec += Math.max(0, Math.floor((end - effectiveStart) / 1000));
           } else if (s.status === 'OPEN') {
             existingOpenSessionId = s.id;
             const now = Date.now();
-            totalSec += Math.max(0, Math.floor((now - start) / 1000));
+            totalSec += Math.max(0, Math.floor((now - effectiveStart) / 1000));
           }
         });
       }
@@ -471,12 +503,15 @@ export default function App() {
 
         if (existingOpenSessionId) {
           currentAttendanceSessionIdRef.current = existingOpenSessionId;
-        }
-
-        // Automatically start tracking if logged in
-        if (!isTrackingRef.current) {
           setIsTracking(true);
-          if (!existingOpenSessionId) {
+          setLastSyncStatus('🚀 Resumed active tracking session');
+        } else {
+          const wasPaused = localStorage.getItem('smart_tracker_is_tracking_paused') === 'true';
+          if (wasPaused) {
+            setIsTracking(false);
+            setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
+          } else if (!isTrackingRef.current) {
+            setIsTracking(true);
             supabase
               .from('attendance_sessions')
               .insert({
@@ -490,11 +525,9 @@ export default function App() {
               .then(({ data, error }) => {
                 if (!error && data) {
                   currentAttendanceSessionIdRef.current = data.id;
-                  setLastSyncStatus('🚀 Resumed tracking session');
+                  setLastSyncStatus('🚀 Tracking Active: Working session recorded');
                 }
               });
-          } else {
-            setLastSyncStatus('🚀 Resumed active tracking session');
           }
         }
       } else {
@@ -514,11 +547,15 @@ export default function App() {
 
         if (existingOpenSessionId) {
           currentAttendanceSessionIdRef.current = existingOpenSessionId;
-        }
-
-        if (!isTrackingRef.current) {
           setIsTracking(true);
-          if (!existingOpenSessionId) {
+          setLastSyncStatus('🚀 Resumed active tracking session');
+        } else {
+          const wasPaused = localStorage.getItem('smart_tracker_is_tracking_paused') === 'true';
+          if (wasPaused) {
+            setIsTracking(false);
+            setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
+          } else if (!isTrackingRef.current) {
+            setIsTracking(true);
             supabase
               .from('attendance_sessions')
               .insert({
@@ -532,11 +569,9 @@ export default function App() {
               .then(({ data, error }) => {
                 if (!error && data) {
                   currentAttendanceSessionIdRef.current = data.id;
-                  setLastSyncStatus('🚀 Resumed tracking session');
+                  setLastSyncStatus('🚀 Tracking Active: Working session recorded');
                 }
               });
-          } else {
-            setLastSyncStatus('🚀 Resumed active tracking session');
           }
         }
       }
@@ -936,6 +971,7 @@ export default function App() {
 
     if (nextTracking) {
       try {
+        localStorage.removeItem('smart_tracker_is_tracking_paused');
         const { data, error } = await supabase
           .from('attendance_sessions')
           .insert({
@@ -956,6 +992,7 @@ export default function App() {
       }
     } else {
       try {
+        localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
         const sessId = currentAttendanceSessionIdRef.current;
         if (sessId) {
           await supabase
