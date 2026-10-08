@@ -393,32 +393,109 @@ export default function App() {
     };
   }, []);
 
+  const getTodayKey = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  const syncTodayTrackedTime = async (userId: string) => {
+    const todayStr = getTodayKey();
+    const storageKey = `smart_tracker_today_seconds_${userId}_${todayStr}`;
+
+    // 1. Instantly restore from localStorage if available
+    try {
+      const cached = localStorage.getItem(storageKey);
+      if (cached) {
+        const parsed = parseInt(cached, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          setTimer((prev) => Math.max(prev, parsed));
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Fetch ground-truth sessions from Supabase for today
+    try {
+      const startOfDay = `${todayStr}T00:00:00.000Z`;
+      const endOfDay = `${todayStr}T23:59:59.999Z`;
+
+      const { data: sessions } = await supabase
+        .from('attendance_sessions')
+        .select('id, clocked_in_at, clocked_out_at, status')
+        .eq('user_id', userId)
+        .gte('clocked_in_at', startOfDay)
+        .lte('clocked_in_at', endOfDay);
+
+      let totalSec = 0;
+      let existingOpenSessionId: string | null = null;
+
+      if (sessions && Array.isArray(sessions)) {
+        sessions.forEach((s) => {
+          const start = new Date(s.clocked_in_at).getTime();
+          if (s.clocked_out_at) {
+            const end = new Date(s.clocked_out_at).getTime();
+            totalSec += Math.max(0, Math.floor((end - start) / 1000));
+          } else if (s.status === 'OPEN') {
+            existingOpenSessionId = s.id;
+            const now = Date.now();
+            totalSec += Math.max(0, Math.floor((now - start) / 1000));
+          }
+        });
+      }
+
+      if (totalSec > 0) {
+        setTimer((prev) => Math.max(prev, totalSec));
+        try {
+          localStorage.setItem(storageKey, String(totalSec));
+        } catch {
+          // ignore
+        }
+      }
+
+      return { totalSec, existingOpenSessionId };
+    } catch (err) {
+      console.warn('Failed to sync today tracked time:', err);
+      return { totalSec: 0, existingOpenSessionId: null };
+    }
+  };
+
   // Load session & track settings & Auto-start tracking on login
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
+        const { existingOpenSessionId } = await syncTodayTrackedTime(session.user.id);
+
+        if (existingOpenSessionId) {
+          currentAttendanceSessionIdRef.current = existingOpenSessionId;
+        }
+
         // Automatically start tracking if logged in
         if (!isTrackingRef.current) {
           setIsTracking(true);
-          supabase
-            .from('attendance_sessions')
-            .insert({
-              tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-              user_id: session.user.id,
-              clocked_in_at: new Date().toISOString(),
-              status: 'OPEN',
-            })
-            .select('id')
-            .single()
-            .then(({ data, error }) => {
-              if (!error && data) {
-                currentAttendanceSessionIdRef.current = data.id;
-                setLastSyncStatus('🚀 Auto-started tracking session');
-              }
-            });
+          if (!existingOpenSessionId) {
+            supabase
+              .from('attendance_sessions')
+              .insert({
+                tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+                user_id: session.user.id,
+                clocked_in_at: new Date().toISOString(),
+                status: 'OPEN',
+              })
+              .select('id')
+              .single()
+              .then(({ data, error }) => {
+                if (!error && data) {
+                  currentAttendanceSessionIdRef.current = data.id;
+                  setLastSyncStatus('🚀 Resumed tracking session');
+                }
+              });
+          } else {
+            setLastSyncStatus('🚀 Resumed active tracking session');
+          }
         }
       } else {
         fetchTrackSettings();
@@ -428,29 +505,39 @@ export default function App() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
+        const { existingOpenSessionId } = await syncTodayTrackedTime(session.user.id);
+
+        if (existingOpenSessionId) {
+          currentAttendanceSessionIdRef.current = existingOpenSessionId;
+        }
+
         if (!isTrackingRef.current) {
           setIsTracking(true);
-          supabase
-            .from('attendance_sessions')
-            .insert({
-              tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-              user_id: session.user.id,
-              clocked_in_at: new Date().toISOString(),
-              status: 'OPEN',
-            })
-            .select('id')
-            .single()
-            .then(({ data, error }) => {
-              if (!error && data) {
-                currentAttendanceSessionIdRef.current = data.id;
-                setLastSyncStatus('🚀 Auto-started tracking session');
-              }
-            });
+          if (!existingOpenSessionId) {
+            supabase
+              .from('attendance_sessions')
+              .insert({
+                tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+                user_id: session.user.id,
+                clocked_in_at: new Date().toISOString(),
+                status: 'OPEN',
+              })
+              .select('id')
+              .single()
+              .then(({ data, error }) => {
+                if (!error && data) {
+                  currentAttendanceSessionIdRef.current = data.id;
+                  setLastSyncStatus('🚀 Resumed tracking session');
+                }
+              });
+          } else {
+            setLastSyncStatus('🚀 Resumed active tracking session');
+          }
         }
       }
     });
@@ -576,8 +663,20 @@ export default function App() {
   useEffect(() => {
     let interval: any;
     if (isTracking) {
-      interval = setInterval(async () => {
-        setTimer((prev) => prev + 1);
+      interval = setInterval(() => {
+        setTimer((prev) => {
+          const next = prev + 1;
+          const currentUserId = sessionRef.current?.user?.id;
+          if (currentUserId && next % 5 === 0) {
+            const todayStr = getTodayKey();
+            try {
+              localStorage.setItem(`smart_tracker_today_seconds_${currentUserId}_${todayStr}`, String(next));
+            } catch {
+              // ignore
+            }
+          }
+          return next;
+        });
       }, 1000);
     } else {
       clearInterval(interval);
@@ -850,7 +949,7 @@ export default function App() {
 
         if (!error && data) {
           currentAttendanceSessionIdRef.current = data.id;
-          setLastSyncStatus('Clocked In: Real session recorded in Supabase');
+          setLastSyncStatus('🚀 Tracking Active: Working session recorded');
         }
       } catch (e) {
         console.warn('Attendance session start error:', e);
@@ -877,7 +976,14 @@ export default function App() {
             .eq('user_id', currentSession.user.id)
             .eq('status', 'OPEN');
         }
-        setLastSyncStatus('Clocked Out: Real session saved to Supabase');
+
+        const todayStr = getTodayKey();
+        try {
+          localStorage.setItem(`smart_tracker_today_seconds_${currentSession.user.id}_${todayStr}`, String(timer));
+        } catch {
+          // ignore
+        }
+        setLastSyncStatus(`⏸️ Paused: Today's progress saved (${formatTime(timer)})`);
       } catch (e) {
         console.warn('Attendance session close error:', e);
       }
