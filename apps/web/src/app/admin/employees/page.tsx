@@ -873,19 +873,37 @@ export default function EmployeesPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
-                    Team(s) Assignment
-                  </label>
-                  <span className="text-[11px] text-gray-400">Can belong to 1 or more teams</span>
-                </div>
-                {availableTeams.length === 0 ? (
-                  <div className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 text-center">
-                    Loading teams...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg max-h-36 overflow-y-auto">
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">
+                  Primary Team / Department
+                </label>
+                <select
+                  value={newTeam}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setNewTeam(val)
+                    if (!newTeams.includes(val)) {
+                      setNewTeams([val, ...newTeams])
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-white"
+                >
+                  {availableTeams.length === 0 ? (
+                    <option value="General">General</option>
+                  ) : (
+                    availableTeams.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                {availableTeams.length > 0 && (
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-between mb-1 text-[11px] text-gray-500">
+                      <span>Multi-Team Assignment (Click to select multiple):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-lg max-h-28 overflow-y-auto">
                       {availableTeams.map((t) => {
                         const isChecked = newTeams.includes(t)
                         return (
@@ -901,7 +919,7 @@ export default function EmployeesPage() {
                             }}
                             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
                               isChecked
-                                ? 'bg-blue-600 text-white shadow-2xs'
+                                ? 'bg-blue-600 text-white shadow-2xs font-semibold'
                                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400'
                             }`}
                           >
@@ -996,19 +1014,37 @@ export default function EmployeesPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
-                    Team(s) Assignment
-                  </label>
-                  <span className="text-[11px] text-gray-400">Can belong to 1 or more teams</span>
-                </div>
-                {availableTeams.length === 0 ? (
-                  <div className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 text-center">
-                    Loading teams...
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg max-h-36 overflow-y-auto">
+                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">
+                  Primary Team / Department
+                </label>
+                <select
+                  value={editTeam}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setEditTeam(val)
+                    if (!editTeams.includes(val)) {
+                      setEditTeams([val, ...editTeams])
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs text-gray-900 dark:text-white"
+                >
+                  {availableTeams.length === 0 ? (
+                    <option value={editTeam || 'General'}>{editTeam || 'General'}</option>
+                  ) : (
+                    availableTeams.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))
+                  )}
+                </select>
+
+                {availableTeams.length > 0 && (
+                  <div className="mt-2.5">
+                    <div className="flex items-center justify-between mb-1 text-[11px] text-gray-500">
+                      <span>Multi-Team Assignment (Click to select multiple):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-850 border border-gray-200 dark:border-gray-700 rounded-lg max-h-28 overflow-y-auto">
                       {availableTeams.map((t) => {
                         const isChecked = editTeams.includes(t)
                         return (
@@ -1024,7 +1060,7 @@ export default function EmployeesPage() {
                             }}
                             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
                               isChecked
-                                ? 'bg-blue-600 text-white shadow-2xs'
+                                ? 'bg-blue-600 text-white shadow-2xs font-semibold'
                                 : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400'
                             }`}
                           >
