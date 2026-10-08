@@ -494,37 +494,47 @@ export default function App() {
 
   const fetchProductivityRules = async () => {
     try {
-      const { data } = await supabase
-        .from('productivity_rules')
-        .select('pattern, classification, match_type, user_id, tenant_id');
-      if (data && Array.isArray(data)) {
-        const currentUserId = sessionRef.current?.user?.id;
-        const ruleMap = new Map<string, ProductivityRule>();
+      const currentTenantId = tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3';
+      const currentUserId = sessionRef.current?.user?.id;
 
-        // 1. First pass: Apply organization-wide global rules (user_id is null)
-        data.filter((r: any) => !r.user_id).forEach((r: any) => {
+      // 1. Fetch organization-wide global rules
+      const { data: globalRules } = await supabase
+        .from('productivity_rules')
+        .select('pattern, classification, match_type');
+
+      const ruleMap = new Map<string, ProductivityRule>();
+
+      if (globalRules && Array.isArray(globalRules)) {
+        globalRules.forEach((r: any) => {
           ruleMap.set(r.pattern.toLowerCase().trim(), {
             pattern: r.pattern,
             classification: r.classification,
             match_type: r.match_type,
           });
         });
-
-        // 2. Second pass: Override with employee-specific rules if logged in
-        if (currentUserId) {
-          data.filter((r: any) => r.user_id === currentUserId).forEach((r: any) => {
-            ruleMap.set(r.pattern.toLowerCase().trim(), {
-              pattern: r.pattern,
-              classification: r.classification,
-              match_type: r.match_type,
-            });
-          });
-        }
-
-        const mergedRules = Array.from(ruleMap.values());
-        setRules(mergedRules);
-        rulesRef.current = mergedRules;
       }
+
+      // 2. Fetch employee-specific overrides from platform_settings
+      const { data: userRulesData } = await supabase
+        .from('platform_settings')
+        .select('value')
+        .eq('key', `user_productivity_${currentTenantId}`)
+        .maybeSingle();
+
+      if (userRulesData?.value && currentUserId) {
+        const userOverrides = (userRulesData.value as Record<string, Record<string, string>>)[currentUserId] || {};
+        Object.entries(userOverrides).forEach(([patternKey, classification]) => {
+          ruleMap.set(patternKey.toLowerCase().trim(), {
+            pattern: patternKey,
+            classification: classification as any,
+            match_type: patternKey.includes('.') ? 'DOMAIN' : 'APP',
+          });
+        });
+      }
+
+      const mergedRules = Array.from(ruleMap.values());
+      setRules(mergedRules);
+      rulesRef.current = mergedRules;
     } catch (e) {
       console.warn('Failed to load productivity rules:', e);
     }
