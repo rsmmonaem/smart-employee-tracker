@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap } from 'lucide-react';
+import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { check } from '@tauri-apps/plugin-updater';
 
 const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   try {
@@ -226,6 +227,68 @@ export default function App() {
 
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
+  // Auto-updater state
+  const [updateAvailable, setUpdateAvailable] = useState<any>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateStatusText, setUpdateStatusText] = useState('');
+
+  const checkForAppUpdates = async (silent = true) => {
+    try {
+      const update = await check();
+      if (update?.available) {
+        setUpdateAvailable(update);
+        if (!silent) {
+          alert(`New version ${update.version} is available!`);
+        }
+      } else {
+        if (!silent) {
+          alert('You are already using the latest version.');
+        }
+      }
+    } catch (err) {
+      console.warn('Auto-updater check error:', err);
+      if (!silent) {
+        alert('Could not check for updates.');
+      }
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!updateAvailable) return;
+    try {
+      setIsUpdating(true);
+      setUpdateStatusText('Downloading update...');
+      let downloaded = 0;
+      let contentLength = 0;
+
+      await updateAvailable.downloadAndInstall((event: any) => {
+        switch (event.event) {
+          case 'Started':
+            contentLength = event.data.contentLength || 0;
+            setUpdateStatusText('Starting download...');
+            break;
+          case 'Progress':
+            downloaded += event.data.chunkLength;
+            if (contentLength > 0) {
+              const pct = Math.round((downloaded / contentLength) * 100);
+              setUpdateStatusText(`Downloading: ${pct}%`);
+            } else {
+              setUpdateStatusText(`Downloading...`);
+            }
+            break;
+          case 'Finished':
+            setUpdateStatusText('Installing & Restarting...');
+            break;
+        }
+      });
+      // App will restart or prompt
+    } catch (err: any) {
+      console.error('Failed to install update:', err);
+      alert(`Update failed: ${err?.message || err}`);
+      setIsUpdating(false);
+    }
+  };
+
   const applyPolicyFromValue = (val: any, userId?: string) => {
     if (!val) return;
     const override = userId ? val.memberOverrides?.[userId] : null;
@@ -341,12 +404,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Periodic safety fallback poll (every 30s)
+  // Periodic safety fallback poll (every 30s) & update check
   useEffect(() => {
+    // Check for updates on startup
+    checkForAppUpdates(true);
+
     const policyInterval = setInterval(() => {
       fetchTrackSettings(sessionRef.current?.user?.id);
     }, 30000);
-    return () => clearInterval(policyInterval);
+
+    const updateInterval = setInterval(() => {
+      checkForAppUpdates(true);
+    }, 1800000); // Check for updates every 30 mins
+
+    return () => {
+      clearInterval(policyInterval);
+      clearInterval(updateInterval);
+    };
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
@@ -778,14 +852,43 @@ export default function App() {
               </p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            title="Sign Out"
-            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => checkForAppUpdates(false)}
+              title="Check for Updates"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleLogout}
+              title="Sign Out"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
+
+        {/* Update Notification Banner */}
+        {updateAvailable && (
+          <div className="bg-blue-600 px-4 py-2.5 text-white flex items-center justify-between shadow-inner">
+            <div className="flex items-center space-x-2 min-w-0">
+              <Download className="w-4 h-4 shrink-0 animate-bounce" />
+              <div className="text-xs truncate">
+                <p className="font-semibold truncate">Update v{updateAvailable.version} available</p>
+                {updateStatusText && <p className="text-[10px] text-blue-100">{updateStatusText}</p>}
+              </div>
+            </div>
+            <button
+              onClick={handleInstallUpdate}
+              disabled={isUpdating}
+              className="px-2.5 py-1 bg-white text-blue-600 rounded-md text-xs font-bold hover:bg-blue-50 transition-colors shadow-2xs shrink-0 disabled:opacity-50"
+            >
+              {isUpdating ? 'Updating...' : 'Update Now'}
+            </button>
+          </div>
+        )}
 
         {/* Timer UI */}
         <div className="p-6 text-center space-y-5">

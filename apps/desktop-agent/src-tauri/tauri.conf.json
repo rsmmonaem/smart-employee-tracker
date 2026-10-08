@@ -36,5 +36,13 @@
     "macOS": {
       "entitlements": "entitlements.plist"
     }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://app.tracmatrix.com/api/agent/update/{{target}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGQjMxNjA3NkJGQkYxNEEKUldSSzhmdHJCeGF6ajF0NWd4dUdhNUpzbGxhK0hHemhmMVN0MjBsczJBMUJLVXFmd3NSWWxDZW8K"
+    }
   }
 }
