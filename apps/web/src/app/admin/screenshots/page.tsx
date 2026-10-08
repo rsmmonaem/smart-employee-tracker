@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import {
   Image as ImageIcon,
@@ -55,6 +55,21 @@ export default function ScreenshotsPage() {
   const [totalCount, setTotalCount] = useState<number>(0)
   const [totalPages, setTotalPages] = useState<number>(1)
 
+  const selectedUserRef = useRef(selectedUser)
+  selectedUserRef.current = selectedUser
+
+  const selectedTeamRef = useRef(selectedTeam)
+  selectedTeamRef.current = selectedTeam
+
+  const selectedDateRef = useRef(selectedDate)
+  selectedDateRef.current = selectedDate
+
+  const currentPageRef = useRef(currentPage)
+  currentPageRef.current = currentPage
+
+  const pageSizeRef = useRef(pageSize)
+  pageSizeRef.current = pageSize
+
   const supabase = createClient()
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
 
@@ -76,14 +91,20 @@ export default function ScreenshotsPage() {
       .catch((err) => console.error('Failed to load employees for filter:', err))
   }, [refreshTrigger])
 
-  const fetchScreenshots = async (page = currentPage, size = pageSize) => {
+  const fetchScreenshots = useCallback(async (
+    page = currentPageRef.current,
+    size = pageSizeRef.current,
+    user = selectedUserRef.current,
+    team = selectedTeamRef.current,
+    date = selectedDateRef.current
+  ) => {
     try {
       setLoading(true)
       // Dedicated server API with tenant isolation, date filtering, team and employee filters
       const params = new URLSearchParams()
-      if (selectedDate) params.set('date', selectedDate)
-      if (selectedUser && selectedUser !== 'all') params.set('userId', selectedUser)
-      if (selectedTeam && selectedTeam !== 'All Team' && selectedTeam !== 'all') params.set('team', selectedTeam)
+      if (date) params.set('date', date)
+      if (user && user !== 'all') params.set('userId', user)
+      if (team && team !== 'All Team' && team !== 'all') params.set('team', team)
       params.set('page', page.toString())
       params.set('limit', size.toString())
 
@@ -107,7 +128,7 @@ export default function ScreenshotsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   const fetchTenantPlan = async () => {
     try {
@@ -123,8 +144,8 @@ export default function ScreenshotsPage() {
 
   useEffect(() => {
     setCurrentPage(1)
-    fetchScreenshots(1, pageSize)
-  }, [selectedDate, selectedUser, selectedTeam])
+    fetchScreenshots(1, pageSize, selectedUser, selectedTeam, selectedDate)
+  }, [selectedDate, selectedUser, selectedTeam, pageSize, fetchScreenshots])
 
   useEffect(() => {
     fetchTenantPlan()
@@ -136,7 +157,13 @@ export default function ScreenshotsPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'screenshots' },
         () => {
-          fetchScreenshots(currentPage, pageSize)
+          fetchScreenshots(
+            currentPageRef.current,
+            pageSizeRef.current,
+            selectedUserRef.current,
+            selectedTeamRef.current,
+            selectedDateRef.current
+          )
         }
       )
       .subscribe()
@@ -144,16 +171,22 @@ export default function ScreenshotsPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, refreshTrigger, currentPage, pageSize])
+  }, [supabase, refreshTrigger, fetchScreenshots])
 
-  // Periodic Auto-refresh when enabled (every 8 seconds)
+  // Periodic Auto-refresh when enabled (every 8 seconds) - strictly preserving current employee filter
   useEffect(() => {
     if (!autoRefresh) return
     const interval = setInterval(() => {
-      fetchScreenshots(currentPage, pageSize)
+      fetchScreenshots(
+        currentPageRef.current,
+        pageSizeRef.current,
+        selectedUserRef.current,
+        selectedTeamRef.current,
+        selectedDateRef.current
+      )
     }, 8000)
     return () => clearInterval(interval)
-  }, [autoRefresh, currentPage, pageSize, selectedDate, selectedUser])
+  }, [autoRefresh, fetchScreenshots])
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
@@ -290,6 +323,9 @@ export default function ScreenshotsPage() {
   }
 
   const filteredScreenshots = screenshots.filter((s) => {
+    if (selectedUser !== 'all' && s.user_id !== selectedUser && s.users?.email !== selectedUser) {
+      return false
+    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const name = (s.users?.full_name || '').toLowerCase()
