@@ -27,14 +27,48 @@ import {
   Sun,
   Moon,
   Download,
+  User,
 } from 'lucide-react'
 import { useTheme } from '@/components/theme-provider'
 
-export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
+export default function AdminSidebar({
+  userEmail,
+  userRole,
+}: {
+  userEmail?: string
+  userRole?: string
+}) {
   const pathname = usePathname()
   const { theme, toggleTheme } = useTheme()
 
-  const navGroups = [
+  const isEmployee = userRole === 'EMPLOYEE'
+
+  const employeeNavGroups = [
+    {
+      title: 'My Workspace',
+      items: [
+        { label: 'My Timeline', href: '/admin/timeline', icon: Clock },
+        { label: 'My Screenshots', href: '/admin/screenshots', icon: Camera },
+        { label: 'My Timesheet', href: '/admin/timesheet', icon: Calendar },
+      ],
+    },
+    {
+      title: 'Leave & Attendance',
+      items: [
+        { label: 'Apply Leave', href: '/admin/leave/apply', icon: CalendarPlus },
+        { label: 'Leave Summary', href: '/admin/leave/summary', icon: CalendarDays },
+      ],
+    },
+    {
+      title: 'Account & Apps',
+      items: [
+        { label: 'My Profile', href: '/admin/profile', icon: User },
+        { label: 'Download Apps', href: '/admin/settings?tab=download-apps', icon: Download },
+      ],
+    },
+  ]
+
+  const adminNavGroups = [
     {
       title: 'Realtime',
       items: [
@@ -80,6 +114,8 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
       ],
     },
   ]
+
+  const navGroups = isEmployee ? employeeNavGroups : adminNavGroups
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 dark:bg-gray-900 dark:border-gray-800 hidden md:flex flex-col flex-shrink-0">
@@ -147,13 +183,15 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
           </span>
         </button>
 
-        <Link
-          href="/superadmin"
-          className="flex items-center px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
-        >
-          <Shield className="w-4 h-4 mr-2.5 text-indigo-500" />
-          <span>Super Admin Panel</span>
-        </Link>
+        {userRole === 'SUPER_ADMIN' && (
+          <Link
+            href="/superadmin"
+            className="flex items-center px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"
+          >
+            <Shield className="w-4 h-4 mr-2.5 text-indigo-500" />
+            <span>Super Admin Panel</span>
+          </Link>
+        )}
         {userEmail && (
           <div className="px-3 py-1 text-[11px] text-gray-400 dark:text-gray-500 truncate font-mono">
             {userEmail}

@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <AdminFilterProvider>
       <div className="flex h-screen bg-gray-50 dark:bg-gray-950 font-sans antialiased text-gray-900 dark:text-gray-100 overflow-hidden transition-colors duration-150">
-        <AdminSidebar userEmail={session.email} />
+        <AdminSidebar userEmail={session.email} userRole={session.role} />
         <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-gray-50/50 dark:bg-gray-950 transition-colors duration-150">
           {children}
         </main>

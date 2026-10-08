@@ -102,7 +102,7 @@ const TIME_TICKS = [
 ]
 
 export default function TimelinePage() {
-  const { searchQuery, selectedDate, selectedTeam, refreshTrigger } = useAdminFilter()
+  const { searchQuery, selectedDate, selectedTeam, refreshTrigger, currentUser } = useAdminFilter()
   const [timelines, setTimelines] = useState<EmployeeTimelineRow[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -186,8 +186,16 @@ export default function TimelinePage() {
     <div className="min-h-full bg-white dark:bg-gray-900 pb-16">
       {/* Top Header Bar */}
       <AdminHeader
-        title="Timeline"
-        searchPlaceholder="Search in timeline"
+        title={currentUser?.role === 'EMPLOYEE' ? 'My Timeline' : 'Timeline'}
+        subtitle={
+          currentUser?.role === 'EMPLOYEE'
+            ? 'Your daily proof of work and tracked application activities'
+            : undefined
+        }
+        searchPlaceholder={currentUser?.role === 'EMPLOYEE' ? undefined : 'Search in timeline'}
+        showSearch={currentUser?.role !== 'EMPLOYEE'}
+        showTeamFilter={currentUser?.role !== 'EMPLOYEE'}
+        showAddUser={false}
         loading={loading}
         onRefresh={() => fetchTimelineData(selectedDate)}
         onUserAdded={() => fetchTimelineData(selectedDate)}

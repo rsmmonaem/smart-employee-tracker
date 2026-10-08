@@ -49,17 +49,21 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // 2. Authenticated users visiting /login get redirected to their dashboard
+  // 2. Authenticated users visiting /login get redirected based on their role
   if (user && pathname === '/login') {
     const { data: profile } = await supabase
       .from('users')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
+
+    const userRole = profile?.role || user.user_metadata?.role || 'EMPLOYEE'
 
     const url = request.nextUrl.clone()
-    if (profile?.role === 'SUPER_ADMIN') {
+    if (userRole === 'SUPER_ADMIN') {
       url.pathname = '/superadmin'
+    } else if (userRole === 'EMPLOYEE') {
+      url.pathname = '/admin/timeline'
     } else {
       url.pathname = '/admin/dashboard'
     }
@@ -72,11 +76,41 @@ export async function middleware(request: NextRequest) {
       .from('users')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (profile?.role !== 'SUPER_ADMIN') {
+    const userRole = profile?.role || user.user_metadata?.role || 'EMPLOYEE'
+
+    if (userRole !== 'SUPER_ADMIN') {
       const url = request.nextUrl.clone()
-      url.pathname = '/admin/dashboard'
+      url.pathname = userRole === 'EMPLOYEE' ? '/admin/timeline' : '/admin/dashboard'
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // 4. Protect Admin-only routes from EMPLOYEE role
+  const adminOnlyRoutes = [
+    '/admin/dashboard',
+    '/admin/employees',
+    '/admin/teams',
+    '/admin/apps/review',
+    '/admin/billing',
+    '/admin/risk-users',
+    '/admin/reports',
+  ]
+
+  const isAdminOnly = adminOnlyRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  if (user && isAdminOnly) {
+    const { data: profile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const userRole = profile?.role || user.user_metadata?.role || 'EMPLOYEE'
+
+    if (userRole === 'EMPLOYEE') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/timeline'
       return NextResponse.redirect(url)
     }
   }

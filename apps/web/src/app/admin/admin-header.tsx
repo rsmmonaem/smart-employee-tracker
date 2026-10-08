@@ -97,6 +97,7 @@ export default function AdminHeader({
     showAddUserModal,
     setShowAddUserModal,
     triggerRefresh,
+    currentUser,
   } = useAdminFilter()
 
   const { theme, toggleTheme } = useTheme()
@@ -240,8 +241,8 @@ export default function AdminHeader({
           {/* Extra Actions if any */}
           {extraActions}
 
-          {/* Add Users Button */}
-          {showAddUser && (
+          {/* Add Users Button (Only for Tenant Admin / Super Admin) */}
+          {showAddUser && (!currentUser || currentUser.role !== 'EMPLOYEE') && (
             <button
               onClick={() => setShowAddUserModal(true)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1677ff] hover:bg-blue-600 text-white rounded-full text-xs font-semibold shadow-xs transition-colors shrink-0"

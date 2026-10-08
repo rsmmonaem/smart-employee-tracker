@@ -12,6 +12,17 @@ export type PeriodPreset =
   | 'Last Week'
   | 'Custom'
 
+export interface CurrentUserProfile {
+  id: string
+  email: string
+  fullName: string
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE'
+  tenantId: string | null
+  isSuperAdmin: boolean
+  isTenantAdmin: boolean
+  isEmployee: boolean
+}
+
 interface AdminFilterContextType {
   searchQuery: string
   setSearchQuery: (query: string) => void
@@ -27,6 +38,7 @@ interface AdminFilterContextType {
   setShowAddUserModal: (show: boolean) => void
   refreshTrigger: number
   triggerRefresh: () => void
+  currentUser: CurrentUserProfile | null
 }
 
 const AdminFilterContext = createContext<AdminFilterContextType | undefined>(undefined)
@@ -40,8 +52,29 @@ export function AdminFilterProvider({ children }: { children: ReactNode }) {
   const [teams, setTeams] = useState<string[]>(['All Team'])
   const [showAddUserModal, setShowAddUserModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [currentUser, setCurrentUser] = useState<CurrentUserProfile | null>(null)
 
   const triggerRefresh = () => setRefreshTrigger((prev) => prev + 1)
+
+  // Fetch current authenticated user role & profile
+  React.useEffect(() => {
+    let isMounted = true
+    const fetchMe = async () => {
+      try {
+        const res = await fetch('/api/admin/me')
+        const data = await res.json()
+        if (isMounted && data.success && data.user) {
+          setCurrentUser(data.user)
+        }
+      } catch (err) {
+        console.error('Error fetching current user profile:', err)
+      }
+    }
+    fetchMe()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   // Dynamically load teams from database
   React.useEffect(() => {
@@ -84,6 +117,7 @@ export function AdminFilterProvider({ children }: { children: ReactNode }) {
         setShowAddUserModal,
         refreshTrigger,
         triggerRefresh,
+        currentUser,
       }}
     >
       {children}

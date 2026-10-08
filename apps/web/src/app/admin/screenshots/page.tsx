@@ -38,7 +38,7 @@ type ScreenshotItem = {
 }
 
 export default function ScreenshotsPage() {
-  const { searchQuery, selectedDate, selectedTeam, refreshTrigger } = useAdminFilter()
+  const { searchQuery, selectedDate, selectedTeam, refreshTrigger, currentUser } = useAdminFilter()
   const [screenshots, setScreenshots] = useState<ScreenshotItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedImage, setSelectedImage] = useState<ScreenshotItem | null>(null)
@@ -296,9 +296,16 @@ export default function ScreenshotsPage() {
     <div className="min-h-full bg-white dark:bg-gray-900 pb-16">
       {/* Top Header Bar */}
       <AdminHeader
-        title="Screenshots"
-        subtitle="Realtime screen captures synced from the desktop tracking agent"
-        searchPlaceholder="Search in screenshots"
+        title={currentUser?.role === 'EMPLOYEE' ? 'My Screenshots' : 'Screenshots'}
+        subtitle={
+          currentUser?.role === 'EMPLOYEE'
+            ? 'Your synced desktop screen captures'
+            : 'Realtime screen captures synced from the desktop tracking agent'
+        }
+        searchPlaceholder={currentUser?.role === 'EMPLOYEE' ? undefined : 'Search in screenshots'}
+        showSearch={currentUser?.role !== 'EMPLOYEE'}
+        showTeamFilter={currentUser?.role !== 'EMPLOYEE'}
+        showAddUser={false}
         loading={loading}
         onRefresh={() => {
           setLoading(true)
@@ -306,22 +313,24 @@ export default function ScreenshotsPage() {
         }}
         onUserAdded={() => fetchScreenshots()}
         extraActions={
-          /* Clean Plan Badge Pill in top header */
-          tenantPlan === 'BASIC' ? (
-            <button
-              type="button"
-              onClick={() => setShowProModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700 shadow-2xs hover:bg-amber-100 transition-colors"
-              title="Click to upgrade to PRO"
-            >
-              <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span>BASIC (Upgrade)</span>
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300">
-              <Crown className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
-              <span>PRO Plan</span>
-            </span>
+          currentUser?.role === 'EMPLOYEE' ? null : (
+            /* Clean Plan Badge Pill in top header */
+            tenantPlan === 'BASIC' ? (
+              <button
+                type="button"
+                onClick={() => setShowProModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-700 shadow-2xs hover:bg-amber-100 transition-colors"
+                title="Click to upgrade to PRO"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                <span>BASIC (Upgrade)</span>
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300">
+                <Crown className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
+                <span>PRO Plan</span>
+              </span>
+            )
           )
         }
       />
@@ -330,8 +339,8 @@ export default function ScreenshotsPage() {
       <div className="bg-gray-50/90 dark:bg-gray-850/60 border-b border-gray-200 dark:border-gray-800 px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs sticky top-16 z-20 backdrop-blur-sm">
         {/* Left: Filters & Counters */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Member Dropdown Selector */}
-          {userOptions.length > 0 && (
+          {/* Member Dropdown Selector (Only for Admins) */}
+          {currentUser?.role !== 'EMPLOYEE' && userOptions.length > 0 && (
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Employee:</span>
               <div className="relative">
