@@ -69,36 +69,29 @@ export default function LoginForm({ initialError, redirectTo }: LoginFormProps) 
         <div className="flex items-center justify-between text-[11px] font-semibold text-gray-400">
           <span className="flex items-center gap-1.5 text-blue-400">
             <UserCheck className="w-3.5 h-3.5" />
-            Quick Demo Autofill
+            Explore Live Demo
           </span>
-          <span className="text-[10px] text-gray-500">Click to fill</span>
+          <span className="text-[10px] text-gray-500">Click to autofill</span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setDemoCredentials('admin@example.com', 'password123')}
-            className="flex flex-col items-start p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 hover:border-blue-500/50 transition-all text-left group"
-          >
-            <span className="text-[11px] font-bold text-white group-hover:text-blue-400 transition-colors flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Tenant Admin
-            </span>
-            <span className="text-[10px] font-mono text-gray-400 truncate w-full">admin@example.com</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setDemoCredentials('superadmin@example.com', 'password123')}
-            className="flex flex-col items-start p-2 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/40 border border-indigo-800/50 hover:border-indigo-500/50 transition-all text-left group"
-          >
-            <span className="text-[11px] font-bold text-indigo-300 group-hover:text-indigo-200 transition-colors flex items-center gap-1">
-              <Shield className="w-2.5 h-2.5 text-indigo-400" />
-              Super Admin
-            </span>
-            <span className="text-[10px] font-mono text-indigo-300/70 truncate w-full">superadmin@example.com</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setDemoCredentials('admin@example.com', 'password123')}
+          className="w-full flex items-center justify-between p-2.5 rounded-lg bg-slate-800/80 hover:bg-slate-750 border border-slate-700/70 hover:border-blue-500/50 transition-all text-left group"
+        >
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+            <div>
+              <span className="text-xs font-bold text-white group-hover:text-blue-400 transition-colors block leading-tight">
+                Live Admin Demo Account
+              </span>
+              <span className="text-[10px] font-mono text-gray-400">admin@example.com</span>
+            </div>
+          </div>
+          <span className="text-[11px] font-semibold text-blue-400 font-mono px-2 py-0.5 rounded bg-blue-950/60 border border-blue-800/40">
+            password123
+          </span>
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

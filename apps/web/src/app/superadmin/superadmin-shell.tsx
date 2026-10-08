@@ -111,23 +111,15 @@ export default function SuperAdminShell({
           })}
 
           <div className="pt-4 px-3 py-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            Shortcuts
+            Organization View
           </div>
 
           <Link
-            href="/admin/dashboard"
+            href="/superadmin/tenants"
             className="flex items-center px-3.5 py-2.5 text-xs font-semibold text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/20 rounded-xl transition-all border border-emerald-900/30"
           >
-            <ExternalLink className="w-4 h-4 mr-3 shrink-0 text-emerald-400" />
-            <span>Client Admin View</span>
-          </Link>
-
-          <Link
-            href="/admin/screenshots"
-            className="flex items-center px-3.5 py-2 text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 rounded-xl transition-all"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 mr-3.5" />
-            <span>Screenshot Audit</span>
+            <Building2 className="w-4 h-4 mr-3 shrink-0 text-emerald-400" />
+            <span>Manage Tenants</span>
           </Link>
         </nav>
 

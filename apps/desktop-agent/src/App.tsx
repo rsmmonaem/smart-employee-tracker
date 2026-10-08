@@ -393,13 +393,33 @@ export default function App() {
     };
   }, []);
 
-  // Load session & track settings
+  // Load session & track settings & Auto-start tracking on login
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
+        // Automatically start tracking if logged in
+        if (!isTrackingRef.current) {
+          setIsTracking(true);
+          supabase
+            .from('attendance_sessions')
+            .insert({
+              tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+              user_id: session.user.id,
+              clocked_in_at: new Date().toISOString(),
+              status: 'OPEN',
+            })
+            .select('id')
+            .single()
+            .then(({ data, error }) => {
+              if (!error && data) {
+                currentAttendanceSessionIdRef.current = data.id;
+                setLastSyncStatus('🚀 Auto-started tracking session');
+              }
+            });
+        }
       } else {
         fetchTrackSettings();
       }
@@ -413,6 +433,25 @@ export default function App() {
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
+        if (!isTrackingRef.current) {
+          setIsTracking(true);
+          supabase
+            .from('attendance_sessions')
+            .insert({
+              tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+              user_id: session.user.id,
+              clocked_in_at: new Date().toISOString(),
+              status: 'OPEN',
+            })
+            .select('id')
+            .single()
+            .then(({ data, error }) => {
+              if (!error && data) {
+                currentAttendanceSessionIdRef.current = data.id;
+                setLastSyncStatus('🚀 Auto-started tracking session');
+              }
+            });
+        }
       }
     });
 
