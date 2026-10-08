@@ -978,9 +978,14 @@ export default function App() {
               }`}
             />
             <div>
-              <span className="text-white font-semibold text-sm">
-                {isTracking ? 'Tracking Active' : 'Online (Idle)'}
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-white font-semibold text-sm">
+                  {isTracking ? 'Tracking Active' : 'Online (Idle)'}
+                </span>
+                <span className="px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 text-[10px] font-mono font-bold border border-blue-500/30">
+                  v1.0.0
+                </span>
+              </div>
               <p className="text-[10px] text-gray-400 truncate max-w-[160px]">
                 {session?.user?.email}
               </p>
