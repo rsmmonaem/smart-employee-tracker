@@ -282,9 +282,9 @@ export default function TimelinePage() {
       ? 'Yesterday Activities'
       : `${selectedDate} Activities`
 
-  const [timelineMode, setTimelineMode] = useState<'24H' | 'OFFICE'>('24H')
+  const [timelineMode, setTimelineMode] = useState<'OFFICE' | '24H'>('OFFICE')
 
-  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 600
+  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 720
   const activeTicks =
     timelineMode === '24H'
       ? TIME_TICKS_24H
@@ -300,6 +300,8 @@ export default function TimelinePage() {
           { min: 480, label: '18:00' },
           { min: 540, label: '19:00' },
           { min: 600, label: '20:00' },
+          { min: 660, label: '21:00' },
+          { min: 720, label: '22:00' },
         ]
 
   return (
@@ -322,24 +324,24 @@ export default function TimelinePage() {
         extraActions={
           <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs">
             <button
+              onClick={() => setTimelineMode('OFFICE')}
+              className={`px-3 py-1 rounded-md font-medium transition-all ${
+                timelineMode === 'OFFICE'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              10:00 AM - 10:00 PM
+            </button>
+            <button
               onClick={() => setTimelineMode('24H')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
+              className={`px-3 py-1 rounded-md font-medium transition-all ${
                 timelineMode === '24H'
                   ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
               }`}
             >
               24 Hours
-            </button>
-            <button
-              onClick={() => setTimelineMode('OFFICE')}
-              className={`px-2.5 py-1 rounded-md font-medium transition-all ${
-                timelineMode === 'OFFICE'
-                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
-              }`}
-            >
-              Office (10-20h)
             </button>
           </div>
         }
@@ -394,12 +396,33 @@ export default function TimelinePage() {
                             </div>
                           ) : (
                             emp.segments.map((seg) => {
-                              const calculatedMin =
-                                timelineMode === '24H'
-                                  ? seg.startMin
-                                  : Math.max(0, Math.min(600, seg.startMin - 600))
-                              const leftPct = (calculatedMin / activeTotalMinutes) * 100
-                              const widthPct = Math.max(0.6, (seg.durationMin / activeTotalMinutes) * 100)
+                              let leftPct = 0
+                              let widthPct = 0
+                              let isVisible = true
+
+                              if (timelineMode === '24H') {
+                                leftPct = (seg.startMin / 1440) * 100
+                                widthPct = Math.max(0.6, (seg.durationMin / 1440) * 100)
+                              } else {
+                                const officeStartMin = 600 // 10:00 AM
+                                const officeTotalMin = 720 // 10:00 to 22:00 (12 hours)
+                                const segStart = seg.startMin
+                                const segEnd = seg.startMin + seg.durationMin
+
+                                if (segEnd <= officeStartMin || segStart >= officeStartMin + officeTotalMin) {
+                                  isVisible = false
+                                } else {
+                                  const visibleStart = Math.max(officeStartMin, segStart)
+                                  const visibleEnd = Math.min(officeStartMin + officeTotalMin, segEnd)
+                                  const visibleDuration = visibleEnd - visibleStart
+
+                                  leftPct = ((visibleStart - officeStartMin) / officeTotalMin) * 100
+                                  widthPct = Math.max(0.6, (visibleDuration / officeTotalMin) * 100)
+                                }
+                              }
+
+                              if (!isVisible) return null
+
                               const color = TYPE_CONFIG[seg.type]?.bgHex || '#3b82f6'
 
                               return (
