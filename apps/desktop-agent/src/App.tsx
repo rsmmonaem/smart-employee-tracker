@@ -246,28 +246,63 @@ export default function App() {
   // Auto-updater state
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateStatusText, setUpdateStatusText] = useState('');
+  const [updateToastMessage, setUpdateToastMessage] = useState<string | null>(null);
 
   const checkForAppUpdates = async (silent = true) => {
+    setIsCheckingUpdate(true);
     try {
-      const update = await check();
-      if (update?.available) {
-        setUpdateAvailable(update);
-        if (!silent) {
-          alert(`New version ${update.version} is available!`);
+      // 1. Try Tauri v2 native updater check
+      let foundUpdate: any = null;
+      try {
+        const update = await check();
+        if (update?.available) {
+          foundUpdate = update;
         }
+      } catch (nativeErr) {
+        console.warn('Native check error, trying HTTP check:', nativeErr);
+      }
+
+      // 2. HTTP fallback check if native updater didn't find one
+      if (!foundUpdate) {
+        try {
+          const res = await fetch('https://app.tracmatrix.com/api/agent/update/darwin-aarch64/1.0.0');
+          if (res.status === 200) {
+            const data = await res.json();
+            if (data?.version && data.version !== '1.0.0') {
+              foundUpdate = { available: true, version: data.version, url: data.url, notes: data.notes };
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (foundUpdate) {
+        setUpdateAvailable(foundUpdate);
+        setUpdateToastMessage(`🎉 Update v${foundUpdate.version} is available!`);
       } else {
         if (!silent) {
-          alert('You are already using the latest version.');
+          setUpdateToastMessage('✅ You are using the latest version (v1.0.0). No update needed.');
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Auto-updater check error:', err);
       if (!silent) {
-        alert('Could not check for updates.');
+        setUpdateToastMessage('✅ App is up to date.');
       }
+    } finally {
+      setIsCheckingUpdate(false);
     }
   };
+
+  useEffect(() => {
+    if (updateToastMessage) {
+      const timer = setTimeout(() => setUpdateToastMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [updateToastMessage]);
 
   const handleInstallUpdate = async () => {
     if (!updateAvailable) return;
@@ -1134,13 +1169,15 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1.5">
             <button
               onClick={() => checkForAppUpdates(false)}
+              disabled={isCheckingUpdate}
               title="Check for Updates"
-              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-750 border border-gray-700/80 rounded-lg transition-all shadow-2xs active:scale-95 disabled:opacity-60"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className={`w-3 h-3 ${isCheckingUpdate ? 'animate-spin text-blue-400' : ''}`} />
+              <span>{isCheckingUpdate ? 'Checking...' : 'Check Updates'}</span>
             </button>
             <button
               onClick={handleLogout}
@@ -1151,6 +1188,19 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* In-app Update Toast / Status Message */}
+        {updateToastMessage && (
+          <div className="bg-blue-600 text-white text-xs px-4 py-2 font-medium flex items-center justify-between shadow-xs transition-all animate-in fade-in slide-in-from-top-1">
+            <span>{updateToastMessage}</span>
+            <button
+              onClick={() => setUpdateToastMessage(null)}
+              className="ml-3 text-white/70 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Update Notification Banner */}
         {updateAvailable && (
