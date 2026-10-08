@@ -73,6 +73,19 @@ interface KeystrokeActivityRecord {
   intensityScore: number
 }
 
+interface LoginIpRecord {
+  id: string
+  employeeName: string
+  email: string
+  loginDate: string
+  loginTime: string
+  logoutTime: string
+  ipAddress: string
+  device: string
+  status: 'ONLINE' | 'OFFLINE'
+  isSuspicious?: boolean
+}
+
 const REPORT_SIDEBAR_ITEMS: Array<{
   id: ReportCategory
   label: string
@@ -109,6 +122,7 @@ export default function ReportsPage() {
   >([])
   const [attendanceRecords, setAttendanceRecords] = useState<EmployeeAttendance[]>([])
   const [keystrokeRecords, setKeystrokeRecords] = useState<KeystrokeActivityRecord[]>([])
+  const [loginIpRecords, setLoginIpRecords] = useState<LoginIpRecord[]>([])
   const [hourlyDistribution, setHourlyDistribution] = useState<
     Array<{ slot: string; keystrokes: number; mouse: number }>
   >([])
@@ -120,6 +134,13 @@ export default function ReportsPage() {
     neutralPct: 0,
     unproductivePct: 0,
   })
+
+  // Sorting states
+  const [keySortField, setKeySortField] = useState<keyof KeystrokeActivityRecord>('totalKeystrokes')
+  const [keySortOrder, setKeySortOrder] = useState<'asc' | 'desc'>('desc')
+
+  const [ipSortField, setIpSortField] = useState<keyof LoginIpRecord>('loginTime')
+  const [ipSortOrder, setIpSortOrder] = useState<'asc' | 'desc'>('desc')
 
   // Live keystroke tracking simulator state
   const [testTypedText, setTestTypedText] = useState('')
@@ -143,6 +164,7 @@ export default function ReportsPage() {
         setEmployeeOptions(data.employees || [])
         setAttendanceRecords(data.attendance || [])
         setKeystrokeRecords(data.keystrokes || [])
+        setLoginIpRecords(data.loginIpRecords || [])
         setHourlyDistribution(data.hourlyDistribution || [])
         if (data.appsUsage) setAppsUsage(data.appsUsage)
       }
@@ -211,6 +233,51 @@ export default function ReportsPage() {
     document.body.removeChild(link)
   }
 
+  // Sorted keystroke records
+  const sortedKeystrokes = useMemo(() => {
+    return [...keystrokeRecords].sort((a, b) => {
+      let aVal = a[keySortField]
+      let bVal = b[keySortField]
+      if (typeof aVal === 'string') {
+        const cmp = (aVal as string).localeCompare(bVal as string)
+        return keySortOrder === 'asc' ? cmp : -cmp
+      }
+      return keySortOrder === 'asc'
+        ? (aVal as number) - (bVal as number)
+        : (bVal as number) - (aVal as number)
+    })
+  }, [keystrokeRecords, keySortField, keySortOrder])
+
+  // Sorted login IP records
+  const sortedLoginIp = useMemo(() => {
+    return [...loginIpRecords].sort((a, b) => {
+      let aVal = a[ipSortField] || ''
+      let bVal = b[ipSortField] || ''
+      if (typeof aVal === 'string') {
+        const cmp = (aVal as string).localeCompare(bVal as string)
+        return ipSortOrder === 'asc' ? cmp : -cmp
+      }
+      return 0
+    })
+  }, [loginIpRecords, ipSortField, ipSortOrder])
+
+  const handleKeySort = (field: keyof KeystrokeActivityRecord) => {
+    if (keySortField === field) {
+      setKeySortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setKeySortField(field)
+      setKeySortOrder('desc')
+    }
+  }
+
+  const handleIpSort = (field: keyof LoginIpRecord) => {
+    if (ipSortField === field) {
+      setIpSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setIpSortField(field)
+      setIpSortOrder('desc')
+    }
+  }
   // Filter attendance records by active subtab
   const filteredAttendance = useMemo(() => {
     return attendanceRecords.filter((emp) => {
@@ -671,18 +738,53 @@ export default function ReportsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
-                        <th className="py-3 px-5">Member</th>
-                        <th className="py-3 px-4">Team</th>
-                        <th className="py-3 px-4">Total Keystrokes</th>
-                        <th className="py-3 px-4">Avg Speed (KPM)</th>
-                        <th className="py-3 px-4">Mouse Clicks</th>
-                        <th className="py-3 px-4">Typing Duration</th>
-                        <th className="py-3 px-5 text-right">Intensity</th>
+                      <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40 select-none">
+                        <th
+                          onClick={() => handleKeySort('employeeName')}
+                          className="py-3 px-5 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Member {keySortField === 'employeeName' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('team')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Team {keySortField === 'team' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('totalKeystrokes')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Total Keystrokes {keySortField === 'totalKeystrokes' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('kpm')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Avg Speed (KPM) {keySortField === 'kpm' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('mouseEvents')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Mouse Clicks {keySortField === 'mouseEvents' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('activeTypingTime')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Typing Duration {keySortField === 'activeTypingTime' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleKeySort('intensityScore')}
+                          className="py-3 px-5 text-right cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Intensity {keySortField === 'intensityScore' && (keySortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
-                      {keystrokeRecords.map((rec) => (
+                      {sortedKeystrokes.map((rec) => (
                         <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
                           <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
@@ -761,10 +863,158 @@ export default function ReportsPage() {
             </div>
           )}
 
+          {/* CATEGORY 8: LOGIN IP REPORT */}
+          {activeReport === 'login-ip' && (
+            <div className="space-y-6">
+              <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Login IP &amp; Device Access Report</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Security telemetry, login IP addresses and device authentication logs for {selectedDate}
+                  </p>
+                </div>
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export IP Log</span>
+                </button>
+              </div>
+
+              {/* Login IP Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total Active Sessions</span>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {loginIpRecords.filter((r) => r.status === 'ONLINE').length} / {loginIpRecords.length}
+                  </div>
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 inline-block">
+                    ● Currently online employees
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Distinct IP Subnets</span>
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                    {new Set(loginIpRecords.map((r) => r.ipAddress)).size}
+                  </div>
+                  <span className="text-xs text-gray-400 font-mono mt-1 inline-block">
+                    Office broadband &amp; remote networks
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Security State</span>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                    Verified
+                  </div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">
+                    All connections within allowed range
+                  </span>
+                </div>
+              </div>
+
+              {/* Login IP Table */}
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
+                <div className="p-4 border-b border-gray-150 dark:border-gray-800 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                      Authentication &amp; Session IP Audit Trail
+                    </h3>
+                    <p className="text-xs text-gray-400">Detailed source IP records per employee</p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40 select-none">
+                        <th
+                          onClick={() => handleIpSort('employeeName')}
+                          className="py-3 px-5 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Employee {ipSortField === 'employeeName' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleIpSort('ipAddress')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          IP Address {ipSortField === 'ipAddress' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleIpSort('loginTime')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Login Time {ipSortField === 'loginTime' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th
+                          onClick={() => handleIpSort('logoutTime')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Logout / Last Seen {ipSortField === 'logoutTime' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                        <th className="py-3 px-4">Device &amp; App Client</th>
+                        <th
+                          onClick={() => handleIpSort('status')}
+                          className="py-3 px-5 text-right cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Status {ipSortField === 'status' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                      {sortedLoginIp.map((rec) => (
+                        <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                          <td className="py-3.5 px-5">
+                            <div className="flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                                {rec.employeeName.charAt(0)}
+                              </span>
+                              <div>
+                                <span className="font-bold text-gray-900 dark:text-white block">{rec.employeeName}</span>
+                                <span className="text-[10px] text-gray-400">{rec.email}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {rec.ipAddress}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-gray-800 dark:text-gray-200">
+                            {rec.loginTime}
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-gray-500">
+                            {rec.logoutTime}
+                          </td>
+                          <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300">
+                            {rec.device}
+                          </td>
+                          <td className="py-3.5 px-5 text-right">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                                rec.status === 'ONLINE'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : 'bg-gray-150 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full ${rec.status === 'ONLINE' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                              <span>{rec.status}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* OTHER REPORT CATEGORIES */}
           {activeReport !== 'daily-attendance' &&
             activeReport !== 'input-activity' &&
-            activeReport !== 'apps-usage' && (
+            activeReport !== 'apps-usage' &&
+            activeReport !== 'login-ip' && (
               <div className="space-y-6">
                 <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex items-center justify-between">
                   <div>

@@ -244,7 +244,13 @@ export default function ScreenshotsPage() {
   const formatTimestamp = (dateStr: string) => {
     try {
       const d = new Date(dateStr)
-      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      if (isNaN(d.getTime())) return dateStr
+      return d.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      })
     } catch {
       return dateStr
     }
@@ -253,7 +259,12 @@ export default function ScreenshotsPage() {
   const formatDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+      if (isNaN(d.getTime())) return dateStr
+      return d.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      })
     } catch {
       return dateStr
     }

@@ -325,7 +325,7 @@ export default function TimelinePage() {
             top: `${hoveredSegment.y}px`,
           }}
         >
-          {/* Tooltip Title */}
+          {/* Tooltip Title matching user reference */}
           <div className="font-bold text-gray-900 dark:text-white truncate">
             {hoveredSegment.segment.type === 'PRODUCTIVE'
               ? `Productive App (${hoveredSegment.segment.appName})`
@@ -334,10 +334,10 @@ export default function TimelinePage() {
               : hoveredSegment.segment.type === 'NEUTRAL'
               ? `Neutral App (${hoveredSegment.segment.appName})`
               : hoveredSegment.segment.type === 'IDLE'
-              ? 'Idle Time'
+              ? `Idle Time (${hoveredSegment.segment.windowTitle || 'No input'})`
               : hoveredSegment.segment.type === 'NOT_IN_WORK'
               ? hoveredSegment.segment.appName
-              : 'Untracked Activity'}
+              : 'Untracked'}
           </div>
 
           {/* User & Time Range */}

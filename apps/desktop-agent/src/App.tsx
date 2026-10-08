@@ -107,6 +107,18 @@ function parseIntervalToMs(intervalStr?: string): number {
   return 60000;
 }
 
+function parseIdleTimeoutToSeconds(idleStr?: string): number {
+  if (!idleStr) return 60;
+  if (idleStr.includes('1 min')) return 60;
+  if (idleStr.includes('2 min')) return 120;
+  if (idleStr.includes('3 min')) return 180;
+  if (idleStr.includes('5 min')) return 300;
+  if (idleStr.includes('10 min')) return 600;
+  if (idleStr.includes('15 min')) return 900;
+  if (idleStr.includes('30 min')) return 1800;
+  return 60;
+}
+
 // 🌐 Extract Web Domain from Browser Window Title or Direct URL
 function extractBrowserDomain(appName: string, windowTitle?: string): string | null {
   if (!appName) return null;
@@ -226,6 +238,9 @@ export default function App() {
   const currentAttendanceSessionIdRef = useRef<string | null>(null);
 
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [isUserIdle, setIsUserIdle] = useState(false);
+  const isUserIdleRef = useRef(false);
+  isUserIdleRef.current = isUserIdle;
 
   // Auto-updater state
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
@@ -534,6 +549,50 @@ export default function App() {
 
   const pollWindow = async () => {
     try {
+      // 1. Check system idle time (keyboard/mouse inactivity)
+      let systemIdleSeconds = 0;
+      try {
+        const idleSec: any = await invoke('get_system_idle_seconds');
+        if (typeof idleSec === 'number') {
+          systemIdleSeconds = idleSec;
+        }
+      } catch {
+        // Fallback if platform does not support
+      }
+
+      const thresholdSeconds = parseIdleTimeoutToSeconds(policyRef.current.idleTimeoutStr);
+      const isIdleNow = systemIdleSeconds >= thresholdSeconds;
+      setIsUserIdle(isIdleNow);
+
+      const currentSession = sessionRef.current;
+      const currentTenantId = tenantIdRef.current;
+
+      if (isIdleNow) {
+        setActiveApp('Idle (Away)');
+        setWindowTitle(`User away for ${Math.round(systemIdleSeconds)}s`);
+        setAppProductivity({ classification: 'NEUTRAL', isReviewed: true });
+
+        if (currentSession?.user?.id && currentTenantId) {
+          const { error } = await supabase.from('activity_events').insert({
+            tenant_id: currentTenantId,
+            user_id: currentSession.user.id,
+            app_name: 'Idle Time',
+            window_title: `Idle / Inactive (${Math.round(systemIdleSeconds)}s)`,
+            domain: null,
+            started_at: new Date(Date.now() - 5000).toISOString(),
+            ended_at: new Date().toISOString(),
+            classification: 'NEUTRAL', // Marked as Idle Time in Timeline
+          });
+
+          if (!error) {
+            setEventsCount((prev) => prev + 1);
+            setLastSyncStatus(`💤 User Idle (${Math.round(systemIdleSeconds)}s)`);
+          }
+        }
+        return;
+      }
+
+      // 2. Active Window Tracking
       const activeWin: any = await invoke('get_focused_window');
       if (activeWin) {
         const app = activeWin.app_name || 'System';
@@ -546,9 +605,6 @@ export default function App() {
 
         const { classification, isReviewed } = getClassificationForApp(app, title, extractedDomain);
         setAppProductivity({ classification, isReviewed });
-
-        const currentSession = sessionRef.current;
-        const currentTenantId = tenantIdRef.current;
 
         if (currentSession?.user?.id && currentTenantId) {
           const { error } = await supabase.from('activity_events').insert({
@@ -581,6 +637,11 @@ export default function App() {
 
     if (!policyRef.current.enableScreenCapture) {
       setLastSyncStatus('Screenshots paused by Admin policy');
+      return;
+    }
+
+    if (isUserIdleRef.current) {
+      setLastSyncStatus('💤 Idle: Screenshots paused while user is away');
       return;
     }
 
@@ -960,7 +1021,11 @@ export default function App() {
                 <span className="font-semibold text-xs text-gray-900 truncate">
                   {activeApp !== 'None' ? activeApp : 'No Focus Detected'}
                 </span>
-                {activeApp !== 'None' && (
+                {isUserIdle ? (
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                    💤 Idle (Away)
+                  </span>
+                ) : activeApp !== 'None' && (
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                       !appProductivity.isReviewed

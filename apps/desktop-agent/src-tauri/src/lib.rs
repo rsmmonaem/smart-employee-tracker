@@ -90,6 +90,44 @@ async fn get_focused_window() -> Result<ActiveWindowData, String> {
     }
 }
 
+#[tauri::command]
+fn get_system_idle_seconds() -> Result<f64, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let output = Command::new("ioreg")
+            .args(&["-c", "IOHIDSystem"])
+            .output();
+
+        if let Ok(out) = output {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                if line.contains("\"HIDIdleTime\" =") {
+                    if let Some(val_str) = line.split('=').nth(1) {
+                        let trimmed = val_str.trim();
+                        if let Ok(nanos) = trimmed.parse::<u64>() {
+                            let seconds = (nanos as f64) / 1_000_000_000.0;
+                            return Ok(seconds);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(0.0)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        // Simple fallback or standard Windows LASTINPUTINFO if needed
+        Ok(0.0)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(0.0)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct NativeHttpResponse {
     pub status: u16,
@@ -177,6 +215,7 @@ pub fn run() {
         capture_all_screens,
         capture_screen,
         get_focused_window,
+        get_system_idle_seconds,
         native_request
     ])
     .setup(|app| {

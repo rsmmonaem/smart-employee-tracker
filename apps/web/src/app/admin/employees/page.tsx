@@ -71,6 +71,7 @@ export default function EmployeesPage() {
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [newTeam, setNewTeam] = useState('Engineering')
+  const [newTeams, setNewTeams] = useState<string[]>(['Engineering'])
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false)
   const [addError, setAddError] = useState('')
 
@@ -80,8 +81,12 @@ export default function EmployeesPage() {
   const [editPassword, setEditPassword] = useState('')
   const [editRole, setEditRole] = useState<'EMPLOYEE' | 'TENANT_ADMIN'>('EMPLOYEE')
   const [editTeam, setEditTeam] = useState('Engineering')
+  const [editTeams, setEditTeams] = useState<string[]>([])
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
   const [editError, setEditError] = useState('')
+
+  // Dynamic Teams List from backend
+  const [availableTeams, setAvailableTeams] = useState<string[]>([])
 
   // Delete State
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -184,6 +189,7 @@ export default function EmployeesPage() {
           avatar,
           role,
           team,
+          teams: teamsList,
           workedDaysText: workedDays > 0 ? `Worked for ${workedDays} days` : 'Yet to start work',
           activeTimePct,
           appsUsedText: hasClockedIn ? 'Activity monitored' : undefined,
@@ -203,6 +209,23 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // Fetch available dynamic teams
+  useEffect(() => {
+    fetch('/api/admin/teams')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.teams) && data.teams.length > 0) {
+          const names = data.teams.map((t: any) => t.name?.trim()).filter(Boolean)
+          setAvailableTeams(names)
+          if (names.length > 0) {
+            setNewTeam(names[0])
+            setNewTeams([names[0]])
+          }
+        }
+      })
+      .catch((err) => console.error('Failed to fetch teams:', err))
   }, [])
 
   useEffect(() => {
@@ -288,6 +311,7 @@ export default function EmployeesPage() {
 
     try {
       setIsSubmittingAdd(true)
+      const primaryTeam = newTeams[0] || newTeam || (availableTeams[0] || 'General')
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -296,7 +320,8 @@ export default function EmployeesPage() {
           email: newEmail.trim(),
           password: newPassword.trim() || undefined,
           role: newRole,
-          team: newTeam,
+          team: primaryTeam,
+          teams: newTeams.length > 0 ? newTeams : [primaryTeam],
         }),
       })
       const json = await res.json()
@@ -304,6 +329,10 @@ export default function EmployeesPage() {
         setNewFullName('')
         setNewEmail('')
         setNewPassword('')
+        if (availableTeams.length > 0) {
+          setNewTeam(availableTeams[0])
+          setNewTeams([availableTeams[0]])
+        }
         setShowAddModal(false)
         await fetchEmployeesData()
       } else {
@@ -324,6 +353,7 @@ export default function EmployeesPage() {
 
     try {
       setIsSubmittingEdit(true)
+      const primaryTeam = editTeams[0] || editTeam || (availableTeams[0] || 'General')
       const res = await fetch('/api/admin/users', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -331,7 +361,8 @@ export default function EmployeesPage() {
           id: editMember.id,
           fullName: editFullName.trim(),
           role: editRole,
-          team: editTeam,
+          team: primaryTeam,
+          teams: editTeams.length > 0 ? editTeams : [primaryTeam],
           password: editPassword.trim() || undefined,
         }),
       })
@@ -566,19 +597,51 @@ export default function EmployeesPage() {
                           </div>
                         </div>
 
-                        <div className="text-right">
-                          <span
-                            className={`text-xl font-black block leading-none font-mono ${
-                              card.activeTimePct > 0
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-gray-400 dark:text-gray-500'
-                            }`}
-                          >
-                            {card.activeTimePct}%
-                          </span>
-                          <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 block font-medium">
-                            Active Time
-                          </span>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span
+                              className={`text-xl font-black block leading-none font-mono ${
+                                card.activeTimePct > 0
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-gray-400 dark:text-gray-500'
+                              }`}
+                            >
+                              {card.activeTimePct}%
+                            </span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 block font-medium">
+                              Active Time
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 pl-2 border-l border-gray-150 dark:border-gray-800">
+                            <button
+                              onClick={() => {
+                                setEditMember(card)
+                                setEditFullName(card.name)
+                                setEditRole(card.role?.includes('Admin') ? 'TENANT_ADMIN' : 'EMPLOYEE')
+                                const memberTeams = card.teams && card.teams.length > 0
+                                  ? card.teams
+                                  : card.team
+                                  ? card.team.split(',').map((t) => t.trim()).filter(Boolean)
+                                  : []
+                                setEditTeams(memberTeams)
+                                setEditTeam(memberTeams[0] || 'General')
+                                setEditError('')
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              title="Edit Member"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(card.id, card.name)}
+                              disabled={deletingId === card.id}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                              title="Delete Member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -714,7 +777,13 @@ export default function EmployeesPage() {
                               setEditMember(row)
                               setEditFullName(row.name)
                               setEditRole(row.role?.includes('Admin') ? 'TENANT_ADMIN' : 'EMPLOYEE')
-                              setEditTeam(row.team || '')
+                              const memberTeams = row.teams && row.teams.length > 0
+                                ? row.teams
+                                : row.team
+                                ? row.team.split(',').map((t) => t.trim()).filter(Boolean)
+                                : []
+                              setEditTeams(memberTeams)
+                              setEditTeam(memberTeams[0] || 'General')
                               setEditError('')
                             }}
                             className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
@@ -804,14 +873,46 @@ export default function EmployeesPage() {
               </div>
 
               <div>
-                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Team / Department</label>
-                <input
-                  type="text"
-                  value={newTeam}
-                  onChange={(e) => setNewTeam(e.target.value)}
-                  placeholder="Engineering, Design, Operations..."
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                    Team(s) Assignment
+                  </label>
+                  <span className="text-[11px] text-gray-400">Can belong to 1 or more teams</span>
+                </div>
+                {availableTeams.length === 0 ? (
+                  <div className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 text-center">
+                    Loading teams...
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg max-h-36 overflow-y-auto">
+                      {availableTeams.map((t) => {
+                        const isChecked = newTeams.includes(t)
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              const updated = isChecked
+                                ? newTeams.filter((item) => item !== t)
+                                : [...newTeams, t]
+                              setNewTeams(updated)
+                              if (updated.length > 0) setNewTeam(updated[0])
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                              isChecked
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                            }`}
+                          >
+                            <span>{t}</span>
+                            {isChecked && <span className="text-[10px] font-bold">✓</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end gap-2">
@@ -895,13 +996,46 @@ export default function EmployeesPage() {
               </div>
 
               <div>
-                <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-300">Team / Department</label>
-                <input
-                  type="text"
-                  value={editTeam}
-                  onChange={(e) => setEditTeam(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block font-semibold text-gray-700 dark:text-gray-300">
+                    Team(s) Assignment
+                  </label>
+                  <span className="text-[11px] text-gray-400">Can belong to 1 or more teams</span>
+                </div>
+                {availableTeams.length === 0 ? (
+                  <div className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs text-gray-400 text-center">
+                    Loading teams...
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg max-h-36 overflow-y-auto">
+                      {availableTeams.map((t) => {
+                        const isChecked = editTeams.includes(t)
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => {
+                              const updated = isChecked
+                                ? editTeams.filter((item) => item !== t)
+                                : [...editTeams, t]
+                              setEditTeams(updated)
+                              if (updated.length > 0) setEditTeam(updated[0])
+                            }}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                              isChecked
+                                ? 'bg-blue-600 text-white shadow-2xs'
+                                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-400'
+                            }`}
+                          >
+                            <span>{t}</span>
+                            {isChecked && <span className="text-[10px] font-bold">✓</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="pt-3 flex justify-end gap-2">
