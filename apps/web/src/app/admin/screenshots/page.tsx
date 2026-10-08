@@ -49,7 +49,7 @@ export default function ScreenshotsPage() {
   const [tenantPlan, setTenantPlan] = useState<'BASIC' | 'PRO' | 'ENTERPRISE'>('BASIC')
   const [showProModal, setShowProModal] = useState(false)
 
-  // Pagination state
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string; email: string }>>([])
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(24)
   const [totalCount, setTotalCount] = useState<number>(0)
@@ -58,13 +58,32 @@ export default function ScreenshotsPage() {
   const supabase = createClient()
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
 
+  // Fetch full employee directory for dropdown
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.employees)) {
+          setEmployees(
+            data.employees.map((e: any) => ({
+              id: e.id,
+              name: e.full_name || e.email?.split('@')[0] || 'Employee',
+              email: e.email,
+            }))
+          )
+        }
+      })
+      .catch((err) => console.error('Failed to load employees for filter:', err))
+  }, [refreshTrigger])
+
   const fetchScreenshots = async (page = currentPage, size = pageSize) => {
     try {
       setLoading(true)
-      // Dedicated server API with tenant isolation, date filtering, and server pagination
+      // Dedicated server API with tenant isolation, date filtering, team and employee filters
       const params = new URLSearchParams()
       if (selectedDate) params.set('date', selectedDate)
       if (selectedUser && selectedUser !== 'all') params.set('userId', selectedUser)
+      if (selectedTeam && selectedTeam !== 'All Team' && selectedTeam !== 'all') params.set('team', selectedTeam)
       params.set('page', page.toString())
       params.set('limit', size.toString())
 
@@ -105,7 +124,7 @@ export default function ScreenshotsPage() {
   useEffect(() => {
     setCurrentPage(1)
     fetchScreenshots(1, pageSize)
-  }, [selectedDate, selectedUser])
+  }, [selectedDate, selectedUser, selectedTeam])
 
   useEffect(() => {
     fetchTenantPlan()
@@ -270,35 +289,12 @@ export default function ScreenshotsPage() {
     }
   }
 
-  // Get unique users for filtering
-  const userOptions = Array.from(
-    new Set(
-      screenshots.map(
-        (s) => s.users?.email || s.user_id
-      )
-    )
-  )
-
   const filteredScreenshots = screenshots.filter((s) => {
-    if (selectedUser !== 'all' && (s.users?.email || s.user_id) !== selectedUser) {
-      return false
-    }
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
       const name = (s.users?.full_name || '').toLowerCase()
       const email = (s.users?.email || s.user_id || '').toLowerCase()
       if (!name.includes(q) && !email.includes(q)) return false
-    }
-    if (selectedDate && s.taken_at) {
-      const dateOnly = s.taken_at.slice(0, 10)
-      const d = new Date(s.taken_at)
-      const localDateOnly = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-')
-      if (dateOnly !== selectedDate && localDateOnly !== selectedDate) {
-        // If selectedDate is legacy fallback date and there are live items, allow them
-        if (selectedDate !== '2026-09-10') {
-          return false
-        }
-      }
     }
     return true
   })
@@ -351,20 +347,23 @@ export default function ScreenshotsPage() {
         {/* Left: Filters & Counters */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Member Dropdown Selector (Only for Admins) */}
-          {currentUser?.role !== 'EMPLOYEE' && userOptions.length > 0 && (
+          {currentUser?.role !== 'EMPLOYEE' && (
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400">Employee:</span>
               <div className="relative">
                 <Users className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5 pointer-events-none" />
                 <select
                   value={selectedUser}
-                  onChange={(e) => setSelectedUser(e.target.value)}
-                  className="appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-8 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  onChange={(e) => {
+                    setSelectedUser(e.target.value)
+                    setCurrentPage(1)
+                  }}
+                  className="appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-8 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
                 >
-                  <option value="all">All Members ({screenshots.length})</option>
-                  {userOptions.map((email) => (
-                    <option key={email} value={email}>
-                      {email}
+                  <option value="all">🏢 All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      👤 {emp.name} ({emp.email})
                     </option>
                   ))}
                 </select>

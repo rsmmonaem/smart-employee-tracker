@@ -14,7 +14,8 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') // optional YYYY-MM-DD
-    const userId = searchParams.get('userId') // optional filter
+    const userId = searchParams.get('userId') // optional filter (UUID or email)
+    const team = searchParams.get('team') || searchParams.get('teamId') // optional filter (name or UUID)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = parseInt(searchParams.get('limit') || searchParams.get('pageSize') || '24', 10)
     const offset = (page - 1) * limit
@@ -39,8 +40,52 @@ export async function GET(req: Request) {
       }
     }
 
+    // 1. Filter by specific Employee (by UUID or email)
     if (userId && userId !== 'all') {
-      query = query.eq('user_id', userId)
+      if (userId.includes('@')) {
+        let uLookup = supabase.from('users').select('id').eq('email', userId)
+        if (!session.isSuperAdmin && session.tenantId) {
+          uLookup = uLookup.eq('tenant_id', session.tenantId)
+        }
+        const { data: u } = await uLookup.maybeSingle()
+        if (u?.id) {
+          query = query.eq('user_id', u.id)
+        } else {
+          return NextResponse.json({ success: true, screenshots: [], count: 0, totalCount: 0, page: 1, totalPages: 1 })
+        }
+      } else {
+        query = query.eq('user_id', userId)
+      }
+    }
+
+    // 2. Filter by Team if selected
+    if (team && team !== 'all' && team !== 'All Team') {
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(team)
+      let targetTeamId = isUUID ? team : null
+
+      if (!targetTeamId) {
+        let teamLookup = supabase.from('teams').select('id').ilike('name', team)
+        if (!session.isSuperAdmin && session.tenantId) {
+          teamLookup = teamLookup.eq('tenant_id', session.tenantId)
+        }
+        const { data: teamRow } = await teamLookup.maybeSingle()
+        targetTeamId = teamRow?.id || null
+      }
+
+      if (targetTeamId) {
+        let memberQuery = supabase.from('team_members').select('user_id').eq('team_id', targetTeamId)
+        if (!session.isSuperAdmin && session.tenantId) {
+          memberQuery = memberQuery.eq('tenant_id', session.tenantId)
+        }
+        const { data: members } = await memberQuery
+        const memberIds = (members || []).map((m) => m.user_id)
+
+        if (memberIds.length > 0) {
+          query = query.in('user_id', memberIds)
+        } else {
+          return NextResponse.json({ success: true, screenshots: [], count: 0, totalCount: 0, page: 1, totalPages: 1 })
+        }
+      }
     }
 
     if (targetDate) {
