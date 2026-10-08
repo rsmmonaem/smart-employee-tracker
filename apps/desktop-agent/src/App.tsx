@@ -591,21 +591,29 @@ export default function App() {
             setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
           } else if (!isTrackingRef.current) {
             setIsTracking(true);
+            // Close any existing open sessions first to guarantee ONE ACTIVE SESSION
             supabase
               .from('attendance_sessions')
-              .insert({
-                tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-                user_id: session.user.id,
-                clocked_in_at: new Date().toISOString(),
-                status: 'OPEN',
-              })
-              .select('id')
-              .single()
-              .then(({ data, error }) => {
-                if (!error && data) {
-                  currentAttendanceSessionIdRef.current = data.id;
-                  setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-                }
+              .update({ status: 'CLOSED', clocked_out_at: new Date().toISOString() })
+              .eq('user_id', session.user.id)
+              .eq('status', 'OPEN')
+              .then(() => {
+                supabase
+                  .from('attendance_sessions')
+                  .insert({
+                    tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+                    user_id: session.user.id,
+                    clocked_in_at: new Date().toISOString(),
+                    status: 'OPEN',
+                  })
+                  .select('id')
+                  .single()
+                  .then(({ data, error }) => {
+                    if (!error && data) {
+                      currentAttendanceSessionIdRef.current = data.id;
+                      setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+                    }
+                  });
               });
           }
         }
@@ -635,21 +643,29 @@ export default function App() {
             setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
           } else if (!isTrackingRef.current) {
             setIsTracking(true);
+            // Close any existing open sessions first to guarantee ONE ACTIVE SESSION
             supabase
               .from('attendance_sessions')
-              .insert({
-                tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-                user_id: session.user.id,
-                clocked_in_at: new Date().toISOString(),
-                status: 'OPEN',
-              })
-              .select('id')
-              .single()
-              .then(({ data, error }) => {
-                if (!error && data) {
-                  currentAttendanceSessionIdRef.current = data.id;
-                  setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-                }
+              .update({ status: 'CLOSED', clocked_out_at: new Date().toISOString() })
+              .eq('user_id', session.user.id)
+              .eq('status', 'OPEN')
+              .then(() => {
+                supabase
+                  .from('attendance_sessions')
+                  .insert({
+                    tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
+                    user_id: session.user.id,
+                    clocked_in_at: new Date().toISOString(),
+                    status: 'OPEN',
+                  })
+                  .select('id')
+                  .single()
+                  .then(({ data, error }) => {
+                    if (!error && data) {
+                      currentAttendanceSessionIdRef.current = data.id;
+                      setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+                    }
+                  });
               });
           }
         }
@@ -1051,20 +1067,48 @@ export default function App() {
     if (nextTracking) {
       try {
         localStorage.removeItem('smart_tracker_is_tracking_paused');
-        const { data, error } = await supabase
-          .from('attendance_sessions')
-          .insert({
-            tenant_id: currentTenantId,
-            user_id: currentSession.user.id,
-            clocked_in_at: new Date().toISOString(),
-            status: 'OPEN',
-          })
-          .select('id')
-          .single();
 
-        if (!error && data) {
-          currentAttendanceSessionIdRef.current = data.id;
+        // Strictly enforce: ONE USER ONE ACTIVE SESSION
+        // 1. Check if an OPEN session already exists for this user in Supabase
+        const { data: existingActive } = await supabase
+          .from('attendance_sessions')
+          .select('id')
+          .eq('user_id', currentSession.user.id)
+          .eq('status', 'OPEN')
+          .order('clocked_in_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingActive?.id) {
+          // Reuse existing active session! Never create duplicate
+          currentAttendanceSessionIdRef.current = existingActive.id;
           setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+        } else {
+          // Close any stale sessions first just in case
+          await supabase
+            .from('attendance_sessions')
+            .update({
+              status: 'CLOSED',
+              clocked_out_at: new Date().toISOString(),
+            })
+            .eq('user_id', currentSession.user.id)
+            .eq('status', 'OPEN');
+
+          const { data, error } = await supabase
+            .from('attendance_sessions')
+            .insert({
+              tenant_id: currentTenantId,
+              user_id: currentSession.user.id,
+              clocked_in_at: new Date().toISOString(),
+              status: 'OPEN',
+            })
+            .select('id')
+            .single();
+
+          if (!error && data) {
+            currentAttendanceSessionIdRef.current = data.id;
+            setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+          }
         }
       } catch (e) {
         console.warn('Attendance session start error:', e);
@@ -1072,26 +1116,16 @@ export default function App() {
     } else {
       try {
         localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
-        const sessId = currentAttendanceSessionIdRef.current;
-        if (sessId) {
-          await supabase
-            .from('attendance_sessions')
-            .update({
-              clocked_out_at: new Date().toISOString(),
-              status: 'CLOSED',
-            })
-            .eq('id', sessId);
-          currentAttendanceSessionIdRef.current = null;
-        } else {
-          await supabase
-            .from('attendance_sessions')
-            .update({
-              clocked_out_at: new Date().toISOString(),
-              status: 'CLOSED',
-            })
-            .eq('user_id', currentSession.user.id)
-            .eq('status', 'OPEN');
-        }
+        // Always close all open sessions for this user
+        await supabase
+          .from('attendance_sessions')
+          .update({
+            clocked_out_at: new Date().toISOString(),
+            status: 'CLOSED',
+          })
+          .eq('user_id', currentSession.user.id)
+          .eq('status', 'OPEN');
+        currentAttendanceSessionIdRef.current = null;
 
         const todayStr = getTodayKey();
         try {
