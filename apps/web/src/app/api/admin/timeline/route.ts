@@ -95,7 +95,7 @@ export async function GET(req: Request) {
     const { data: authData } = await supabase.auth.admin.listUsers()
     const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
 
-    // 2. Fetch real activity events strictly for those userIds
+    // 2. Fetch real activity events strictly for those userIds (allow up to 25000 events to prevent 1000 row truncation)
     const { data: events } = await supabase
       .from('activity_events')
       .select('*')
@@ -103,6 +103,7 @@ export async function GET(req: Request) {
       .gte('started_at', startOfDay)
       .lte('started_at', endOfDay)
       .order('started_at', { ascending: true })
+      .limit(25000)
 
     // 3. Fetch attendance sessions strictly for those userIds
     const { data: sessions } = await supabase
@@ -111,6 +112,7 @@ export async function GET(req: Request) {
       .in('user_id', userIds)
       .gte('clocked_in_at', startOfDay)
       .lte('clocked_in_at', endOfDay)
+      .limit(5000)
 
     // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {

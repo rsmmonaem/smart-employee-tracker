@@ -440,13 +440,14 @@ export default function App() {
     const todayStr = getTodayKey();
     const storageKey = `smart_tracker_today_seconds_${userId}_${todayStr}`;
 
-    // 1. Instantly restore from localStorage if available
+    // 1. Instantly restore from localStorage if available (with sanity cap)
     try {
       const cached = localStorage.getItem(storageKey);
       if (cached) {
         const parsed = parseInt(cached, 10);
-        if (!isNaN(parsed) && parsed > 0) {
-          setTimer((prev) => Math.max(prev, parsed));
+        // Only load if valid and sane (< 12 hours)
+        if (!isNaN(parsed) && parsed > 0 && parsed < 43200) {
+          setTimer(parsed);
         }
       }
     } catch {
@@ -464,15 +465,15 @@ export default function App() {
         .select('id, clocked_in_at, clocked_out_at, status')
         .eq('user_id', userId)
         .gte('clocked_in_at', startOfDay)
-        .lte('clocked_in_at', endOfDay);
+        .lte('clocked_in_at', endOfDay)
+        .order('clocked_in_at', { ascending: true });
 
       // Compute expectedClockIn threshold for today (in local date)
-      const expectedClockInStr = policyRef.current.expectedClockIn || '09:00';
+      const expectedClockInStr = policyRef.current.expectedClockIn || '10:00';
       const expectedClockInMs = (() => {
         try {
-          // Normalize format: "09:00 AM" or "09:00" → hours/minutes
           const cleaned = expectedClockInStr.trim().toUpperCase();
-          let hours = 0, minutes = 0;
+          let hours = 10, minutes = 0;
           const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
           const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
           if (ampmMatch) {
@@ -496,23 +497,66 @@ export default function App() {
       let existingOpenSessionId: string | null = null;
 
       if (sessions && Array.isArray(sessions)) {
+        // Find latest open session
+        const openSessions = sessions.filter((s) => s.status === 'OPEN' && !s.clocked_out_at);
+        const activeOpenSession = openSessions.length > 0 ? openSessions[openSessions.length - 1] : null;
+        if (activeOpenSession) {
+          existingOpenSessionId = activeOpenSession.id;
+        }
+
+        // Close any stale duplicate open sessions in background
+        if (openSessions.length > 1 && existingOpenSessionId) {
+          const staleIds = openSessions.filter((s) => s.id !== existingOpenSessionId).map((s) => s.id);
+          supabase
+            .from('attendance_sessions')
+            .update({ status: 'CLOSED', clocked_out_at: new Date().toISOString() })
+            .in('id', staleIds)
+            .then(() => {});
+        }
+
+        const intervals: { start: number; end: number }[] = [];
+        const now = Date.now();
+
         sessions.forEach((s) => {
           const rawStart = new Date(s.clocked_in_at).getTime();
-          // Apply expected clock-in cutoff: only count time from max(clocked_in_at, expectedClockIn)
           const effectiveStart = expectedClockInMs > 0 ? Math.max(rawStart, expectedClockInMs) : rawStart;
+
+          let effectiveEnd = effectiveStart;
           if (s.clocked_out_at) {
-            const end = new Date(s.clocked_out_at).getTime();
-            totalSec += Math.max(0, Math.floor((end - effectiveStart) / 1000));
-          } else if (s.status === 'OPEN') {
-            existingOpenSessionId = s.id;
-            const now = Date.now();
-            totalSec += Math.max(0, Math.floor((now - effectiveStart) / 1000));
+            effectiveEnd = new Date(s.clocked_out_at).getTime();
+          } else if (s.id === existingOpenSessionId) {
+            effectiveEnd = now;
+          }
+
+          if (effectiveEnd > effectiveStart) {
+            intervals.push({ start: effectiveStart, end: effectiveEnd });
           }
         });
+
+        // Merge overlapping intervals so sessions NEVER double-count
+        intervals.sort((a, b) => a.start - b.start);
+        const merged: { start: number; end: number }[] = [];
+        for (const int of intervals) {
+          if (merged.length === 0) {
+            merged.push({ ...int });
+          } else {
+            const last = merged[merged.length - 1];
+            if (int.start <= last.end) {
+              last.end = Math.max(last.end, int.end);
+            } else {
+              merged.push({ ...int });
+            }
+          }
+        }
+
+        for (const m of merged) {
+          totalSec += Math.floor((m.end - m.start) / 1000);
+        }
       }
 
+      // Overwrite state and cache with actual calculated ground truth
       if (totalSec > 0) {
-        setTimer((prev) => Math.max(prev, totalSec));
+        setTimer(totalSec);
         try {
           localStorage.setItem(storageKey, String(totalSec));
         } catch {

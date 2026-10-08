@@ -168,6 +168,7 @@ export async function GET(req: Request) {
       .select('*')
       .in('user_id', userIds)
       .order('clocked_in_at', { ascending: true })
+      .limit(5000)
 
     // 4. Fetch activity events strictly for those userIds
     const { data: activityEvents } = await supabase
@@ -176,6 +177,7 @@ export async function GET(req: Request) {
       .in('user_id', userIds)
       .gte('started_at', startOfDay)
       .lte('started_at', endOfDay)
+      .limit(25000)
 
     const colors = [
       'bg-blue-600',
