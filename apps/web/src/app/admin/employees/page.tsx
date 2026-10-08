@@ -50,6 +50,7 @@ interface TeamMemberCardData {
   role?: string
   email?: string
   team?: string
+  teams?: string[]
 }
 
 // In-memory cache for instant navigation transitions
@@ -85,7 +86,7 @@ export default function EmployeesPage() {
   // Delete State
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const { refreshTrigger } = useAdminFilter()
+  const { refreshTrigger, selectedTeam } = useAdminFilter()
 
   const fetchEmployeesData = useCallback(async (isBackground = false) => {
     try {
@@ -125,7 +126,14 @@ export default function EmployeesPage() {
         const name = ts?.name || dbU?.full_name || dbU?.email?.split('@')[0] || 'Employee'
         const email = ts?.email || dbU?.email || ''
         const role = dbU?.role === 'TENANT_ADMIN' ? 'Tenant Admin' : ts?.role || 'Employee'
-        const team = dbU?.team || ts?.team || 'Engineering'
+        const teamsList: string[] = Array.isArray(dbU?.teams)
+          ? dbU.teams
+          : dbU?.team
+          ? [dbU.team]
+          : ts?.team
+          ? [ts.team]
+          : ['General']
+        const team = teamsList.join(', ')
         const avatar = ts?.avatarLetter || name.charAt(0).toUpperCase()
 
         const hasClockedIn = !!ts?.hasClockedIn
@@ -248,6 +256,14 @@ export default function EmployeesPage() {
         if (!matchName && !matchEmail) return false
       }
 
+      // Team filter match
+      if (selectedTeam && selectedTeam !== 'All Team') {
+        const matchesTeam =
+          (card.team && card.team.toLowerCase().includes(selectedTeam.toLowerCase())) ||
+          (card.teams && card.teams.some((t) => t.toLowerCase() === selectedTeam.toLowerCase()))
+        if (!matchesTeam) return false
+      }
+
       // Status pill match
       if (activeFilterPill === 'ALL') return true
       if (activeFilterPill === 'WORKING') return card.statusCategory === 'WORKING'
@@ -259,7 +275,7 @@ export default function EmployeesPage() {
         return card.statusCategory === 'NOT_INSTALLED' || card.statusCategory === 'YET_TO_START'
       return true
     })
-  }, [teamCards, activeFilterPill, searchQuery])
+  }, [teamCards, activeFilterPill, searchQuery, selectedTeam])
 
   // Add Employee Handler
   const handleAddEmployee = async (e: React.FormEvent) => {
@@ -413,8 +429,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('ALL')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'ALL'
-                ? 'bg-[#dbeafe] text-[#1d4ed8] border border-[#bfdbfe] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/70 dark:text-blue-300 dark:border-blue-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             All Members ({pillCounts.all})
@@ -424,8 +440,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('WORKING')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'WORKING'
-                ? 'bg-[#dcfce7] text-[#15803d] border border-[#bbf7d0] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             Currently Working ({pillCounts.working})
@@ -435,8 +451,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('BREAK')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'BREAK'
-                ? 'bg-[#fef3c7] text-[#b45309] border border-[#fde68a] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             Currently In Break ({pillCounts.break})
@@ -446,8 +462,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('STOPPED')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'STOPPED'
-                ? 'bg-[#ffe4e6] text-[#be123c] border border-[#fecdd3] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             Stopped Work ({pillCounts.stopped})
@@ -457,8 +473,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('LEAVE')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'LEAVE'
-                ? 'bg-[#ede9fe] text-[#6d28d9] border border-[#ddd6fe] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-purple-100 text-purple-800 border border-purple-200 dark:bg-purple-950/70 dark:text-purple-300 dark:border-purple-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             On Leave ({pillCounts.leave})
@@ -468,8 +484,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('NOT_INSTALLED')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'NOT_INSTALLED'
-                ? 'bg-[#fef9c3] text-[#a16207] border border-[#fef08a] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             App Not Installed ({pillCounts.notInstalled})
@@ -479,8 +495,8 @@ export default function EmployeesPage() {
             onClick={() => setActiveFilterPill('YET_TO_START')}
             className={`px-4 py-1.5 rounded-full transition-all shrink-0 ${
               activeFilterPill === 'YET_TO_START'
-                ? 'bg-[#fef9c3] text-[#a16207] border border-[#fef08a] font-bold shadow-2xs'
-                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50'
+                ? 'bg-amber-50 text-amber-800 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 font-bold shadow-2xs'
+                : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-850'
             }`}
           >
             Yet To Start ({pillCounts.yetToStart})
@@ -656,7 +672,7 @@ export default function EmployeesPage() {
                         {row.role}
                       </td>
                       <td className="py-3.5 px-4 text-gray-500">
-                        {row.team || 'Engineering'}
+                        {row.team || '—'}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">
                         {row.checkInTime}
@@ -698,7 +714,7 @@ export default function EmployeesPage() {
                               setEditMember(row)
                               setEditFullName(row.name)
                               setEditRole(row.role?.includes('Admin') ? 'TENANT_ADMIN' : 'EMPLOYEE')
-                              setEditTeam(row.team || 'Engineering')
+                              setEditTeam(row.team || '')
                               setEditError('')
                             }}
                             className="p-1 text-gray-400 hover:text-blue-600 transition-colors"

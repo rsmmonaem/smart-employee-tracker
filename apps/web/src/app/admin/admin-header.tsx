@@ -12,8 +12,11 @@ import {
   RefreshCw,
   Check,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react'
 import { useAdminFilter, PeriodPreset } from './admin-filter-context'
+import { useTheme } from '@/components/theme-provider'
 import AddUserModal from './add-user-modal'
 
 export interface AdminHeaderProps {
@@ -95,6 +98,8 @@ export default function AdminHeader({
     setShowAddUserModal,
     triggerRefresh,
   } = useAdminFilter()
+
+  const { theme, toggleTheme } = useTheme()
 
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [isTeamMenuOpen, setIsTeamMenuOpen] = useState(false)
@@ -447,12 +452,32 @@ export default function AdminHeader({
             </div>
           )}
 
+          {/* Dark / Light Mode Switcher */}
+          <button
+            onClick={toggleTheme}
+            type="button"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-all text-xs font-medium shadow-2xs shrink-0 cursor-pointer"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <span className="hidden md:inline text-[11px] font-semibold text-gray-200">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-indigo-500 fill-indigo-500" />
+                <span className="hidden md:inline text-[11px] font-semibold text-gray-700">Dark</span>
+              </>
+            )}
+          </button>
+
           {/* Optional Refresh Button if onRefresh supplied */}
           {onRefresh && (
             <button
               onClick={onRefresh}
               title="Refresh Data"
-              className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             </button>

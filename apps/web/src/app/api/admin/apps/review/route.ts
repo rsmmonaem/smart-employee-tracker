@@ -27,10 +27,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
-    const { searchParams } = new URL(req.url)
-    const query = (searchParams.get('q') || '').toLowerCase().trim()
     const supabase = createAdminClient()
+    const { searchParams } = new URL(req.url)
+    let tenantId = searchParams.get('tenantId') || session.tenantId
+    if (!tenantId) {
+      const { data: defaultTenant } = await supabase.from('tenants').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      tenantId = defaultTenant?.id || null
+    }
+
+    if (!tenantId) {
+      return NextResponse.json({ success: true, unreviewed: [], reviewed: [], topUsed: [], stats: { totalSeconds: 0, productiveSeconds: 0, neutralSeconds: 0, unproductiveSeconds: 0 } })
+    }
+
+    const query = (searchParams.get('q') || '').toLowerCase().trim()
+    const userId = searchParams.get('userId') // optional employee filter
 
     // 1. Fetch current productivity rules
     let rulesQuery = supabase
@@ -71,19 +81,33 @@ export async function GET(req: Request) {
 
     const ruleMap = new Map((rules || []).map((r) => [r.pattern.toLowerCase(), r]))
 
-    // 2. Fetch activity events strictly for this tenant
+    // 2. Fetch activity events strictly for this tenant, optionally filtered by employee
     let eventsQuery = supabase
       .from('activity_events')
-      .select('app_name, domain, started_at, ended_at')
+      .select('user_id, app_name, domain, started_at, ended_at, classification')
 
     if (!session.isSuperAdmin) {
       eventsQuery = eventsQuery.eq('tenant_id', tenantId)
     }
 
+    if (userId && userId !== 'ALL') {
+      eventsQuery = eventsQuery.eq('user_id', userId)
+    }
+
     const { data: events } = await eventsQuery
 
+    // Fetch tenant employees for user lookup and attribution
+    let usersQuery = supabase
+      .from('users')
+      .select('id, full_name, email')
+    if (!session.isSuperAdmin) {
+      usersQuery = usersQuery.eq('tenant_id', tenantId)
+    }
+    const { data: tenantUsers } = await usersQuery
+    const userMap = new Map((tenantUsers || []).map((u) => [u.id, u.full_name || u.email?.split('@')[0] || 'Employee']))
+
     // Aggregate app usage counts and total duration in seconds
-    const appStatsMap = new Map<string, { count: number; totalSeconds: number; type: 'APP' | 'DOMAIN' }>()
+    const appStatsMap = new Map<string, { count: number; totalSeconds: number; type: 'APP' | 'DOMAIN'; users: Set<string> }>()
 
     ;(events || []).forEach((ev) => {
       const name = ev.domain || ev.app_name
@@ -100,22 +124,28 @@ export async function GET(req: Request) {
         count: 0,
         totalSeconds: 0,
         type: isDomain ? 'DOMAIN' : 'APP',
+        users: new Set<string>(),
       }
       existing.count += 1
       existing.totalSeconds += dur
+      if (ev.user_id) {
+        const uName = userMap.get(ev.user_id)
+        if (uName) existing.users.add(uName)
+      }
       appStatsMap.set(key, existing)
     })
 
     // Combine distinct apps from SEED_APPS and real activity_events
-    const allKnownApps = new Map<string, { name: string; type: 'APP' | 'DOMAIN'; totalSeconds: number; count: number }>()
+    const allKnownApps = new Map<string, { name: string; type: 'APP' | 'DOMAIN'; totalSeconds: number; count: number; usedBy: string[] }>()
 
     SEED_APPS.forEach((sa) => {
-      const stats = appStatsMap.get(sa.name.toLowerCase()) || { count: 0, totalSeconds: 0, type: sa.type as 'APP' | 'DOMAIN' }
+      const stats = appStatsMap.get(sa.name.toLowerCase()) || { count: 0, totalSeconds: 0, type: sa.type as 'APP' | 'DOMAIN', users: new Set<string>() }
       allKnownApps.set(sa.name.toLowerCase(), {
         name: sa.name,
         type: sa.type as 'APP' | 'DOMAIN',
         totalSeconds: stats.totalSeconds,
         count: stats.count,
+        usedBy: Array.from(stats.users),
       })
     })
 
@@ -125,12 +155,13 @@ export async function GET(req: Request) {
       if (!rawName || rawName === 'Untracked Activity') return
       const key = rawName.toLowerCase()
       if (!allKnownApps.has(key)) {
-        const stats = appStatsMap.get(key) || { count: 1, totalSeconds: 60, type: 'APP' }
+        const stats = appStatsMap.get(key) || { count: 1, totalSeconds: 60, type: 'APP', users: new Set<string>() }
         allKnownApps.set(key, {
           name: rawName,
           type: stats.type,
           totalSeconds: stats.totalSeconds,
           count: stats.count,
+          usedBy: Array.from(stats.users),
         })
       }
     })
@@ -142,6 +173,7 @@ export async function GET(req: Request) {
       type: 'APP' | 'DOMAIN'
       usageCount: number
       totalSeconds: number
+      usedBy: string[]
     }> = []
 
     const reviewed: Array<{
@@ -152,6 +184,7 @@ export async function GET(req: Request) {
       classification: 'PRODUCTIVE' | 'NEUTRAL' | 'UNPRODUCTIVE'
       usageCount: number
       totalSeconds: number
+      usedBy: string[]
     }> = []
 
     allKnownApps.forEach((item, key) => {
@@ -167,6 +200,7 @@ export async function GET(req: Request) {
           classification: rule.classification,
           usageCount: item.count,
           totalSeconds: item.totalSeconds,
+          usedBy: item.usedBy,
         })
       } else {
         unreviewed.push({
@@ -175,6 +209,7 @@ export async function GET(req: Request) {
           type: item.type,
           usageCount: item.count,
           totalSeconds: item.totalSeconds,
+          usedBy: item.usedBy,
         })
       }
     })
@@ -234,10 +269,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
     const body = await req.json()
-    const { action, pattern, classification, matchType, appName, excluded } = body
     const supabase = createAdminClient()
+    let tenantId = body.tenantId || session.tenantId
+    if (!tenantId && session.isSuperAdmin) {
+      const { data: defaultTenant } = await supabase.from('tenants').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      tenantId = defaultTenant?.id || null
+    }
+
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: 'Tenant ID required' }, { status: 400 })
+    }
+
+    const { action, pattern, classification, matchType, appName, excluded } = body
 
     // Action 1: Toggle Idle Exclusion
     if (action === 'toggle_idle_exclusion' && appName) {
@@ -359,8 +403,18 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
+    const supabase = createAdminClient()
     const { searchParams } = new URL(req.url)
+    let tenantId = searchParams.get('tenantId') || session.tenantId
+    if (!tenantId && session.isSuperAdmin) {
+      const { data: defaultTenant } = await supabase.from('tenants').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      tenantId = defaultTenant?.id || null
+    }
+
+    if (!tenantId) {
+      return NextResponse.json({ success: false, error: 'Tenant ID required' }, { status: 400 })
+    }
+
     let ruleId = searchParams.get('id')
     let pattern = searchParams.get('pattern')
 
@@ -373,8 +427,6 @@ export async function DELETE(req: Request) {
         // no body
       }
     }
-
-    const supabase = createAdminClient()
 
     if (ruleId) {
       let deleteQuery = supabase.from('productivity_rules').delete().eq('id', ruleId)

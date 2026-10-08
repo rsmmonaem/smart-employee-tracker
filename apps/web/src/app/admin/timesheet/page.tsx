@@ -300,28 +300,28 @@ export default function TimesheetPage() {
         {/* Timesheet Matrix Table */}
         <div className="border border-gray-150 dark:border-gray-800 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-2xs">
           {/* Table Header */}
-          <div className="grid grid-cols-12 border-b border-gray-150 dark:border-gray-800 bg-[#fbfbfb] dark:bg-gray-850 py-3 px-6 text-[11px] font-semibold tracking-wider text-gray-400 uppercase">
-            <div className="col-span-3 text-gray-500">EMPLOYEE</div>
-            <div className="col-span-5 flex items-center justify-center gap-3 text-gray-500">
+          <div className="grid grid-cols-12 border-b border-gray-150 dark:border-gray-800 bg-[#fbfbfb] dark:bg-gray-850 py-3 px-6 text-[11px] font-semibold tracking-wider text-gray-500 dark:text-gray-400 uppercase">
+            <div className="col-span-3 text-gray-500 dark:text-gray-400">EMPLOYEE</div>
+            <div className="col-span-5 flex items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
               <button
                 onClick={() => handleShiftDate(-1)}
                 title="Previous Day"
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600"
+                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="font-bold tracking-wide">
+              <span className="font-bold tracking-wide text-gray-700 dark:text-gray-200">
                 {getHeaderDateTitle(selectedDate)}
               </span>
               <button
                 onClick={() => handleShiftDate(1)}
                 title="Next Day"
-                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600"
+                className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-300"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
-            <div className="col-span-4 pl-4 text-gray-500">TOTAL WORK SUMMARY</div>
+            <div className="col-span-4 pl-4 text-gray-500 dark:text-gray-400">TOTAL WORK SUMMARY</div>
           </div>
 
           {/* Rows */}

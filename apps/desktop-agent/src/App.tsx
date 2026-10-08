@@ -106,6 +106,73 @@ function parseIntervalToMs(intervalStr?: string): number {
   return 60000;
 }
 
+// 🌐 Extract Web Domain from Browser Window Title or Direct URL
+function extractBrowserDomain(appName: string, windowTitle?: string): string | null {
+  if (!appName) return null;
+  const isBrowser = /chrome|brave|firefox|edge|safari|opera|arc|browser|vivaldi/i.test(appName);
+  if (!isBrowser || !windowTitle) return null;
+
+  // Clean browser title suffix (e.g. ' - Google Chrome', ' - Brave')
+  const clean = windowTitle
+    .replace(/\s*-\s*(Google Chrome|Google Chrome Beta|Brave Browser|Brave|Mozilla Firefox|Firefox|Microsoft Edge|Edge|Safari|Opera|Arc|Vivaldi)$/i, '')
+    .trim();
+
+  // 1. Direct FQDN / domain match (e.g., 'admin.truckpointbd.com', 'trackmatrix.com', 'app.tracmatrix.com/admin')
+  const fqdnRegex = /(?:https?:\/\/)?([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.(?:com|org|net|co|io|app|dev|chat|edu|gov|xyz|me|info|ai|tv|bd|pk|in|so|tech|cloud|site|online|pro)(?:\.[a-zA-Z]{2,3})?)/i;
+  const fqdnMatch = clean.match(fqdnRegex);
+  if (fqdnMatch) {
+    const rawDomain = fqdnMatch[1].toLowerCase().replace(/^www\./, '');
+    if (rawDomain && !rawDomain.includes('newtab')) {
+      return rawDomain;
+    }
+  }
+
+  // 2. High-precision Web Platform & Service Signatures
+  const webPlatforms: Array<{ pattern: RegExp; domain: string }> = [
+    { pattern: /youtube/i, domain: 'youtube.com' },
+    { pattern: /github|[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+|workflow runs|pull request|\bpr\b|commit|repo/i, domain: 'github.com' },
+    { pattern: /gitlab/i, domain: 'gitlab.com' },
+    { pattern: /bitbucket/i, domain: 'bitbucket.org' },
+    { pattern: /google\s*meet|\bmeet\b/i, domain: 'meet.google.com' },
+    { pattern: /gmail|google\s*mail/i, domain: 'mail.google.com' },
+    { pattern: /google\s*docs/i, domain: 'docs.google.com' },
+    { pattern: /google\s*sheets/i, domain: 'sheets.google.com' },
+    { pattern: /google\s*slides/i, domain: 'slides.google.com' },
+    { pattern: /google\s*drive/i, domain: 'drive.google.com' },
+    { pattern: /facebook/i, domain: 'facebook.com' },
+    { pattern: /instagram/i, domain: 'instagram.com' },
+    { pattern: /twitter|\bx\s*corp|\bx\.com/i, domain: 'x.com' },
+    { pattern: /linkedin/i, domain: 'linkedin.com' },
+    { pattern: /chatgpt|openai/i, domain: 'chatgpt.com' },
+    { pattern: /claude|anthropic/i, domain: 'claude.ai' },
+    { pattern: /gemini/i, domain: 'gemini.google.com' },
+    { pattern: /stack\s*overflow/i, domain: 'stackoverflow.com' },
+    { pattern: /notion/i, domain: 'notion.so' },
+    { pattern: /figma/i, domain: 'figma.com' },
+    { pattern: /canva/i, domain: 'canva.com' },
+    { pattern: /whatsapp/i, domain: 'web.whatsapp.com' },
+    { pattern: /telegram/i, domain: 'web.telegram.org' },
+    { pattern: /slack/i, domain: 'app.slack.com' },
+    { pattern: /discord/i, domain: 'discord.com' },
+    { pattern: /trello/i, domain: 'trello.com' },
+    { pattern: /jira|atlassian/i, domain: 'atlassian.net' },
+    { pattern: /netflix/i, domain: 'netflix.com' },
+    { pattern: /spotify/i, domain: 'open.spotify.com' },
+    { pattern: /reddit/i, domain: 'reddit.com' },
+    { pattern: /tracmatrix|trackmatrix/i, domain: 'app.tracmatrix.com' },
+    { pattern: /wikipedia/i, domain: 'wikipedia.org' },
+    { pattern: /google\s*search|\bgoogle\b/i, domain: 'google.com' },
+  ];
+
+  for (const wp of webPlatforms) {
+    if (wp.pattern.test(clean)) {
+      return wp.domain;
+    }
+  }
+
+  return null;
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [tenantId, setTenantId] = useState<string>('7d91b2a1-c727-4f50-83ec-4fdb9debebd3');
@@ -313,12 +380,25 @@ export default function App() {
 
   const getClassificationForApp = (
     appName: string,
-    title?: string
+    title?: string,
+    domain?: string | null
   ): { classification: 'PRODUCTIVE' | 'NEUTRAL' | 'UNPRODUCTIVE'; isReviewed: boolean } => {
     const currentRules = rulesRef.current;
     const nApp = appName.toLowerCase().trim();
     const nTitle = (title || '').toLowerCase().trim();
+    const nDomain = (domain || '').toLowerCase().trim();
 
+    // 1. Highest Priority: Match exact web domain rule if active
+    if (nDomain) {
+      for (const r of currentRules) {
+        const pat = r.pattern.toLowerCase().trim();
+        if (nDomain === pat || nDomain.includes(pat) || pat.includes(nDomain)) {
+          return { classification: r.classification, isReviewed: true };
+        }
+      }
+    }
+
+    // 2. Secondary: Match App Name or Title
     for (const r of currentRules) {
       const pat = r.pattern.toLowerCase().trim();
       if (nApp === pat || nApp.includes(pat) || nTitle.includes(pat)) {
@@ -387,7 +467,10 @@ export default function App() {
         setActiveApp(app);
         setWindowTitle(title);
 
-        const { classification, isReviewed } = getClassificationForApp(app, title);
+        // 🌐 Extract active web domain if this is a browser
+        const extractedDomain = extractBrowserDomain(app, title);
+
+        const { classification, isReviewed } = getClassificationForApp(app, title, extractedDomain);
         setAppProductivity({ classification, isReviewed });
 
         const currentSession = sessionRef.current;
@@ -399,6 +482,7 @@ export default function App() {
             user_id: currentSession.user.id,
             app_name: app,
             window_title: title,
+            domain: extractedDomain || null,
             started_at: new Date(Date.now() - 5000).toISOString(),
             ended_at: new Date().toISOString(),
             classification,
@@ -406,7 +490,8 @@ export default function App() {
 
           if (!error) {
             setEventsCount((prev) => prev + 1);
-            setLastSyncStatus(`Activity: ${app} (${classification})`);
+            const label = extractedDomain ? `${extractedDomain} (${app})` : app;
+            setLastSyncStatus(`Activity: ${label} [${classification}]`);
           }
         }
       }
@@ -427,55 +512,91 @@ export default function App() {
 
     try {
       setIsSnapping(true);
-      const base64Img: string = await invoke('capture_screen');
-      if (!base64Img) {
+      let capturedScreens: Array<{
+        screen_index: number;
+        screen_name: string;
+        is_primary?: boolean;
+        base64_image: string;
+      }> = [];
+
+      try {
+        const screensRes: any = await invoke('capture_all_screens');
+        if (Array.isArray(screensRes) && screensRes.length > 0) {
+          capturedScreens = screensRes;
+        }
+      } catch (multiErr) {
+        // Fallback to single primary screen
+        const singleBase64: string = await invoke('capture_screen');
+        if (singleBase64) {
+          capturedScreens = [{
+            screen_index: 1,
+            screen_name: 'Screen 1',
+            is_primary: true,
+            base64_image: singleBase64,
+          }];
+        }
+      }
+
+      if (capturedScreens.length === 0) {
         setIsSnapping(false);
         return;
       }
 
-      setLastScreenshot(`data:image/jpeg;base64,${base64Img}`);
-
-      // Convert Base64 to binary buffer
-      const byteChars = atob(base64Img);
-      const byteNumbers = new Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) {
-        byteNumbers[i] = byteChars.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
+      // Preview the first / primary screen in desktop agent UI
+      const primary = capturedScreens.find((s) => s.is_primary) || capturedScreens[0];
+      setLastScreenshot(`data:image/jpeg;base64,${primary.base64_image}`);
 
       const timestamp = Date.now();
-      const storagePath = `${currentTenantId}/${currentSession.user.id}/${timestamp}.jpg`;
+      let successCount = 0;
 
-      // 1. Upload to Supabase Storage
-      const { error: storageErr } = await supabase.storage
-        .from('screenshots')
-        .upload(storagePath, byteArray.buffer, {
-          contentType: 'image/jpeg',
-          upsert: true,
+      for (const item of capturedScreens) {
+        // Convert Base64 to binary buffer
+        const byteChars = atob(item.base64_image);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+
+        const screenSuffix = capturedScreens.length > 1 ? `_screen_${item.screen_index}` : '';
+        const storagePath = `${currentTenantId}/${currentSession.user.id}/${timestamp}${screenSuffix}.jpg`;
+
+        // 1. Upload to Supabase Storage
+        const { error: storageErr } = await supabase.storage
+          .from('screenshots')
+          .upload(storagePath, byteArray.buffer, {
+            contentType: 'image/jpeg',
+            upsert: true,
+          });
+
+        if (storageErr) {
+          console.error(`Storage upload failed for ${item.screen_name}:`, storageErr);
+          continue;
+        }
+
+        // 2. Insert record in screenshots table
+        const { error: dbErr } = await supabase.from('screenshots').insert({
+          tenant_id: currentTenantId,
+          user_id: currentSession.user.id,
+          storage_path: storagePath,
+          taken_at: new Date().toISOString(),
+          is_blurred: policyRef.current.blurScreenCapture,
         });
 
-      if (storageErr) {
-        console.error('Storage upload failed:', storageErr);
-        setLastSyncStatus(`Upload err: ${storageErr.message}`);
-        setIsSnapping(false);
-        return;
+        if (!dbErr) {
+          successCount++;
+        }
       }
 
-      // 2. Insert record in screenshots table
-      const { error: dbErr } = await supabase.from('screenshots').insert({
-        tenant_id: currentTenantId,
-        user_id: currentSession.user.id,
-        storage_path: storagePath,
-        taken_at: new Date().toISOString(),
-        is_blurred: policyRef.current.blurScreenCapture,
-      });
-
-      if (dbErr) {
-        console.error('Screenshot DB record error:', dbErr);
-        setLastSyncStatus(`DB err: ${dbErr.message}`);
+      if (successCount > 0) {
+        setScreenshotsCount((prev) => prev + successCount);
+        setLastSyncStatus(
+          capturedScreens.length > 1
+            ? `${successCount} screens captured & synced!`
+            : `Screenshot #${screenshotsCount + 1} synced!`
+        );
       } else {
-        setScreenshotsCount((prev) => prev + 1);
-        setLastSyncStatus(`Screenshot #${screenshotsCount + 1} synced!`);
+        setLastSyncStatus('Upload encountered an error');
       }
     } catch (e: any) {
       const errDetail = typeof e === 'string' ? e : (e?.message || JSON.stringify(e));

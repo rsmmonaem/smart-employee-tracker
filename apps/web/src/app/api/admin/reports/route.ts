@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
     const employeeIdFilter = searchParams.get('employeeId')
-    const tenantId = session.tenantId || '56428c1f-4679-4df7-972a-7309ab364fc0'
+    const targetTenant = searchParams.get('tenantId') || session.tenantId
 
     const supabase = createAdminClient()
 
@@ -47,7 +47,12 @@ export async function GET(req: Request) {
       .order('full_name', { ascending: true })
 
     if (!session.isSuperAdmin) {
-      usersQuery = usersQuery.eq('tenant_id', tenantId)
+      if (!session.tenantId) {
+        return NextResponse.json({ success: true, date: targetDate, employees: [], attendance: [], keystrokes: [], hourlyInput: [] })
+      }
+      usersQuery = usersQuery.eq('tenant_id', session.tenantId)
+    } else if (targetTenant) {
+      usersQuery = usersQuery.eq('tenant_id', targetTenant)
     }
 
     const { data: dbUsers, error: usersErr } = await usersQuery
@@ -88,8 +93,8 @@ export async function GET(req: Request) {
       .gte('clocked_in_at', startOfDay)
       .lte('clocked_in_at', endOfDay)
 
-    if (!session.isSuperAdmin) {
-      sessionsQuery = sessionsQuery.eq('tenant_id', tenantId)
+    if (!session.isSuperAdmin && session.tenantId) {
+      sessionsQuery = sessionsQuery.eq('tenant_id', session.tenantId)
     }
 
     const { data: sessions } = await sessionsQuery
@@ -102,8 +107,8 @@ export async function GET(req: Request) {
       .gte('started_at', startOfDay)
       .lte('started_at', endOfDay)
 
-    if (!session.isSuperAdmin) {
-      activityQuery = activityQuery.eq('tenant_id', tenantId)
+    if (!session.isSuperAdmin && session.tenantId) {
+      activityQuery = activityQuery.eq('tenant_id', session.tenantId)
     }
 
     const { data: activityEvents } = await activityQuery

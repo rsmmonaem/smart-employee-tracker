@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/shared",
+    "crates/windows-launcher",
     "apps/api",
     "apps/desktop-agent/src-tauri",
 ]

@@ -33,6 +33,7 @@ interface EmployeeTimelineRow {
   email: string
   role: string
   team: string
+  teams?: string[]
   hasClockedIn: boolean
   hasEvents: boolean
   segments: TimelineSegment[]
@@ -164,15 +165,21 @@ export default function TimelinePage() {
     const matchesSearch =
       emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.email.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesTeam = selectedTeam === 'All Team' || emp.team === selectedTeam
+    const matchesTeam =
+      selectedTeam === 'All Team' ||
+      emp.team === selectedTeam ||
+      (emp.teams && emp.teams.includes(selectedTeam))
     return matchesSearch && matchesTeam
   })
 
+  const todayActual = new Date().toISOString().slice(0, 10)
+  const yesterdayActual = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+
   const dayTitle =
-    selectedDate === '2026-09-09'
-      ? 'Yesterday Activities'
-      : selectedDate === '2026-09-10'
+    selectedDate === todayActual || selectedDate === '2026-09-10'
       ? 'Today Activities'
+      : selectedDate === yesterdayActual || selectedDate === '2026-09-09'
+      ? 'Yesterday Activities'
       : `${selectedDate} Activities`
 
   return (
@@ -333,7 +340,7 @@ export default function TimelinePage() {
 
           {/* Date */}
           <div className="text-gray-500 dark:text-gray-400 mt-0.5">
-            Date : {selectedDate === '2026-09-09' ? '09 Sep, 2026' : '10 Sep, 2026'}
+            Date : {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
           </div>
 
           {/* Duration */}

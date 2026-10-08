@@ -14,7 +14,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('EMPLOYEE')
-  const [team, setTeam] = useState('Engineering')
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([])
   const [availableTeams, setAvailableTeams] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -25,10 +25,10 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
         .then((res) => res.json())
         .then((data) => {
           if (data.success && Array.isArray(data.teams) && data.teams.length > 0) {
-            const names = data.teams.map((t: any) => t.name)
+            const names = data.teams.map((t: any) => t.name?.trim()).filter(Boolean)
             setAvailableTeams(names)
-            if (!names.includes(team)) {
-              setTeam(names[0])
+            if (selectedTeams.length === 0 && names.length > 0) {
+              setSelectedTeams([names[0]])
             }
           }
         })
@@ -38,12 +38,19 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
 
   if (!isOpen) return null
 
+  const toggleTeam = (t: string) => {
+    setSelectedTeams((prev) =>
+      prev.includes(t) ? prev.filter((item) => item !== t) : [...prev, t]
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
     setError('')
 
     try {
+      const primaryTeam = selectedTeams[0] || (availableTeams[0] || 'General')
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,7 +59,8 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
           email,
           password: password.trim() || undefined,
           role,
-          team,
+          team: primaryTeam,
+          teams: selectedTeams.length > 0 ? selectedTeams : [primaryTeam],
         }),
       })
       const json = await res.json()
@@ -61,7 +69,7 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
         setEmail('')
         setPassword('')
         setRole('EMPLOYEE')
-        setTeam('Engineering')
+        setSelectedTeams(availableTeams.length > 0 ? [availableTeams[0]] : [])
         onClose()
         if (onSuccess) onSuccess()
       } else {
@@ -152,20 +160,38 @@ export default function AddUserModal({ isOpen, onClose, onSuccess }: AddUserModa
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              Team
-            </label>
-            <select
-              value={team}
-              onChange={(e) => setTeam(e.target.value)}
-              className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
-            >
-              {(availableTeams.length > 0 ? availableTeams : ['Engineering', 'Design', 'Marketing', 'Management']).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Team(s) Assignment
+              </label>
+              <span className="text-[11px] text-gray-400">Can belong to 1 or more teams</span>
+            </div>
+            {availableTeams.length === 0 ? (
+              <div className="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-[11px] text-gray-400 text-center">
+                Loading available teams...
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg max-h-36 overflow-y-auto">
+                {availableTeams.map((t) => {
+                  const isChecked = selectedTeams.includes(t)
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleTeam(t)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                        isChecked
+                          ? 'bg-blue-600 text-white shadow-2xs'
+                          : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                      }`}
+                    >
+                      <span>{t}</span>
+                      {isChecked && <span className="text-[10px] font-bold">✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-150 dark:border-gray-700">

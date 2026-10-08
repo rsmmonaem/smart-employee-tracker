@@ -29,14 +29,6 @@ interface AdminFilterContextType {
   triggerRefresh: () => void
 }
 
-const DEFAULT_TEAMS = [
-  'All Team',
-  'Engineering',
-  'Design',
-  'Marketing',
-  'Management',
-]
-
 const AdminFilterContext = createContext<AdminFilterContextType | undefined>(undefined)
 
 export function AdminFilterProvider({ children }: { children: ReactNode }) {
@@ -45,11 +37,35 @@ export function AdminFilterProvider({ children }: { children: ReactNode }) {
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [selectedPreset, setSelectedPreset] = useState<PeriodPreset>('Today')
   const [selectedTeam, setSelectedTeam] = useState('All Team')
-  const [teams, setTeams] = useState<string[]>(DEFAULT_TEAMS)
+  const [teams, setTeams] = useState<string[]>(['All Team'])
   const [showAddUserModal, setShowAddUserModal] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const triggerRefresh = () => setRefreshTrigger((prev) => prev + 1)
+
+  // Dynamically load teams from database
+  React.useEffect(() => {
+    let isMounted = true
+    const fetchTeams = async () => {
+      try {
+        const res = await fetch('/api/admin/teams', { cache: 'no-store' })
+        const data = await res.json()
+        if (isMounted && data.success && Array.isArray(data.teams)) {
+          const fetchedNames = data.teams
+            .map((t: any) => t.name?.trim())
+            .filter(Boolean)
+          const uniqueTeams = ['All Team', ...Array.from(new Set(fetchedNames as string[]))]
+          setTeams(uniqueTeams)
+        }
+      } catch (err) {
+        console.error('Error fetching dynamic teams:', err)
+      }
+    }
+    fetchTeams()
+    return () => {
+      isMounted = false
+    }
+  }, [refreshTrigger])
 
   return (
     <AdminFilterContext.Provider

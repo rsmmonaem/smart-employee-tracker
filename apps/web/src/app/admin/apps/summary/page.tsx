@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { AppWindow, RefreshCw, BarChart2 } from 'lucide-react'
+import { AppWindow, Globe, RefreshCw, BarChart2 } from 'lucide-react'
 import { useAdminFilter } from '../../admin-filter-context'
 import AdminHeader from '../../admin-header'
 
@@ -35,6 +35,7 @@ export default function AppsSummaryPage() {
   const [topApps, setTopApps] = useState<
     Array<{
       name: string
+      type: 'APP' | 'DOMAIN'
       hours: string
       percent: number
       category: string
@@ -83,8 +84,9 @@ export default function AppsSummaryPage() {
           unproductiveHours: formatDuration(unprodSec),
         })
 
-        const mappedTopApps = topUsed.slice(0, 15).map((item) => ({
+        const mappedTopApps = topUsed.slice(0, 20).map((item) => ({
           name: item.name,
+          type: item.type,
           hours: formatDuration(item.totalSeconds),
           percent: totalSec > 0 ? Math.round((item.totalSeconds / totalSec) * 100) : 0,
           category: item.classification || 'NEUTRAL',
@@ -194,13 +196,24 @@ export default function AppsSummaryPage() {
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
               {topApps.map((item) => (
-                <div key={item.name} className="p-4 flex items-center justify-between hover:bg-gray-50/50">
+                <div key={item.name} className="p-4 flex items-center justify-between hover:bg-gray-50/50 dark:hover:bg-gray-850/50 transition-colors">
                   <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-xs">
-                      <AppWindow className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                    <div className="w-7 h-7 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-xs shrink-0">
+                      {item.type === 'DOMAIN' ? (
+                        <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      ) : (
+                        <AppWindow className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+                      )}
                     </div>
                     <div>
-                      <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.name}</span>
+                        {item.type === 'DOMAIN' && (
+                          <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200/60 dark:border-blue-900/60">
+                            Web Domain
+                          </span>
+                        )}
+                      </div>
                       <div className="w-48 bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 mt-1.5">
                         <div
                           className={`h-1.5 rounded-full ${

@@ -47,33 +47,33 @@ interface TopAppItem {
 
 const COLOR_SCHEMES = [
   {
-    bgClass: 'bg-[#d8f3ea] text-[#065f46] border-[#a7f3d0]',
-    badgeBg: 'bg-black text-white',
+    bgClass: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+    badgeBg: 'bg-emerald-600 dark:bg-emerald-500 text-white',
     badgeText: '●',
   },
   {
-    bgClass: 'bg-[#fde8ef] text-[#9d174d] border-[#fbcfe8]',
-    badgeBg: 'bg-[#00005b] text-[#ea77ff]',
+    bgClass: 'bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border-pink-200 dark:border-pink-800',
+    badgeBg: 'bg-pink-600 dark:bg-pink-500 text-white',
     badgeText: '★',
   },
   {
-    bgClass: 'bg-[#ede9fe] text-[#5b21b6] border-[#ddd6fe]',
-    badgeBg: 'bg-[#00005b] text-[#9999ff]',
+    bgClass: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+    badgeBg: 'bg-purple-600 dark:bg-purple-500 text-white',
     badgeText: '◆',
   },
   {
-    bgClass: 'bg-[#fef3c7] text-[#92400e] border-[#fde68a]',
-    badgeBg: 'bg-amber-600 text-white',
+    bgClass: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+    badgeBg: 'bg-amber-600 dark:bg-amber-500 text-white',
     badgeText: '▲',
   },
   {
-    bgClass: 'bg-[#e0f2fe] text-[#075985] border-[#bae6fd]',
-    badgeBg: 'bg-[#0284c7] text-white',
+    bgClass: 'bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800',
+    badgeBg: 'bg-sky-600 dark:bg-sky-500 text-white',
     badgeText: '■',
   },
   {
-    bgClass: 'bg-[#fef9c3] text-[#854d0e] border-[#fef08a]',
-    badgeBg: 'bg-[#007acc] text-white',
+    bgClass: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+    badgeBg: 'bg-indigo-600 dark:bg-indigo-500 text-white',
     badgeText: '⟨/⟩',
   },
 ]
@@ -86,60 +86,39 @@ function formatDuration(totalSeconds: number): string {
   return `${minutes}m`
 }
 
-// In-memory module cache for instant (0ms) render on return navigation
-let cachedDashboardState: {
-  stats: {
-    totalMembers: number
-    currentlyWorking: number
-    currentlyOnBreak: number
-    currentlyStopped: number
-    appNotInstalled: number
-  }
-  workHoursList: Array<{
-    id: string
-    name: string
-    hoursWorked: string
-    clockIn: string
-    color: string
-  }>
-  topAppsList: TopAppItem[]
-  screenshots: ScreenshotCard[]
-} | null = null
-
 export default function DashboardPage() {
-  const [loading, setLoading] = useState(!cachedDashboardState)
+  const [loading, setLoading] = useState(true)
   const [activeAppPill, setActiveAppPill] = useState<string>('')
   const [isRealtimeActive, setIsRealtimeActive] = useState(false)
 
-  // Live Stats State initialized from cache if available
-  const [stats, setStats] = useState(
-    cachedDashboardState?.stats || {
-      totalMembers: 0,
-      currentlyWorking: 0,
-      currentlyOnBreak: 0,
-      currentlyStopped: 0,
-      appNotInstalled: 0,
-    }
-  )
+  // Live Stats State
+  const [stats, setStats] = useState({
+    totalMembers: 0,
+    currentlyWorking: 0,
+    currentlyOnBreak: 0,
+    currentlyStopped: 0,
+    appNotInstalled: 0,
+  })
 
-  const [workHoursList, setWorkHoursList] = useState(
-    cachedDashboardState?.workHoursList || []
-  )
+  const [workHoursList, setWorkHoursList] = useState<
+    Array<{
+      id: string
+      name: string
+      hoursWorked: string
+      clockIn: string
+      color: string
+    }>
+  >([])
 
-  const [topAppsList, setTopAppsList] = useState<TopAppItem[]>(
-    cachedDashboardState?.topAppsList || []
-  )
-
-  const [dbScreenshots, setDbScreenshots] = useState<ScreenshotCard[]>(
-    cachedDashboardState?.screenshots || []
-  )
+  const [topAppsList, setTopAppsList] = useState<TopAppItem[]>([])
+  const [dbScreenshots, setDbScreenshots] = useState<ScreenshotCard[]>([])
 
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
   const supabase = useMemo(() => createClient(), [])
 
   const fetchDashboardData = useCallback(async (isBackground = false) => {
     try {
-      if (!isBackground && !cachedDashboardState) {
+      if (!isBackground) {
         setLoading(true)
       }
       const todayStr = new Date().toISOString().slice(0, 10)
@@ -230,14 +209,6 @@ export default function DashboardPage() {
         newScreenshots = screenshotsJson.screenshots as ScreenshotCard[]
         setDbScreenshots(newScreenshots)
       }
-
-      // Save to cache for instant return visits
-      cachedDashboardState = {
-        stats: newStats,
-        workHoursList: newWorkHours,
-        topAppsList: newTopApps,
-        screenshots: newScreenshots,
-      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
     } finally {
@@ -247,7 +218,7 @@ export default function DashboardPage() {
 
   // 1. Initial Load & Background Revalidation
   useEffect(() => {
-    fetchDashboardData(!!cachedDashboardState)
+    fetchDashboardData(false)
   }, [fetchDashboardData])
 
   // 2. Supabase Realtime Subscriptions (Screenshots, Attendance, Activity)

@@ -12,7 +12,8 @@ import {
   X,
   Clock,
   AlertCircle,
-  Trash2
+  Trash2,
+  Users
 } from 'lucide-react'
 import { useAdminFilter } from '../../admin-filter-context'
 import AdminHeader from '../../admin-header'
@@ -28,6 +29,7 @@ interface AppItem {
   classification?: Classification
   usageCount: number
   totalSeconds: number
+  usedBy?: string[]
 }
 
 interface TopAppItem {
@@ -36,6 +38,12 @@ interface TopAppItem {
   totalSeconds: number
   count: number
   classification: string
+}
+
+interface EmployeeOption {
+  id: string
+  name: string
+  email: string
 }
 
 function formatDuration(totalSeconds: number): string {
@@ -57,18 +65,41 @@ export default function ReviewAppsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
-  const { selectedTeam, refreshTrigger } = useAdminFilter()
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('ALL')
+  const [employees, setEmployees] = useState<EmployeeOption[]>([])
+  const { selectedTeam, refreshTrigger, triggerRefresh } = useAdminFilter()
   const [copiedName, setCopiedName] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   // Custom Idle Exclude input
   const [newExcludeApp, setNewExcludeApp] = useState('')
 
-  // Fetch apps review data
+  // Fetch employees list
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.employees)) {
+          setEmployees(
+            data.employees.map((e: any) => ({
+              id: e.id,
+              name: e.full_name || e.email?.split('@')[0] || 'Employee',
+              email: e.email,
+            }))
+          )
+        }
+      })
+      .catch((err) => console.error('Error fetching employees:', err))
+  }, [refreshTrigger])
+
+  // Fetch apps review data with employee filter
   const fetchReviewData = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetch('/api/admin/apps/review', { cache: 'no-store' })
+      const url = selectedEmployee && selectedEmployee !== 'ALL'
+        ? `/api/admin/apps/review?userId=${encodeURIComponent(selectedEmployee)}`
+        : '/api/admin/apps/review'
+      const res = await fetch(url, { cache: 'no-store' })
       const json = await res.json()
       if (json.success) {
         setUnreviewedApps(json.unreviewed || [])
@@ -81,7 +112,7 @@ export default function ReviewAppsPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [selectedEmployee])
 
   useEffect(() => {
     fetchReviewData()
@@ -123,6 +154,9 @@ export default function ReviewAppsPage() {
       if (!json.success) {
         alert(json.error || 'Failed to classify app')
         await fetchReviewData()
+      } else {
+        // Automatically sync timeline and reports
+        triggerRefresh()
       }
     } catch (err) {
       console.error('Error classifying app:', err)
@@ -154,6 +188,8 @@ export default function ReviewAppsPage() {
       if (!json.success) {
         alert(json.error || 'Failed to remove rule')
         await fetchReviewData()
+      } else {
+        triggerRefresh()
       }
     } catch (err) {
       console.error('Error removing review:', err)
@@ -254,21 +290,45 @@ export default function ReviewAppsPage() {
 
       {/* Main Content Area */}
       <div className="p-8 max-w-7xl mx-auto space-y-5">
-        {/* Title Bar & Download Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-gray-700 dark:text-gray-300">
-              Review apps &amp; websites for{' '}
-              <span className="font-bold text-gray-900 dark:text-white underline cursor-pointer decoration-dotted">
-                Organization
+        {/* Title Bar & Filters */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200/80 dark:border-gray-800 shadow-2xs">
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <span className="text-[11px] font-medium text-gray-500 dark:text-gray-400 block uppercase tracking-wider">
+                Reviewing Usage For
               </span>
-            </h2>
+              <div className="flex items-center gap-2 mt-0.5">
+                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-bold text-gray-900 dark:text-white">
+                  {selectedEmployee === 'ALL'
+                    ? 'Entire Organization'
+                    : employees.find((e) => e.id === selectedEmployee)?.name || 'Selected Employee'}
+                </span>
+              </div>
+            </div>
+
+            {/* Employee Selector Dropdown */}
+            <div className="relative sm:ml-4">
+              <select
+                value={selectedEmployee}
+                onChange={(e) => setSelectedEmployee(e.target.value)}
+                className="appearance-none bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-3 pr-8 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 shadow-2xs"
+              >
+                <option value="ALL">🏢 All Employees (Organization-wide)</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    👤 {emp.name} ({emp.email})
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            </div>
           </div>
 
           {(activeTab === 'unreviewed' || activeTab === 'reviewed') && (
             <button
               onClick={handleDownloadCSV}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/60 rounded-lg text-xs font-semibold text-[#1677ff] dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 shadow-2xs transition-colors self-start sm:self-auto"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/60 rounded-lg text-xs font-semibold text-[#1677ff] dark:text-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/30 shadow-2xs transition-colors self-start sm:self-auto shrink-0"
             >
               <Download className="w-3.5 h-3.5" />
               <span>
@@ -389,24 +449,39 @@ export default function ReviewAppsPage() {
                           <AppWindow className="w-3.5 h-3.5" />
                         )}
                       </div>
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="text-xs font-medium text-gray-900 dark:text-white truncate">
-                          {app.name}
-                        </span>
-                        <button
-                          onClick={() => handleCopy(app.name)}
-                          title="Copy app name"
-                          className="opacity-0 group-hover:opacity-100 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-opacity inline-flex items-center gap-0.5"
-                        >
-                          {copiedName === app.name ? (
-                            <>
-                              <Check className="w-3 h-3 text-emerald-600" />
-                              <span className="text-emerald-600">Copied</span>
-                            </>
-                          ) : (
-                            <span>Copy</span>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                            {app.name}
+                          </span>
+                          <button
+                            onClick={() => handleCopy(app.name)}
+                            title="Copy app name"
+                            className="opacity-0 group-hover:opacity-100 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-opacity inline-flex items-center gap-0.5"
+                          >
+                            {copiedName === app.name ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span className="text-emerald-600">Copied</span>
+                              </>
+                            ) : (
+                              <span>Copy</span>
+                            )}
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                          {app.totalSeconds > 0 && (
+                            <span className="font-mono text-gray-500 dark:text-gray-400 font-medium">
+                              ⏱ {formatDuration(app.totalSeconds)}
+                            </span>
                           )}
-                        </button>
+                          {app.usedBy && app.usedBy.length > 0 && (
+                            <span className="text-blue-600 dark:text-blue-400 font-medium truncate max-w-xs">
+                              Used by: {app.usedBy.slice(0, 3).join(', ')}
+                              {app.usedBy.length > 3 && ` +${app.usedBy.length - 3} more`}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -490,24 +565,39 @@ export default function ReviewAppsPage() {
                             <AppWindow className="w-3.5 h-3.5" />
                           )}
                         </div>
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-xs font-medium text-gray-900 dark:text-white truncate">
-                            {app.name}
-                          </span>
-                          <button
-                            onClick={() => handleCopy(app.name)}
-                            title="Copy app name"
-                            className="opacity-0 group-hover:opacity-100 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-opacity inline-flex items-center gap-0.5"
-                          >
-                            {copiedName === app.name ? (
-                              <>
-                                <Check className="w-3 h-3 text-emerald-600" />
-                                <span className="text-emerald-600">Copied</span>
-                              </>
-                            ) : (
-                              <span>Copy</span>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-xs font-semibold text-gray-900 dark:text-white truncate">
+                              {app.name}
+                            </span>
+                            <button
+                              onClick={() => handleCopy(app.name)}
+                              title="Copy app name"
+                              className="opacity-0 group-hover:opacity-100 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-opacity inline-flex items-center gap-0.5"
+                            >
+                              {copiedName === app.name ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span className="text-emerald-600">Copied</span>
+                                </>
+                              ) : (
+                                <span>Copy</span>
+                              )}
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                            {app.totalSeconds > 0 && (
+                              <span className="font-mono text-gray-500 dark:text-gray-400 font-medium">
+                                ⏱ {formatDuration(app.totalSeconds)}
+                              </span>
                             )}
-                          </button>
+                            {app.usedBy && app.usedBy.length > 0 && (
+                              <span className="text-blue-600 dark:text-blue-400 font-medium truncate max-w-xs">
+                                Used by: {app.usedBy.slice(0, 3).join(', ')}
+                                {app.usedBy.length > 3 && ` +${app.usedBy.length - 3} more`}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
 

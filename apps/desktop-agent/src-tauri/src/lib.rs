@@ -9,11 +9,56 @@ pub struct ActiveWindowData {
     app_name: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct CapturedScreen {
+    pub screen_index: usize,
+    pub screen_name: String,
+    pub is_primary: bool,
+    pub base64_image: String,
+}
+
+#[tauri::command]
+async fn capture_all_screens() -> Result<Vec<CapturedScreen>, String> {
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    let mut screens = Vec::new();
+
+    for (idx, monitor) in monitors.into_iter().enumerate() {
+        let is_primary = monitor.is_primary().unwrap_or(idx == 0);
+        let name = monitor.name().unwrap_or_default();
+        let display_name = if name.trim().is_empty() {
+            format!("Screen {}", idx + 1)
+        } else {
+            name
+        };
+
+        if let Ok(image) = monitor.capture_image() {
+            let rgb_image = image::DynamicImage::ImageRgba8(image).to_rgb8();
+            let mut buffer = Vec::new();
+            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 75);
+            if rgb_image.write_with_encoder(encoder).is_ok() {
+                let base64_image = BASE64.encode(&buffer);
+                screens.push(CapturedScreen {
+                    screen_index: idx + 1,
+                    screen_name: display_name,
+                    is_primary,
+                    base64_image,
+                });
+            }
+        }
+    }
+
+    if screens.is_empty() {
+        return Err("No monitor could be captured".to_string());
+    }
+
+    Ok(screens)
+}
+
 #[tauri::command]
 async fn capture_screen() -> Result<String, String> {
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
     
-    // For now, grab the primary monitor (or just the first one)
+    // Grab the primary monitor (or first one)
     let monitor = monitors.into_iter().next().ok_or("No monitors found")?;
     
     let image = monitor.capture_image().map_err(|e| e.to_string())?;
@@ -25,7 +70,6 @@ async fn capture_screen() -> Result<String, String> {
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 75);
     rgb_image.write_with_encoder(encoder).map_err(|e| e.to_string())?;
     
-    // Return Base64 encoded string so the frontend can preview it and send it to Supabase
     let base64_image = BASE64.encode(&buffer);
     Ok(base64_image)
 }
@@ -128,7 +172,12 @@ pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_os::init())
     .plugin(tauri_plugin_shell::init())
-    .invoke_handler(tauri::generate_handler![capture_screen, get_focused_window, native_request])
+    .invoke_handler(tauri::generate_handler![
+        capture_all_screens,
+        capture_screen,
+        get_focused_window,
+        native_request
+    ])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

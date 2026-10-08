@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import crypto from 'crypto'
 import { createClient } from './server'
 import { createAdminClient } from './admin'
 
@@ -28,16 +29,18 @@ export async function getSessionContext(): Promise<UserContext | null> {
     const cookieStore = cookies()
     const allCookies = cookieStore.getAll()
 
-    // Build a unique key from Supabase authentication cookies
-    const authKeyParts = allCookies
+    // Build a cryptographically unique SHA-256 key from Supabase authentication cookies
+    const authCookiesStr = allCookies
       .filter((c) => c.name.startsWith('sb-'))
-      .map((c) => `${c.name}=${c.value.slice(0, 32)}`)
-      .sort()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => `${c.name}=${c.value}`)
       .join(';')
 
-    if (!authKeyParts) {
+    if (!authCookiesStr) {
       return null
     }
+
+    const authKeyParts = crypto.createHash('sha256').update(authCookiesStr).digest('hex')
 
     const now = Date.now()
     const cached = sessionCache.get(authKeyParts)

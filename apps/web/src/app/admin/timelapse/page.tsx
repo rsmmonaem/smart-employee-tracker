@@ -25,12 +25,13 @@ export default function TimelapsePage() {
   const fetchTimelapses = async () => {
     try {
       setLoading(true)
-      const supabase = createClient()
-      const { data: jobs } = await supabase
-        .from('timelapse_jobs')
-        .select('*, users(full_name, email)')
-        .order('created_at', { ascending: false })
-      if (jobs) setTimelapses(jobs)
+      const res = await fetch('/api/admin/timelapse')
+      const json = await res.json()
+      if (json.success && json.jobs) {
+        setTimelapses(json.jobs)
+      } else {
+        setTimelapses([])
+      }
     } catch (e) {
       console.error(e)
     } finally {

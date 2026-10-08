@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,11 @@ const DEFAULT_TRACK_SETTINGS = {
 
 export async function GET() {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const supabase = createAdminClient()
 
     // 1. Fetch saved settings
@@ -100,35 +106,33 @@ export async function GET() {
       updated_at: row?.updated_at || null,
     }
 
-    // 2. Fetch users for members table
-    const { data: users, error: usersErr } = await supabase
+    // 2. Fetch users for members table with strict Tenant Isolation
+    let usersQuery = supabase
       .from('users')
       .select('id, full_name, email, role, is_active, tracking_mode, created_at')
       .order('created_at', { ascending: false })
+
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({
+          success: true,
+          settings: mergedSettings,
+          members: [],
+        })
+      }
+      usersQuery = usersQuery.eq('tenant_id', session.tenantId)
+    }
+
+    const { data: users, error: usersErr } = await usersQuery
 
     if (usersErr) {
       console.warn('Could not read users for settings:', usersErr.message)
     }
 
-    // Include Mohammad Munayam Sowdagor fallback if user table has no custom user
-    const memberList = (users && users.length > 0)
-      ? users
-      : [
-          {
-            id: 'Rezk1W9SpBD0avSuwkbkR',
-            full_name: 'MOHAMMADMUNAYAM SOWDAGOR',
-            email: 'vrkm55@gmail.com',
-            role: 'TENANT_ADMIN',
-            is_active: true,
-            tracking_mode: 'VISIBLE',
-            created_at: new Date().toISOString(),
-          }
-        ]
-
     return NextResponse.json({
       success: true,
       settings: mergedSettings,
-      members: memberList,
+      members: users || [],
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -142,6 +146,11 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await req.json()
     const supabase = createAdminClient()
 

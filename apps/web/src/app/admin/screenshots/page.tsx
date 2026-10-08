@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import {
   Image as ImageIcon,
@@ -10,6 +10,8 @@ import {
   X,
   Calendar,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Trash2,
   Crown,
   CheckSquare,
@@ -47,16 +49,39 @@ export default function ScreenshotsPage() {
   const [tenantPlan, setTenantPlan] = useState<'BASIC' | 'PRO' | 'ENTERPRISE'>('BASIC')
   const [showProModal, setShowProModal] = useState(false)
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [pageSize, setPageSize] = useState<number>(24)
+  const [totalCount, setTotalCount] = useState<number>(0)
+  const [totalPages, setTotalPages] = useState<number>(1)
+
   const supabase = createClient()
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
 
-  const fetchScreenshots = async () => {
+  const fetchScreenshots = async (page = currentPage, size = pageSize) => {
     try {
-      // 1. Fetch via dedicated server API (uses admin client with bypass for reliable production queries)
-      const res = await fetch('/api/admin/screenshots', { cache: 'no-store' })
+      setLoading(true)
+      // Dedicated server API with tenant isolation, date filtering, and server pagination
+      const params = new URLSearchParams()
+      if (selectedDate) params.set('date', selectedDate)
+      if (selectedUser && selectedUser !== 'all') params.set('userId', selectedUser)
+      params.set('page', page.toString())
+      params.set('limit', size.toString())
+
+      const res = await fetch(`/api/admin/screenshots?${params.toString()}`, { cache: 'no-store' })
       const json = await res.json()
       if (json.success && json.screenshots) {
         setScreenshots(json.screenshots as ScreenshotItem[])
+        if (typeof json.totalCount === 'number') {
+          setTotalCount(json.totalCount)
+        } else {
+          setTotalCount(json.screenshots.length)
+        }
+        if (typeof json.totalPages === 'number') {
+          setTotalPages(json.totalPages)
+        } else {
+          setTotalPages(Math.max(1, Math.ceil((json.screenshots.length || 0) / size)))
+        }
       }
     } catch (err) {
       console.error('Failed to fetch screenshots:', err)
@@ -78,7 +103,11 @@ export default function ScreenshotsPage() {
   }
 
   useEffect(() => {
-    fetchScreenshots()
+    setCurrentPage(1)
+    fetchScreenshots(1, pageSize)
+  }, [selectedDate, selectedUser])
+
+  useEffect(() => {
     fetchTenantPlan()
 
     // Realtime Postgres Changes Subscription
@@ -88,7 +117,7 @@ export default function ScreenshotsPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'screenshots' },
         () => {
-          fetchScreenshots()
+          fetchScreenshots(currentPage, pageSize)
         }
       )
       .subscribe()
@@ -96,7 +125,16 @@ export default function ScreenshotsPage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, refreshTrigger])
+  }, [supabase, refreshTrigger, currentPage, pageSize])
+
+  // Periodic Auto-refresh when enabled (every 8 seconds)
+  useEffect(() => {
+    if (!autoRefresh) return
+    const interval = setInterval(() => {
+      fetchScreenshots(currentPage, pageSize)
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [autoRefresh, currentPage, pageSize, selectedDate, selectedUser])
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
@@ -242,9 +280,10 @@ export default function ScreenshotsPage() {
     }
     if (selectedDate && s.taken_at) {
       const dateOnly = s.taken_at.slice(0, 10)
-      const localDateOnly = new Date(s.taken_at).toISOString().slice(0, 10)
+      const d = new Date(s.taken_at)
+      const localDateOnly = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-')
       if (dateOnly !== selectedDate && localDateOnly !== selectedDate) {
-        // If selectedDate is the legacy mock date 2026-09-10 and there are newer screenshots, don't filter them out
+        // If selectedDate is legacy fallback date and there are live items, allow them
         if (selectedDate !== '2026-09-10') {
           return false
         }
@@ -405,10 +444,11 @@ export default function ScreenshotsPage() {
 
       <div className="p-6 lg:p-8 space-y-6">
 
-      {/* Grid of Screenshots */}
+      {/* Grid of Screenshots & Pagination */}
       {filteredScreenshots.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filteredScreenshots.map((item) => {
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filteredScreenshots.map((item) => {
             const imageUrl = getPublicUrl(item.storage_path)
             const userName = item.users?.full_name || item.users?.email?.split('@')[0] || 'Employee'
             const userEmail = item.users?.email || item.user_id
@@ -457,31 +497,38 @@ export default function ScreenshotsPage() {
                       <span>View Screenshot</span>
                     </span>
                   </div>
+
+                  {/* Multi-screen indicator badge if applicable */}
+                  {item.storage_path.includes('_screen_') && (
+                    <div className="absolute bottom-2 right-2 bg-black/75 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-md border border-white/20 shadow-xs">
+                      {`Screen ${item.storage_path.match(/_screen_(\d+)/)?.[1] || '1'}`}
+                    </div>
+                  )}
                 </div>
 
-                {/* Card Metadata */}
+                {/* Card Metadata with Large & Prominent Highlighted User Info */}
                 <div className="p-4 flex flex-col justify-between flex-1 bg-white dark:bg-gray-850">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5 truncate">
-                      <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs shrink-0 ring-2 ring-blue-500/10">
+                  <div className="bg-blue-50/60 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/40">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs ring-2 ring-blue-400/30">
                         {userName.charAt(0).toUpperCase()}
                       </div>
-                      <div className="truncate">
-                        <p className="text-xs font-semibold text-gray-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-gray-950 dark:text-white truncate tracking-tight">
                           {userName}
                         </p>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
+                        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 truncate mt-0.5">
                           {userEmail}
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-3.5 pt-2.5 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
+                  <div className="mt-3.5 pt-2.5 border-t border-gray-150 dark:border-gray-800 flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400">
                     <div className="flex items-center space-x-2.5">
                       <div className="flex items-center space-x-1">
                         <Clock className="w-3 h-3 text-gray-400" />
-                        <span>{formatTimestamp(item.taken_at)}</span>
+                        <span className="font-medium">{formatTimestamp(item.taken_at)}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Calendar className="w-3 h-3 text-gray-400" />
@@ -501,6 +548,109 @@ export default function ScreenshotsPage() {
             )
           })}
         </div>
+
+        {/* Pagination Bar */}
+        <div className="mt-8 pt-5 border-t border-gray-200 dark:border-gray-800 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <span>Showing</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              {totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+            </span>
+            <span>to</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              {Math.min(currentPage * pageSize, totalCount || filteredScreenshots.length)}
+            </span>
+            <span>of</span>
+            <span className="font-semibold text-gray-800 dark:text-gray-200">
+              {totalCount || filteredScreenshots.length}
+            </span>
+            <span>screenshots</span>
+
+            <span className="mx-2 text-gray-300 dark:text-gray-700">|</span>
+
+            <span>Per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                const newSize = Number(e.target.value)
+                setPageSize(newSize)
+                setCurrentPage(1)
+                fetchScreenshots(1, newSize)
+              }}
+              className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md px-2 py-1 text-xs text-gray-700 dark:text-gray-300 focus:outline-none focus:border-blue-500 shadow-2xs"
+            >
+              <option value={12}>12</option>
+              <option value={24}>24</option>
+              <option value={48}>48</option>
+              <option value={96}>96</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={currentPage <= 1 || loading}
+              onClick={() => {
+                const prev = Math.max(1, currentPage - 1)
+                setCurrentPage(prev)
+                fetchScreenshots(prev, pageSize)
+              }}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-750 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-2xs"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Previous</span>
+            </button>
+
+            {/* Page number buttons */}
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => {
+                  if (totalPages <= 7) return true
+                  if (p === 1 || p === totalPages) return true
+                  return Math.abs(p - currentPage) <= 1
+                })
+                .map((p, idx, arr) => {
+                  const showEllipsis = idx > 0 && p - arr[idx - 1] > 1
+                  return (
+                    <React.Fragment key={p}>
+                      {showEllipsis && (
+                        <span className="px-1 text-xs text-gray-400">...</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentPage(p)
+                          fetchScreenshots(p, pageSize)
+                        }}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${
+                          currentPage === p
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 border border-gray-200 dark:border-gray-700'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  )
+                })}
+            </div>
+
+            <button
+              type="button"
+              disabled={currentPage >= totalPages || loading}
+              onClick={() => {
+                const next = Math.min(totalPages, currentPage + 1)
+                setCurrentPage(next)
+                fetchScreenshots(next, pageSize)
+              }}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-750 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-2xs"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+        </>
       ) : (
         /* Empty State */
         <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-12 text-center shadow-2xs">
@@ -539,16 +689,26 @@ export default function ScreenshotsPage() {
           >
             {/* Modal Header */}
             <div className="px-6 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm ring-2 ring-blue-400/40">
                   {(selectedImage.users?.full_name || selectedImage.users?.email || 'E').charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-white">
-                    {selectedImage.users?.full_name || selectedImage.users?.email || 'Employee'}
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    Captured at {formatDate(selectedImage.taken_at)} {formatTimestamp(selectedImage.taken_at)}
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white tracking-tight">
+                      {selectedImage.users?.full_name || selectedImage.users?.email?.split('@')[0] || 'Employee'}
+                    </h3>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800">
+                      {selectedImage.users?.email || selectedImage.user_id}
+                    </span>
+                    {selectedImage.storage_path.includes('_screen_') && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800">
+                        {`Screen ${selectedImage.storage_path.match(/_screen_(\d+)/)?.[1] || '1'}`}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Captured at {formatDate(selectedImage.taken_at)} · {formatTimestamp(selectedImage.taken_at)}
                   </p>
                 </div>
               </div>

@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">TracMatrix Tracker</string>
+    <string name="login_title">Employee Sign In</string>
+    <string name="login_subtitle">Track your time, apps, and productivity</string>
+    <string name="email_hint">Employee Email</string>
+    <string name="password_hint">Password</string>
+    <string name="server_url_hint">Server URL (e.g. https://app.tracmatrix.com)</string>
+    <string name="sign_in_btn">Sign In</string>
+    <string name="clock_in">Start Work (Clock In)</string>
+    <string name="clock_out">Stop Work (Clock Out)</string>
+    <string name="today_summary">Today\'s Working Summary</string>
+    <string name="grant_permissions">Grant System Permissions</string>
+    <string name="perm_screen">Screen Capture (MediaProjection)</string>
+    <string name="perm_usage">App Usage Access</string>
+    <string name="perm_battery">Battery Optimization (Keep Alive)</string>
+</resources>

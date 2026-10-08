@@ -1,24 +1,62 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import AdminHeader from '../../admin-header'
-import { CalendarPlus, Send, CheckCircle2 } from 'lucide-react'
+import { CalendarPlus, Send, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function ApplyLeavePage() {
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-  const [leaveType, setLeaveType] = useState('CASUAL')
+  const [leaveType, setLeaveType] = useState('Casual Leave')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [days, setDays] = useState(1)
   const [reason, setReason] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Calculate day difference
+  useEffect(() => {
+    if (startDate && endDate) {
+      const s = new Date(startDate).getTime()
+      const e = new Date(endDate).getTime()
+      if (e >= s) {
+        const diff = Math.round((e - s) / (1000 * 3600 * 24)) + 1
+        setDays(diff)
+      } else {
+        setDays(1)
+      }
+    }
+  }, [startDate, endDate])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLoading(true)
-    setTimeout(() => {
+    setErrorMsg('')
+    try {
+      setLoading(true)
+      const res = await fetch('/api/admin/leave/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leaveType,
+          startDate,
+          endDate,
+          days,
+          reason,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setSubmitted(true)
+      } else {
+        setErrorMsg(data.error || 'Failed to submit leave request')
+      }
+    } catch (err) {
+      console.error(err)
+      setErrorMsg('Error submitting leave request')
+    } finally {
       setLoading(false)
-      setSubmitted(true)
-    }, 600)
+    }
   }
 
   return (
@@ -37,7 +75,7 @@ export default function ApplyLeavePage() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 dark:text-white">Leave Application Submitted</h3>
               <p className="text-sm text-gray-500 max-w-md mx-auto">
-                Your request has been logged and sent to your organization administrator for approval.
+                Your request has been logged in the database and sent to your organization administrator for review.
               </p>
               <button
                 onClick={() => {
@@ -61,71 +99,90 @@ export default function ApplyLeavePage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
-                  Leave Classification
-                </label>
-                <select
-                  value={leaveType}
-                  onChange={(e) => setLeaveType(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="CASUAL">Casual Leave (CL)</option>
-                  <option value="SICK">Medical / Sick Leave (SL)</option>
-                  <option value="EARNED">Earned / Annual Leave (EL)</option>
-                  <option value="UNPAID">Leave Without Pay (LWP)</option>
-                </select>
-              </div>
+              {errorMsg && (
+                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
-                    Start Date
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Leave Type
                   </label>
-                  <input
-                    type="date"
+                  <select
+                    value={leaveType}
+                    onChange={(e) => setLeaveType(e.target.value)}
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
+                  >
+                    <option value="Casual Leave">Casual Leave (CL)</option>
+                    <option value="Medical / Sick Leave">Medical / Sick Leave (SL)</option>
+                    <option value="Earned / Annual Leave">Earned / Annual Leave (EL)</option>
+                    <option value="Unpaid Leave">Unpaid Leave</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Total Duration
+                  </label>
+                  <div className="px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs font-mono font-bold text-blue-600 dark:text-blue-400">
+                    {days} {days === 1 ? 'Day' : 'Days'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    Reason / Explanation
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Provide details regarding this leave request..."
+                    className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs font-medium text-gray-800 dark:text-gray-200 focus:outline-none focus:border-blue-500 shadow-2xs"
                     required
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
-                    End Date
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">
-                  Reason / Notes
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Provide context regarding this leave application..."
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <div className="flex justify-end pt-2">
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1677ff] hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-xs transition-colors"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>{loading ? 'Submitting...' : 'Apply for Leave'}</span>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{loading ? 'Submitting...' : 'Submit Leave Request'}</span>
                 </button>
               </div>
             </form>

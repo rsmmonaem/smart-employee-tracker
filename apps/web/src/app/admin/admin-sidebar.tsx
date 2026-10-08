@@ -24,10 +24,15 @@ import {
   LogOut,
   Shield,
   FolderKanban,
+  Sun,
+  Moon,
+  Download,
 } from 'lucide-react'
+import { useTheme } from '@/components/theme-provider'
 
 export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
   const pathname = usePathname()
+  const { theme, toggleTheme } = useTheme()
 
   const navGroups = [
     {
@@ -69,6 +74,7 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
     {
       title: 'Configuration',
       items: [
+        { label: 'Download Apps', href: '/admin/settings?tab=download-apps', icon: Download },
         { label: 'Settings', href: '/admin/settings', icon: Settings },
         { label: 'Billing & Plans', href: '/admin/billing', icon: CreditCard },
       ],
@@ -122,7 +128,25 @@ export default function AdminSidebar({ userEmail }: { userEmail?: string }) {
       </nav>
 
       {/* Footer / Sign Out */}
-      <div className="p-3 border-t border-gray-150 dark:border-gray-800 space-y-1">
+      <div className="p-3 border-t border-gray-150 dark:border-gray-850 space-y-1">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400 fill-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-500 fill-indigo-500" />
+            )}
+            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+          </div>
+          <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            {theme}
+          </span>
+        </button>
+
         <Link
           href="/superadmin"
           className="flex items-center px-3 py-2 text-xs font-semibold text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-950/30 transition-colors"

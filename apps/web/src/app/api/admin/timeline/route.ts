@@ -90,6 +90,10 @@ export async function GET(req: Request) {
       })
     }
 
+    // Auth metadata for teams
+    const { data: authData } = await supabase.auth.admin.listUsers()
+    const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
+
     // 2. Fetch real activity events strictly for those userIds
     const { data: events } = await supabase
       .from('activity_events')
@@ -109,6 +113,17 @@ export async function GET(req: Request) {
 
     // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {
+      const meta = authMap.get(user.id) || {}
+      let userTeams: string[] = []
+      if (Array.isArray(meta.teams)) {
+        userTeams = meta.teams.map((t: any) => String(t).trim()).filter(Boolean)
+      } else if (typeof meta.teams === 'string' && meta.teams.trim()) {
+        userTeams = meta.teams.split(',').map((t: string) => t.trim()).filter(Boolean)
+      }
+      if (userTeams.length === 0 && meta.team) {
+        userTeams = [String(meta.team).trim()]
+      }
+      const primaryTeam = userTeams[0] || (meta.team || 'General')
       const userEvents = (events || []).filter((e) => e.user_id === user.id)
       const userSession = (sessions || []).find((s) => s.user_id === user.id)
 
@@ -118,8 +133,9 @@ export async function GET(req: Request) {
         const startD = new Date(ev.started_at)
         const endD = new Date(ev.ended_at)
 
-        const startH = startD.getUTCHours()
-        const startM = startD.getUTCMinutes()
+        // Use local hours to accurately match the employee's work day (10:00 - 19:30)
+        const startH = startD.getHours()
+        const startM = startD.getMinutes()
         const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
 
         const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
@@ -168,7 +184,8 @@ export async function GET(req: Request) {
         name,
         email: user.email,
         role: user.role === 'TENANT_ADMIN' ? 'Tenant Admin' : 'Full Stack Engineer',
-        team: 'Engineering',
+        team: primaryTeam,
+        teams: userTeams.length > 0 ? userTeams : [primaryTeam],
         hasClockedIn: !!userSession,
         clockedInAt: userSession?.clocked_in_at || null,
         clockedOutAt: userSession?.clocked_out_at || null,

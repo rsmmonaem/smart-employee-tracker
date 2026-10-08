@@ -40,6 +40,18 @@ export async function GET() {
 
     const employees = (dbUsers || []).map((u) => {
       const meta = authMap.get(u.id) || {}
+      let userTeams: string[] = []
+      if (Array.isArray(meta.teams)) {
+        userTeams = meta.teams.map((t: any) => String(t).trim()).filter(Boolean)
+      } else if (typeof meta.teams === 'string' && meta.teams.trim()) {
+        userTeams = meta.teams.split(',').map((t: string) => t.trim()).filter(Boolean)
+      }
+      if (userTeams.length === 0 && meta.team) {
+        userTeams = [String(meta.team).trim()]
+      }
+
+      const primaryTeam = userTeams[0] || (meta.team || 'General')
+
       return {
         id: u.id,
         full_name: u.full_name,
@@ -47,7 +59,8 @@ export async function GET() {
         role: u.role,
         is_active: u.is_active,
         created_at: u.created_at,
-        team: meta.team || 'Engineering',
+        team: primaryTeam,
+        teams: userTeams.length > 0 ? userTeams : [primaryTeam],
       }
     })
 
@@ -72,7 +85,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { email, fullName, role, team, password } = body
+    const { email, fullName, role, team, teams, password } = body
 
     if (!email || !fullName) {
       return NextResponse.json(
@@ -89,6 +102,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'No tenant workspace configured' }, { status: 400 })
     }
 
+    const assignedTeams: string[] = Array.isArray(teams) && teams.length > 0
+      ? teams.map((t: any) => String(t).trim()).filter(Boolean)
+      : team
+      ? [String(team).trim()]
+      : []
+
+    const primaryTeam = assignedTeams[0] || (team || 'General')
+
     const supabase = createAdminClient()
 
     // 1. Create in auth.users
@@ -98,7 +119,8 @@ export async function POST(req: Request) {
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
-        team: team || 'Engineering',
+        team: primaryTeam,
+        teams: assignedTeams.length > 0 ? assignedTeams : [primaryTeam],
         tenant_id: targetTenantId,
         role: role || 'EMPLOYEE',
       },
@@ -138,7 +160,8 @@ export async function POST(req: Request) {
         email,
         full_name: fullName,
         role: role || 'EMPLOYEE',
-        team: team || 'Engineering',
+        team: primaryTeam,
+        teams: assignedTeams.length > 0 ? assignedTeams : [primaryTeam],
         is_active: true,
       },
     })
@@ -158,7 +181,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json()
-    const { id, fullName, role, isActive, team, password } = body
+    const { id, fullName, role, isActive, team, teams, password } = body
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'User ID is required' }, { status: 400 })
@@ -200,8 +223,16 @@ export async function PUT(req: Request) {
     const authUpdates: Record<string, unknown> = {}
     const metaUpdates: Record<string, unknown> = {}
     if (fullName !== undefined) metaUpdates.full_name = fullName
-    if (team !== undefined) metaUpdates.team = team
     if (role !== undefined) metaUpdates.role = role
+
+    if (teams !== undefined && Array.isArray(teams)) {
+      const cleanTeams = teams.map((t: any) => String(t).trim()).filter(Boolean)
+      metaUpdates.teams = cleanTeams
+      metaUpdates.team = cleanTeams[0] || (team || 'General')
+    } else if (team !== undefined) {
+      metaUpdates.team = team
+      metaUpdates.teams = [team]
+    }
 
     if (Object.keys(metaUpdates).length > 0) {
       authUpdates.user_metadata = metaUpdates

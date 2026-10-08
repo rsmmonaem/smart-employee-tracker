@@ -193,6 +193,7 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
   // Filters for member overrides table
   const [roleFilter, setRoleFilter] = useState('All Roles')
   const [teamFilter, setTeamFilter] = useState('All Teams')
+  const [availableTeams, setAvailableTeams] = useState<string[]>([])
   const [osFilter, setOsFilter] = useState('All OS')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -201,20 +202,30 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
   const [memberModalOpen, setMemberModalOpen] = useState(false)
   const [memberOverrideState, setMemberOverrideState] = useState<MemberOverride>({})
 
-  // Fetch settings and members on mount
+  // Fetch settings, teams, and members on mount
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch('/api/admin/settings')
-        if (res.ok) {
-          const data = await res.json()
+        const [settingsRes, teamsRes] = await Promise.all([
+          fetch('/api/admin/settings'),
+          fetch('/api/admin/teams'),
+        ])
+        if (settingsRes.ok) {
+          const data = await settingsRes.json()
           if (data.settings) setSettings(data.settings)
           if (data.members && data.members.length > 0) {
             setMembers(data.members)
           }
         }
+        if (teamsRes.ok) {
+          const tData = await teamsRes.json()
+          if (tData.success && Array.isArray(tData.teams)) {
+            const names = tData.teams.map((t: any) => t.name?.trim()).filter(Boolean)
+            setAvailableTeams(Array.from(new Set(names as string[])))
+          }
+        }
       } catch (err) {
-        console.error('Failed to load settings:', err)
+        console.error('Failed to load settings or teams:', err)
       }
     }
     loadData()
@@ -1123,9 +1134,11 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
                 className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-gray-700 shadow-xs dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
               >
                 <option value="All Teams">Team: All Teams</option>
-                <option value="Engineering">Team: Engineering</option>
-                <option value="Design">Team: Design</option>
-                <option value="Marketing">Team: Marketing</option>
+                {availableTeams.map((t) => (
+                  <option key={t} value={t}>
+                    Team: {t}
+                  </option>
+                ))}
               </select>
 
               <select

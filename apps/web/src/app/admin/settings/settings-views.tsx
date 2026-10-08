@@ -449,13 +449,14 @@ interface EmployeeItem {
 export function ManageEmployeesView({ members: initialMembers }: { members: EmployeeItem[] }) {
   const [members, setMembers] = useState<EmployeeItem[]>(initialMembers || [])
   const [loading, setLoading] = useState(false)
+  const [availableTeams, setAvailableTeams] = useState<string[]>([])
 
   // Invite modal
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   const [inviteName, setInviteName] = useState('')
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('EMPLOYEE')
-  const [inviteTeam, setInviteTeam] = useState('Engineering')
+  const [inviteTeam, setInviteTeam] = useState('')
   const [isSubmittingInvite, setIsSubmittingInvite] = useState(false)
 
   // Edit Access Modal
@@ -469,6 +470,22 @@ export function ManageEmployeesView({ members: initialMembers }: { members: Empl
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [memberToDelete, setMemberToDelete] = useState<EmployeeItem | null>(null)
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/teams')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.teams)) {
+          const names = d.teams.map((t: any) => t.name?.trim()).filter(Boolean)
+          const unique = Array.from(new Set(names as string[]))
+          setAvailableTeams(unique)
+          if (unique.length > 0 && !inviteTeam) {
+            setInviteTeam(unique[0])
+          }
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const reloadMembers = async () => {
     try {
@@ -486,12 +503,8 @@ export function ManageEmployeesView({ members: initialMembers }: { members: Empl
   }
 
   useEffect(() => {
-    if (!initialMembers || initialMembers.length === 0) {
-      reloadMembers()
-    } else {
-      setMembers(initialMembers)
-    }
-  }, [initialMembers])
+    reloadMembers()
+  }, [])
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -741,9 +754,15 @@ export function ManageEmployeesView({ members: initialMembers }: { members: Empl
                   onChange={(e) => setInviteTeam(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-xs text-gray-900 focus:border-blue-500 focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
                 >
-                  <option value="Engineering">Engineering</option>
-                  <option value="Design & UI/UX">Design & UI/UX</option>
-                  <option value="Product & QA">Product & QA</option>
+                  {availableTeams.length === 0 ? (
+                    <option value="">No teams available</option>
+                  ) : (
+                    availableTeams.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>

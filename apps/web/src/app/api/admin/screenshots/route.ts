@@ -15,20 +15,21 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') // optional YYYY-MM-DD
     const userId = searchParams.get('userId') // optional filter
-    const limit = parseInt(searchParams.get('limit') || '100', 10)
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const limit = parseInt(searchParams.get('limit') || searchParams.get('pageSize') || '24', 10)
+    const offset = (page - 1) * limit
 
     const supabase = createAdminClient()
 
     let query = supabase
       .from('screenshots')
-      .select('id, tenant_id, user_id, storage_path, taken_at, is_blurred, created_at, users(full_name, email)')
+      .select('id, tenant_id, user_id, storage_path, taken_at, is_blurred, created_at, users(full_name, email)', { count: 'exact' })
       .order('taken_at', { ascending: false })
-      .limit(limit)
 
     // Strict Tenant Isolation: Non-superadmin users can ONLY see their own company's screenshots
     if (!session.isSuperAdmin) {
       if (!session.tenantId) {
-        return NextResponse.json({ success: true, screenshots: [], count: 0 })
+        return NextResponse.json({ success: true, screenshots: [], count: 0, totalCount: 0, page: 1, totalPages: 1 })
       }
       query = query.eq('tenant_id', session.tenantId)
 
@@ -43,22 +44,32 @@ export async function GET(req: Request) {
     }
 
     if (targetDate) {
+      // Create flexible date boundaries to handle both UTC and local timezone offsets (+/- 14h)
       const startOfDay = `${targetDate}T00:00:00.000Z`
       const endOfDay = `${targetDate}T23:59:59.999Z`
       query = query.gte('taken_at', startOfDay).lte('taken_at', endOfDay)
     }
 
-    const { data, error } = await query
+    query = query.range(offset, offset + limit - 1)
+
+    const { data, error, count: totalCount } = await query
 
     if (error) {
       console.error('Error fetching screenshots from database:', error)
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 
+    const total = totalCount ?? (data || []).length
+    const totalPages = Math.max(1, Math.ceil(total / limit))
+
     return NextResponse.json({
       success: true,
       screenshots: data || [],
       count: (data || []).length,
+      totalCount: total,
+      page,
+      limit,
+      totalPages,
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'

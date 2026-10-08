@@ -43,6 +43,8 @@ export async function GET(req: Request) {
       .select('id, full_name, email, role, tenant_id, avatar_url, is_active')
       .order('full_name', { ascending: true })
 
+    const targetTenant = searchParams.get('tenantId') || session.tenantId
+
     if (!session.isSuperAdmin) {
       if (!session.tenantId) {
         return NextResponse.json({ success: true, employees: [], totalCount: 0 })
@@ -52,6 +54,14 @@ export async function GET(req: Request) {
       // If employee, only self
       if (session.role === 'EMPLOYEE') {
         usersQuery = usersQuery.eq('id', session.userId)
+      }
+    } else if (targetTenant) {
+      usersQuery = usersQuery.eq('tenant_id', targetTenant)
+    } else {
+      // If superadmin in /admin without explicit tenantId, scope to latest tenant
+      const { data: activeTenant } = await supabase.from('tenants').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      if (activeTenant?.id) {
+        usersQuery = usersQuery.eq('tenant_id', activeTenant.id)
       }
     }
 
