@@ -47,6 +47,12 @@ interface EmployeeTimelineRow {
   hasClockedIn: boolean
   clockedInAt?: string | null
   clockedOutAt?: string | null
+  attendanceSessions?: Array<{
+    id: string
+    clocked_in_at: string
+    clocked_out_at: string | null
+    status: string
+  }>
   hasEvents: boolean
   rawEvents?: RawEvent[]
   segments: TimelineSegment[]
@@ -206,30 +212,49 @@ export default function TimelinePage() {
         })
       }
 
-      // 2. Fallback: If clientSegments is empty but user clocked in, render their attendance session
-      if (clientSegments.length === 0 && emp.clockedInAt) {
-        const clockInDate = new Date(emp.clockedInAt)
-        const localClockInDateStr = `${clockInDate.getFullYear()}-${String(clockInDate.getMonth() + 1).padStart(2, '0')}-${String(clockInDate.getDate()).padStart(2, '0')}`
+      // 2. Fallback: If clientSegments is empty but user clocked in, render ALL attendance sessions
+      if (clientSegments.length === 0) {
+        const sessionsToUse =
+          emp.attendanceSessions && emp.attendanceSessions.length > 0
+            ? emp.attendanceSessions
+            : emp.clockedInAt
+            ? [
+                {
+                  id: `session-${emp.id}`,
+                  clocked_in_at: emp.clockedInAt,
+                  clocked_out_at: emp.clockedOutAt || null,
+                  status: 'CLOSED',
+                },
+              ]
+            : []
 
-        if (localClockInDateStr === targetDateStr || !emp.rawEvents || emp.rawEvents.length === 0) {
-          const clockOutDate = emp.clockedOutAt ? new Date(emp.clockedOutAt) : new Date()
-          const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
-          const endMin = clockOutDate.getHours() * 60 + clockOutDate.getMinutes()
-          const totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
-          const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+        sessionsToUse.forEach((sess, sIdx) => {
+          const clockInDate = new Date(sess.clocked_in_at)
+          const localClockInDateStr = `${clockInDate.getFullYear()}-${String(clockInDate.getMonth() + 1).padStart(2, '0')}-${String(clockInDate.getDate()).padStart(2, '0')}`
 
-          clientSegments.push({
-            id: `session-${emp.id}`,
-            startMin,
-            durationMin,
-            type: 'PRODUCTIVE',
-            appName: 'Tracked Work Session',
-            windowTitle: 'Active Tracker Session',
-            startTimeStr: formatClockTime(clockInDate),
-            endTimeStr: emp.clockedOutAt ? formatClockTime(clockOutDate) : 'In Progress',
-            durationStr: formatDurationSec(totalDiffSec),
-          })
-        }
+          if (localClockInDateStr === targetDateStr || !emp.rawEvents || emp.rawEvents.length === 0) {
+            const clockOutDate = sess.clocked_out_at ? new Date(sess.clocked_out_at) : new Date()
+            const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
+            const endMin = clockOutDate.getHours() * 60 + clockOutDate.getMinutes()
+            const totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
+            const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+
+            clientSegments.push({
+              id: sess.id || `session-${emp.id}-${sIdx}`,
+              startMin,
+              durationMin,
+              type: 'PRODUCTIVE',
+              appName: 'Tracked Work Session',
+              windowTitle:
+                sessionsToUse.length > 1
+                  ? `Work Session ${sIdx + 1} (${formatClockTime(clockInDate)} - ${sess.clocked_out_at ? formatClockTime(clockOutDate) : 'Active'})`
+                  : 'Active Tracker Session',
+              startTimeStr: formatClockTime(clockInDate),
+              endTimeStr: sess.clocked_out_at ? formatClockTime(clockOutDate) : 'In Progress',
+              durationStr: formatDurationSec(totalDiffSec),
+            })
+          }
+        })
       }
 
       // 3. Fallback to server computed segments if any exist

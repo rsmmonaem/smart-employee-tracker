@@ -139,7 +139,9 @@ export async function GET(req: Request) {
       }
       const primaryTeam = userTeams[0] || (meta.team || 'General')
       const userEvents = (events || []).filter((e) => e.user_id === user.id)
-      const userSessions = (sessions || []).filter((s) => s.user_id === user.id)
+      const userSessions = (sessions || [])
+        .filter((s) => s.user_id === user.id)
+        .sort((a, b) => new Date(a.clocked_in_at).getTime() - new Date(b.clocked_in_at).getTime())
       const userSession = userSessions[0] || null
       const userScreenshots = (screenshots || []).filter((s) => s.user_id === user.id)
 
@@ -285,9 +287,12 @@ export async function GET(req: Request) {
         role: user.role === 'TENANT_ADMIN' ? 'Tenant Admin' : 'Full Stack Engineer',
         team: primaryTeam,
         teams: userTeams.length > 0 ? userTeams : [primaryTeam],
-        hasClockedIn: !!userSession,
-        clockedInAt: userSession?.clocked_in_at || null,
-        clockedOutAt: userSession?.clocked_out_at || null,
+        hasClockedIn: userSessions.length > 0,
+        clockedInAt: userSessions[0]?.clocked_in_at || null,
+        clockedOutAt: userSessions.some((s) => !s.clocked_out_at || s.status === 'OPEN')
+          ? null
+          : userSessions[userSessions.length - 1]?.clocked_out_at || null,
+        attendanceSessions: userSessions,
         hasEvents: userEvents.length > 0 || userSessions.length > 0 || userScreenshots.length > 0,
         rawEvents: fallbackRawEvents,
         segments,
