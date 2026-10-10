@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download, Clock, Coffee, Bell, Power } from 'lucide-react';
+import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download, Clock, Coffee, Bell, Power, AlertTriangle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { type as getOsType, arch as getArch } from '@tauri-apps/plugin-os';
@@ -206,6 +206,30 @@ export default function App() {
   const [eventsCount, setEventsCount] = useState(0);
   const [isSnapping, setIsSnapping] = useState(false);
   const [isSyncingPolicy, setIsSyncingPolicy] = useState(false);
+
+  // Single-active session management across devices
+  const [showSessionConflictModal, setShowSessionConflictModal] = useState(false);
+  const [sessionConflictData, setSessionConflictData] = useState<{
+    existingSessionId: string;
+    clockedInAt: string;
+  } | null>(null);
+  const [showRemoteSessionEndedModal, setShowRemoteSessionEndedModal] = useState(false);
+
+  const formatClockInTime = (isoString?: string | null) => {
+    if (!isoString) return 'Earlier today';
+    try {
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return isoString;
+      return d.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      });
+    } catch {
+      return isoString;
+    }
+  };
 
   // Productivity Review Rules
   const [rules, setRules] = useState<ProductivityRule[]>([]);
@@ -475,6 +499,57 @@ export default function App() {
     };
   }, []);
 
+  // ⚡ Supabase Realtime Listener for Single-Active Session Enforcement across devices
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const userSessionChannel = supabase
+      .channel(`agent_session_sync_${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attendance_sessions',
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        (payload) => {
+          const newRow = payload.new as any;
+          if (!newRow) return;
+
+          // If tracking is active on this device:
+          if (isTrackingRef.current) {
+            const currentMySessionId = currentAttendanceSessionIdRef.current;
+            // 1. If another device started a new session (different ID that is OPEN):
+            if (payload.eventType === 'INSERT' && newRow?.status === 'OPEN' && newRow?.id !== currentMySessionId) {
+              console.log('⚡ Detected new session started on another device. Stopping local tracking.');
+              setIsTracking(false);
+              currentAttendanceSessionIdRef.current = null;
+              localStorage.removeItem('smart_tracker_current_session_id');
+              localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
+              setShowRemoteSessionEndedModal(true);
+              invoke('bring_to_front').catch(() => {});
+            }
+            // 2. If our active session was remotely marked CLOSED by another device:
+            else if (payload.eventType === 'UPDATE' && newRow?.id === currentMySessionId && newRow?.status === 'CLOSED') {
+              console.log('⚡ Active session was closed remotely. Stopping local tracking.');
+              setIsTracking(false);
+              currentAttendanceSessionIdRef.current = null;
+              localStorage.removeItem('smart_tracker_current_session_id');
+              localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
+              setShowRemoteSessionEndedModal(true);
+              invoke('bring_to_front').catch(() => {});
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(userSessionChannel);
+    };
+  }, [session?.user?.id]);
+
   const getTodayKey = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -539,6 +614,7 @@ export default function App() {
 
       let totalSec = 0;
       let existingOpenSessionId: string | null = null;
+      let activeOpenSessionClockedInAt: string | null = null;
 
       if (sessions && Array.isArray(sessions)) {
         // Find latest open session
@@ -546,6 +622,7 @@ export default function App() {
         const activeOpenSession = openSessions.length > 0 ? openSessions[openSessions.length - 1] : null;
         if (activeOpenSession) {
           existingOpenSessionId = activeOpenSession.id;
+          activeOpenSessionClockedInAt = activeOpenSession.clocked_in_at;
         }
 
         // Close any stale duplicate open sessions in background
@@ -608,10 +685,86 @@ export default function App() {
         }
       }
 
-      return { totalSec, existingOpenSessionId };
+      return { totalSec, existingOpenSessionId, activeOpenSessionClockedInAt };
     } catch (err) {
       console.warn('Failed to sync today tracked time:', err);
-      return { totalSec: 0, existingOpenSessionId: null };
+      return { totalSec: 0, existingOpenSessionId: null, activeOpenSessionClockedInAt: null };
+    }
+  };
+
+  const proceedStartTracking = async (_oldSessionIdToClose?: string | null) => {
+    const currentSession = sessionRef.current;
+    const currentTenantId = tenantIdRef.current;
+    if (!currentSession?.user?.id || !currentTenantId) return;
+
+    try {
+      localStorage.removeItem('smart_tracker_is_tracking_paused');
+
+      // 1. Close any older/conflicting sessions for this user in DB
+      await supabase
+        .from('attendance_sessions')
+        .update({
+          status: 'CLOSED',
+          clocked_out_at: new Date().toISOString(),
+        })
+        .eq('user_id', currentSession.user.id)
+        .eq('status', 'OPEN');
+
+      // 2. Insert new OPEN session
+      const { data, error } = await supabase
+        .from('attendance_sessions')
+        .insert({
+          tenant_id: currentTenantId,
+          user_id: currentSession.user.id,
+          clocked_in_at: new Date().toISOString(),
+          status: 'OPEN',
+        })
+        .select('id')
+        .single();
+
+      if (!error && data) {
+        currentAttendanceSessionIdRef.current = data.id;
+        localStorage.setItem('smart_tracker_current_session_id', data.id);
+        setIsTracking(true);
+        setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+      } else {
+        setIsTracking(true);
+      }
+    } catch (e) {
+      console.warn('Attendance session start error:', e);
+      setIsTracking(true);
+    }
+  };
+
+  const stopTrackingSession = async () => {
+    setIsTracking(false);
+    const currentSession = sessionRef.current;
+    if (!currentSession?.user?.id) return;
+
+    try {
+      localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
+      localStorage.removeItem('smart_tracker_current_session_id');
+
+      await supabase
+        .from('attendance_sessions')
+        .update({
+          clocked_out_at: new Date().toISOString(),
+          status: 'CLOSED',
+        })
+        .eq('user_id', currentSession.user.id)
+        .eq('status', 'OPEN');
+
+      currentAttendanceSessionIdRef.current = null;
+
+      const todayStr = getTodayKey();
+      try {
+        localStorage.setItem(`smart_tracker_today_seconds_${currentSession.user.id}_${todayStr}`, String(timer));
+      } catch {
+        // ignore
+      }
+      setLastSyncStatus(`⏸️ Paused: Today's progress saved (${formatTime(timer)})`);
+    } catch (e) {
+      console.warn('Attendance session close error:', e);
     }
   };
 
@@ -622,43 +775,32 @@ export default function App() {
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
-        const { existingOpenSessionId } = await syncTodayTrackedTime(session.user.id);
+        const { existingOpenSessionId, activeOpenSessionClockedInAt } = await syncTodayTrackedTime(session.user.id);
 
         if (existingOpenSessionId) {
-          currentAttendanceSessionIdRef.current = existingOpenSessionId;
-          setIsTracking(true);
-          setLastSyncStatus('🚀 Resumed active tracking session');
+          const localOwnedId = localStorage.getItem('smart_tracker_current_session_id');
+          if (localOwnedId === existingOpenSessionId) {
+            currentAttendanceSessionIdRef.current = existingOpenSessionId;
+            setIsTracking(true);
+            setLastSyncStatus('🚀 Resumed active tracking session');
+          } else {
+            // Active session belongs to another device/instance! Prompt confirmation!
+            setIsTracking(false);
+            setLastSyncStatus('⚠️ Active session running on another device');
+            setSessionConflictData({
+              existingSessionId: existingOpenSessionId,
+              clockedInAt: activeOpenSessionClockedInAt || new Date().toISOString(),
+            });
+            setShowSessionConflictModal(true);
+            invoke('bring_to_front').catch(() => {});
+          }
         } else {
           const wasPaused = localStorage.getItem('smart_tracker_is_tracking_paused') === 'true';
           if (wasPaused) {
             setIsTracking(false);
             setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
           } else if (!isTrackingRef.current) {
-            setIsTracking(true);
-            // Close any existing open sessions first to guarantee ONE ACTIVE SESSION
-            supabase
-              .from('attendance_sessions')
-              .update({ status: 'CLOSED', clocked_out_at: new Date().toISOString() })
-              .eq('user_id', session.user.id)
-              .eq('status', 'OPEN')
-              .then(() => {
-                supabase
-                  .from('attendance_sessions')
-                  .insert({
-                    tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-                    user_id: session.user.id,
-                    clocked_in_at: new Date().toISOString(),
-                    status: 'OPEN',
-                  })
-                  .select('id')
-                  .single()
-                  .then(({ data, error }) => {
-                    if (!error && data) {
-                      currentAttendanceSessionIdRef.current = data.id;
-                      setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-                    }
-                  });
-              });
+            proceedStartTracking(null);
           }
         }
       } else {
@@ -674,43 +816,32 @@ export default function App() {
       if (session?.user) {
         fetchUserProfile(session.user.id);
         fetchTrackSettings(session.user.id);
-        const { existingOpenSessionId } = await syncTodayTrackedTime(session.user.id);
+        const { existingOpenSessionId, activeOpenSessionClockedInAt } = await syncTodayTrackedTime(session.user.id);
 
         if (existingOpenSessionId) {
-          currentAttendanceSessionIdRef.current = existingOpenSessionId;
-          setIsTracking(true);
-          setLastSyncStatus('🚀 Resumed active tracking session');
+          const localOwnedId = localStorage.getItem('smart_tracker_current_session_id');
+          if (localOwnedId === existingOpenSessionId) {
+            currentAttendanceSessionIdRef.current = existingOpenSessionId;
+            setIsTracking(true);
+            setLastSyncStatus('🚀 Resumed active tracking session');
+          } else {
+            // Active session belongs to another device/instance! Prompt confirmation!
+            setIsTracking(false);
+            setLastSyncStatus('⚠️ Active session running on another device');
+            setSessionConflictData({
+              existingSessionId: existingOpenSessionId,
+              clockedInAt: activeOpenSessionClockedInAt || new Date().toISOString(),
+            });
+            setShowSessionConflictModal(true);
+            invoke('bring_to_front').catch(() => {});
+          }
         } else {
           const wasPaused = localStorage.getItem('smart_tracker_is_tracking_paused') === 'true';
           if (wasPaused) {
             setIsTracking(false);
             setLastSyncStatus('⏸️ Tracker paused. Click Start to resume');
           } else if (!isTrackingRef.current) {
-            setIsTracking(true);
-            // Close any existing open sessions first to guarantee ONE ACTIVE SESSION
-            supabase
-              .from('attendance_sessions')
-              .update({ status: 'CLOSED', clocked_out_at: new Date().toISOString() })
-              .eq('user_id', session.user.id)
-              .eq('status', 'OPEN')
-              .then(() => {
-                supabase
-                  .from('attendance_sessions')
-                  .insert({
-                    tenant_id: tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3',
-                    user_id: session.user.id,
-                    clocked_in_at: new Date().toISOString(),
-                    status: 'OPEN',
-                  })
-                  .select('id')
-                  .single()
-                  .then(({ data, error }) => {
-                    if (!error && data) {
-                      currentAttendanceSessionIdRef.current = data.id;
-                      setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-                    }
-                  });
-              });
+            proceedStartTracking(null);
           }
         }
       }
@@ -1230,94 +1361,50 @@ export default function App() {
   };
 
   const toggleTracking = async () => {
-    const nextTracking = !isTracking;
-    setIsTracking(nextTracking);
+    if (isTracking) {
+      await stopTrackingSession();
+    } else {
+      const currentSession = sessionRef.current;
+      if (!currentSession?.user?.id) return;
 
-    const currentSession = sessionRef.current;
-    const currentTenantId = tenantIdRef.current;
-
-    if (!currentSession?.user?.id || !currentTenantId) return;
-
-    if (nextTracking) {
       try {
-        localStorage.removeItem('smart_tracker_is_tracking_paused');
-
-        // Strictly enforce: ONE USER ONE ACTIVE SESSION
-        // 1. Check if an OPEN session already exists for this user in Supabase
+        // Strictly check if an active session already exists in Supabase
         const { data: existingActive } = await supabase
           .from('attendance_sessions')
-          .select('id')
+          .select('id, clocked_in_at')
           .eq('user_id', currentSession.user.id)
           .eq('status', 'OPEN')
           .order('clocked_in_at', { ascending: false })
           .limit(1)
           .maybeSingle();
 
-        if (existingActive?.id) {
-          // Reuse existing active session! Never create duplicate
-          currentAttendanceSessionIdRef.current = existingActive.id;
-          setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-        } else {
-          // Close any stale sessions first just in case
-          await supabase
-            .from('attendance_sessions')
-            .update({
-              status: 'CLOSED',
-              clocked_out_at: new Date().toISOString(),
-            })
-            .eq('user_id', currentSession.user.id)
-            .eq('status', 'OPEN');
+        const localOwnedId = localStorage.getItem('smart_tracker_current_session_id');
 
-          const { data, error } = await supabase
-            .from('attendance_sessions')
-            .insert({
-              tenant_id: currentTenantId,
-              user_id: currentSession.user.id,
-              clocked_in_at: new Date().toISOString(),
-              status: 'OPEN',
-            })
-            .select('id')
-            .single();
-
-          if (!error && data) {
-            currentAttendanceSessionIdRef.current = data.id;
-            setLastSyncStatus('🚀 Tracking Active: Working session recorded');
-          }
+        // If an active session exists and wasn't started by this local device:
+        if (existingActive?.id && existingActive.id !== currentAttendanceSessionIdRef.current && existingActive.id !== localOwnedId) {
+          setSessionConflictData({
+            existingSessionId: existingActive.id,
+            clockedInAt: existingActive.clocked_in_at,
+          });
+          setShowSessionConflictModal(true);
+          invoke('bring_to_front').catch(() => {});
+          return;
         }
-      } catch (e) {
-        console.warn('Attendance session start error:', e);
-      }
-    } else {
-      try {
-        localStorage.setItem('smart_tracker_is_tracking_paused', 'true');
-        // Always close all open sessions for this user
-        await supabase
-          .from('attendance_sessions')
-          .update({
-            clocked_out_at: new Date().toISOString(),
-            status: 'CLOSED',
-          })
-          .eq('user_id', currentSession.user.id)
-          .eq('status', 'OPEN');
-        currentAttendanceSessionIdRef.current = null;
 
-        const todayStr = getTodayKey();
-        try {
-          localStorage.setItem(`smart_tracker_today_seconds_${currentSession.user.id}_${todayStr}`, String(timer));
-        } catch {
-          // ignore
-        }
-        setLastSyncStatus(`⏸️ Paused: Today's progress saved (${formatTime(timer)})`);
+        // No conflict, proceed to start
+        await proceedStartTracking(existingActive?.id || null);
       } catch (e) {
-        console.warn('Attendance session close error:', e);
+        console.warn('Toggle tracking check error:', e);
+        await proceedStartTracking(null);
       }
     }
   };
 
   const handleLogout = async () => {
     if (isTracking) {
-      await toggleTracking();
+      await stopTrackingSession();
     }
+    localStorage.removeItem('smart_tracker_current_session_id');
     setIsTracking(false);
     supabase.auth.signOut();
   };
@@ -1715,6 +1802,96 @@ export default function App() {
               >
                 <Square className="w-3.5 h-3.5 fill-current" />
                 <span>Stop Tracking</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ Session Conflict Confirmation Modal */}
+      {showSessionConflictModal && sessionConflictData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-amber-200 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner border border-amber-200">
+              <AlertTriangle className="w-7 h-7 text-amber-600" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                Active Session Detected
+              </h3>
+              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                You already have an active tracking session running on another device (Clocked in at{' '}
+                <strong className="text-amber-800 font-semibold">
+                  {formatClockInTime(sessionConflictData.clockedInAt)}
+                </strong>
+                ).
+              </p>
+            </div>
+
+            <div className="bg-amber-50/80 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 text-left leading-relaxed">
+              <strong>Company Policy:</strong> Only one active session is permitted at a time. Starting tracking here will automatically <strong>clock out and end</strong> your previous session.
+            </div>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSessionConflictModal(false);
+                  setSessionConflictData(null);
+                  setIsTracking(false);
+                  setLastSyncStatus('⏸️ Kept previous session active');
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl border border-gray-200 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const oldId = sessionConflictData.existingSessionId;
+                  setShowSessionConflictModal(false);
+                  setSessionConflictData(null);
+                  await proceedStartTracking(oldId);
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-xs font-bold text-white shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+              >
+                End &amp; Start Here
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⏹️ Remote Session Takeover Modal */}
+      {showRemoteSessionEndedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/75 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-rose-200 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner border border-rose-200">
+              <Power className="w-7 h-7 text-rose-600" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                Session Ended on This Device
+              </h3>
+              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                Your tracking session on this computer was stopped because a new session was started on another computer or device.
+              </p>
+            </div>
+
+            <div className="bg-rose-50/80 border border-rose-200 rounded-xl p-3 text-[11px] text-rose-900 text-left leading-relaxed">
+              Tracking has been safely paused on this computer. To resume tracking here, click Start Tracking whenever you are ready.
+            </div>
+
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => setShowRemoteSessionEndedModal(false)}
+                className="w-full py-2.5 px-4 rounded-xl bg-gray-900 hover:bg-black text-xs font-bold text-white shadow-sm transition-colors cursor-pointer"
+              >
+                Got It
               </button>
             </div>
           </div>
