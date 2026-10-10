@@ -2,6 +2,7 @@ use xcap::Monitor;
 use active_win_pos_rs::get_active_window;
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use serde::{Serialize, Deserialize};
+use tauri::WebviewWindow;
 
 #[derive(Serialize, Deserialize)]
 pub struct ActiveWindowData {
@@ -257,6 +258,146 @@ async fn native_request(
     })
 }
 
+#[tauri::command]
+fn bring_to_front(window: WebviewWindow) -> Result<(), String> {
+    // Unminimize if minimized
+    let _ = window.unminimize();
+    // Show window if hidden
+    let _ = window.show();
+    // Focus window
+    let _ = window.set_focus();
+    // Briefly set always on top to ensure it breaks through other apps, then disable
+    let _ = window.set_always_on_top(true);
+    let win_clone = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let _ = win_clone.set_always_on_top(false);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn enable_auto_start(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe_path = current_exe.to_string_lossy().to_string();
+
+        if enabled {
+            let status = Command::new("reg")
+                .args(&[
+                    "add",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v",
+                    "SmartEmployeeTracker",
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    &format!("\"{}\"", exe_path),
+                    "/f",
+                ])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err("Failed to register Windows auto-start".into());
+            }
+        } else {
+            let _ = Command::new("reg")
+                .args(&[
+                    "delete",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v",
+                    "SmartEmployeeTracker",
+                    "/f",
+                ])
+                .status();
+        }
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::fs;
+        use std::process::Command;
+
+        let home = std::env::var("HOME").map_err(|_| "HOME env not found".to_string())?;
+        let launch_agents_dir = format!("{}/Library/LaunchAgents", home);
+        let plist_path = format!("{}/com.smartemployeetracker.app.plist", launch_agents_dir);
+
+        if enabled {
+            let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exe_path = current_exe.to_string_lossy().to_string();
+
+            let plist_content = format!(
+r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.smartemployeetracker.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>"#,
+                exe_path
+            );
+
+            let _ = fs::create_dir_all(&launch_agents_dir);
+            fs::write(&plist_path, plist_content).map_err(|e| e.to_string())?;
+            let _ = Command::new("launchctl").args(&["load", "-w", &plist_path]).status();
+        } else {
+            let _ = Command::new("launchctl").args(&["unload", "-w", &plist_path]).status();
+            let _ = fs::remove_file(&plist_path);
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn is_auto_start_enabled() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let output = Command::new("reg")
+            .args(&[
+                "query",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "SmartEmployeeTracker",
+            ])
+            .output();
+
+        if let Ok(out) = output {
+            return Ok(out.status.success());
+        }
+        return Ok(false);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").map_err(|_| "HOME env not found".to_string())?;
+        let plist_path = format!("{}/Library/LaunchAgents/com.smartemployeetracker.app.plist", home);
+        return Ok(std::path::Path::new(&plist_path).exists());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Ok(false)
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -268,7 +409,10 @@ pub fn run() {
         capture_screen,
         get_focused_window,
         get_system_idle_seconds,
-        native_request
+        native_request,
+        bring_to_front,
+        enable_auto_start,
+        is_auto_start_enabled
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

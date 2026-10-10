@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download, Clock, Coffee, Bell } from 'lucide-react';
+import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download, Clock, Coffee, Bell, Power } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { type as getOsType, arch as getArch } from '@tauri-apps/plugin-os';
@@ -249,6 +249,9 @@ export default function App() {
   const [showIdlePrompt, setShowIdlePrompt] = useState(false);
   const [idleCountdown, setIdleCountdown] = useState(60);
   const idlePromptActiveRef = useRef(false);
+
+  // Auto-start on computer boot state
+  const [isAutoStart, setIsAutoStart] = useState(true);
 
   // Auto-updater state
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
@@ -719,6 +722,21 @@ export default function App() {
     // Check for updates on startup
     checkForAppUpdates(true);
 
+    // Check & ensure autostart on system boot
+    invoke('is_auto_start_enabled')
+      .then((enabled: any) => {
+        if (typeof enabled === 'boolean') {
+          setIsAutoStart(enabled);
+          if (!enabled) {
+            // Auto enable by default for employee convenience
+            invoke('enable_auto_start', { enabled: true }).then(() => {
+              setIsAutoStart(true);
+            }).catch(() => {});
+          }
+        }
+      })
+      .catch(() => {});
+
     const policyInterval = setInterval(() => {
       fetchTrackSettings(sessionRef.current?.user?.id);
     }, 30000);
@@ -732,6 +750,17 @@ export default function App() {
       clearInterval(updateInterval);
     };
   }, []);
+
+  const toggleAutoStart = async () => {
+    const nextVal = !isAutoStart;
+    try {
+      await invoke('enable_auto_start', { enabled: nextVal });
+      setIsAutoStart(nextVal);
+      setLastSyncStatus(nextVal ? '⚡ Auto-start on computer boot enabled' : '⚡ Auto-start disabled');
+    } catch (e: any) {
+      console.warn('Failed to update autostart setting:', e);
+    }
+  };
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -918,6 +947,27 @@ export default function App() {
           idlePromptActiveRef.current = true;
           setShowIdlePrompt(true);
           setIdleCountdown(60);
+
+          // 🔔 Bring minimized/background app to front immediately so employee notices!
+          invoke('bring_to_front').catch(() => {});
+
+          // Play subtle system alert sound
+          try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+            gain.gain.setValueAtTime(0.2, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.4);
+          } catch {
+            // Audio context not available or user gesture blocked
+          }
         }
 
         if (currentSession?.user?.id && currentTenantId) {
@@ -1556,6 +1606,36 @@ export default function App() {
               className="p-1.5 text-gray-400 hover:text-blue-600 rounded-md transition-colors shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingPolicy ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+          </div>
+
+          {/* Auto-Start System Boot Preference */}
+          <div className="flex items-center justify-between text-xs text-gray-700 bg-white p-2.5 rounded-xl border border-gray-200 shadow-2xs">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className={`p-1.5 rounded-lg shrink-0 ${isAutoStart ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400'}`}>
+                <Power className="w-3.5 h-3.5" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-xs text-gray-900 truncate">
+                  Auto-Start on Boot
+                </span>
+                <span className="text-[10px] text-gray-400 truncate">
+                  {isAutoStart ? 'Starts automatically on Windows/Mac boot' : 'Manual start required'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={toggleAutoStart}
+              type="button"
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isAutoStart ? 'bg-emerald-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  isAutoStart ? 'translate-x-4' : 'translate-x-0'
+                }`}
+              />
             </button>
           </div>
 
