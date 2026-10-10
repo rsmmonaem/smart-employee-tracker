@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 export interface PackageFeature {
   text: string
@@ -42,17 +42,37 @@ export default function LandingPricing({
   loading,
   onSelectPlan,
 }: LandingPricingProps) {
-  const [selectedPlanForQuote, setSelectedPlanForQuote] = useState<string>('Business - ৳15,400 BDT')
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual')
+  const [currency, setCurrency] = useState<'BDT' | 'USD'>('BDT')
+  const [internalPackages, setInternalPackages] = useState<PackageItem[]>(packages || [])
+
+  const [selectedPlanForQuote, setSelectedPlanForQuote] = useState<string>('PRO - 470 ৳/mo')
   const [quoteModalOpen, setQuoteModalOpen] = useState(false)
   const [quoteName, setQuoteName] = useState('')
   const [quotePhone, setQuotePhone] = useState('')
   const [quoteCompany, setQuoteCompany] = useState('')
   const [quoteSuccess, setQuoteSuccess] = useState(false)
 
+  // Sync prop or fetch from api
+  useEffect(() => {
+    if (packages && packages.length > 0) {
+      setInternalPackages(packages)
+    } else {
+      fetch('/api/superadmin/packages')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.success && Array.isArray(data.packages) && data.packages.length > 0) {
+            setInternalPackages(data.packages)
+          }
+        })
+        .catch((err) => console.error('Failed to load packages in LandingPricing:', err))
+    }
+  }, [packages])
+
   // Company Owner Free Trial Signup Modal State
   const [trialModalOpen, setTrialModalOpen] = useState(false)
   const [trialPlanId, setTrialPlanId] = useState('BASIC')
-  const [trialPlanName, setTrialPlanName] = useState('Starter')
+  const [trialPlanName, setTrialPlanName] = useState('BASIC')
 
   const openTrialModal = (planId: string, planTitle: string) => {
     setTrialPlanId(planId.toUpperCase())
@@ -79,148 +99,184 @@ export default function LandingPricing({
     }, 400)
   }
 
-  // Fallback plans if database packages are still loading or empty
-  const defaultCards = [
+  // Fallback defaults aligned with SuperAdmin packages if API is not yet loaded
+  const fallbackPackages: PackageItem[] = [
     {
-      id: 'starter',
-      theme: 'starter',
-      badgeColor: 'badge-green',
-      circleColor: 'circle-green',
-      badgeText: 'STARTER',
-      iconColor: '#10b981',
-      title: 'Basic HR Management',
-      desc: 'Perfect for small businesses and startups looking for essential HR features.',
-      struckPrice: '৳12,000 BDT',
-      discountPill: 'SAVE 20%',
-      discountClass: 'pill-green',
-      priceColor: 'text-green',
-      price: '9,600',
-      term: '/ One Time Payment',
-      quoteLabel: 'Starter - ৳9,600 BDT',
-      btnClass: 'btn-green-plan',
+      id: 'basic',
+      name: 'BASIC',
+      badge: 'Free Forever',
+      tagline: 'For teams monitoring their work productivity for the short term',
+      price: {
+        USD: { monthly: 0, annual: 0 },
+        BDT: { monthly: 0, annual: 0 },
+      },
+      isPopular: false,
+      colorScheme: 'green',
       features: [
-        { strong: 'Employee Management', small: '(Profiles & Database)' },
-        { strong: 'Attendance Management', small: '(Time Tracking & Reports)' },
-        { strong: 'Leave Management', small: '(Request & Approval)' },
-        { strong: 'Department & Designation', small: '(Organizational Structure)' },
-        { strong: 'Basic Payroll Management', small: '(Salary & Deductions)' },
-        { strong: 'Basic HR Reports', small: '(Essential Reports)' },
-        { strong: 'Email Notifications', small: '(System Alerts)' },
+        { text: 'Unlimited users', included: true },
+        { text: 'Upto 2 teams', included: true },
+        { text: 'Computer activity tracking', included: true },
+        { text: 'Timesheet and attendance', included: true },
+        { text: 'Custom rules to detect slacking employees', included: true },
+        { text: 'Screenshots every 10 minutes', included: true },
+        { text: 'Last 14 days data retention', included: true },
+        { text: '10 GB file storage limit', included: true },
+        { text: 'Data Export to CSV, XLS', included: true },
+        { text: 'Standard email support', included: true },
       ],
+      limits: {
+        screenshotIntervalSec: 600,
+        retentionDays: 14,
+        storageQuotaMb: 10000,
+        maxTeams: 2,
+        bulkScreenshotDelete: false,
+      },
     },
     {
-      id: 'business',
-      theme: 'business',
+      id: 'pro',
+      name: 'PRO',
+      badge: 'Save 20% on Annual',
+      tagline: 'For teams optimizing their work productivity for the long term',
+      price: {
+        USD: { monthly: 4.99, annual: 3.99 },
+        BDT: { monthly: 590, annual: 470 },
+      },
       isPopular: true,
-      badgeColor: 'badge-blue',
-      circleColor: 'circle-blue',
-      badgeText: 'BUSINESS',
-      iconColor: '#0070f3',
-      title: 'Advanced HR Solution',
-      desc: 'Ideal for growing companies with multiple employees and departments.',
-      struckPrice: '৳22,000 BDT',
-      discountPill: 'SAVE 30%',
-      discountClass: 'pill-blue',
-      priceColor: 'text-blue',
-      price: '15,400',
-      term: '/ One Time Payment',
-      quoteLabel: 'Business - ৳15,400 BDT',
-      btnClass: 'btn-blue-plan',
+      colorScheme: 'blue',
       features: [
-        { strong: 'Everything in Starter Plan', small: '(All Basic Features Included)', highlight: true },
-        { strong: 'Advanced Payroll Management', small: '(Tax, Bonus & Deductions)' },
-        { strong: 'Salary Structure & Payslip', small: '(Automated Generation)' },
-        { strong: 'Shift & Roster Management', small: '(Flexible Scheduling)' },
-        { strong: 'Late, Absent & Overtime Tracking', small: '(Real-time Monitoring)' },
-        { strong: 'Performance Management', small: '(Goals & Appraisal)' },
-        { strong: 'Recruitment & Applicant Management', small: '(Job Posting & Hiring)' },
-        { strong: 'Employee Document Management', small: '(Digital Repository)' },
-        { strong: 'Advanced Reports & Analytics', small: '(Custom Reports)' },
-        { strong: 'SMS & Email Notifications', small: '(Instant Alerts)' },
-        { strong: 'Attendance Device / Biometric Integration', small: '(Device Support)' },
+        { text: 'Unlimited tracking', included: true },
+        { text: 'Unlimited teams', included: true },
+        { text: 'Computer activity tracking', included: true },
+        { text: 'Timesheet and attendance', included: true },
+        { text: 'Custom rules to detect slacking employees', included: true },
+        { text: 'Screenshots every 1 minute', included: true },
+        { text: 'Last 1 year data retention', included: true },
+        { text: 'Unlimited Storage', included: true },
+        { text: 'Timelapse videos of work progress', included: true },
+        { text: 'Data Export to CSV, XLS', included: true },
+        { text: 'Priority support 24/7', included: true },
+        { text: 'Multiple bulk screenshot deletion', included: true, isPremiumOnly: true },
       ],
+      limits: {
+        screenshotIntervalSec: 60,
+        retentionDays: 365,
+        storageQuotaMb: 500000,
+        maxTeams: 9999,
+        bulkScreenshotDelete: true,
+      },
     },
     {
       id: 'enterprise',
-      theme: 'enterprise',
-      badgeColor: 'badge-purple',
-      circleColor: 'circle-purple',
-      badgeText: 'ENTERPRISE',
-      iconColor: '#7928ca',
-      title: 'Complete HR Platform',
-      desc: 'Built for large organizations, corporate groups and multi-branch businesses.',
-      struckPrice: '৳35,000 BDT',
-      discountPill: 'SAVE 35%',
-      discountClass: 'pill-purple',
-      priceColor: 'text-purple',
-      price: '22,750',
-      term: '/ One Time Payment',
-      quoteLabel: 'Enterprise - ৳22,750 BDT',
-      btnClass: 'btn-purple-plan',
+      name: 'ENTERPRISE',
+      badge: 'Custom Scale',
+      tagline: 'For large enterprises requiring custom retention, security, and dedicated infrastructure',
+      price: {
+        USD: { monthly: 19.99, annual: 15.99 },
+        BDT: { monthly: 2350, annual: 1880 },
+      },
+      isPopular: false,
+      colorScheme: 'purple',
       features: [
-        { strong: 'Everything in Business Plan', small: '(All Features Included)', highlight: true },
-        { strong: 'Multi-Branch Management', small: '(Multiple Locations)' },
-        { strong: 'Advanced Payroll & Tax Management', small: '(Tax, Compliance & Reports)' },
-        { strong: 'Advanced Recruitment & Onboarding', small: '(Full Hiring Workflow)' },
-        { strong: 'Performance & KPI Management', small: '(Goal, Review & Growth)' },
-        { strong: 'Training & Development Management', small: '(Learning & Skill Building)' },
-        { strong: 'Asset Management', small: '(Company Assets & Inventory)' },
-        { strong: 'Expense & Loan Management', small: '(Financial Tracking)' },
-        { strong: 'Advanced HR Analytics', small: '(Data-Driven Insights)' },
-        { strong: 'Custom Reports & Dashboard', small: '(Real-time Dashboard)' },
-        { strong: 'Role-Based Access Control', small: '(Security & Permissions)' },
-        { strong: 'API Integration', small: '(Third Party Integration)' },
-        { strong: 'Mobile App Support', small: '(iOS & Android)' },
-        { strong: 'Custom Branding / White Label', small: '(Your Brand, Our Platform)' },
-        { strong: 'Priority Support & Assistance', small: '(Dedicated Account Manager)' },
+        { text: 'Everything in PRO Plan included', included: true },
+        { text: 'Multi-branch & company isolation', included: true },
+        { text: 'Custom screenshot frequency & retention', included: true },
+        { text: 'Custom branding & white labeling', included: true },
+        { text: 'Role-Based Access Control & audit logs', included: true },
+        { text: 'Dedicated Account Manager', included: true },
+        { text: 'SLA 99.99% uptime guarantee', included: true },
+        { text: 'Custom integrations & API access', included: true },
       ],
+      limits: {
+        screenshotIntervalSec: 30,
+        retentionDays: 730,
+        storageQuotaMb: 1000000,
+        maxTeams: 99999,
+        bulkScreenshotDelete: true,
+      },
     },
   ]
 
-  // If dynamic packages exist, map them to preserve the exact UI aesthetics
-  const renderCards = packages.length > 0
-    ? packages.map((pkg, index) => {
-        const isMiddle = pkg.isPopular || index === 1
-        const isThird = index === 2 || pkg.id.toLowerCase().includes('enterprise')
-        const theme = isMiddle ? 'business' : isThird ? 'enterprise' : 'starter'
-        const badgeColor = isMiddle ? 'badge-blue' : isThird ? 'badge-purple' : 'badge-green'
-        const circleColor = isMiddle ? 'circle-blue' : isThird ? 'circle-purple' : 'circle-green'
-        const iconColor = isMiddle ? '#0070f3' : isThird ? '#7928ca' : '#10b981'
-        const btnClass = isMiddle ? 'btn-blue-plan' : isThird ? 'btn-purple-plan' : 'btn-green-plan'
-        const discountClass = isMiddle ? 'pill-blue' : isThird ? 'pill-purple' : 'pill-green'
-        const priceColor = isMiddle ? 'text-blue' : isThird ? 'text-purple' : 'text-green'
+  const activePackages = internalPackages.length > 0 ? internalPackages : fallbackPackages
+  const currSymbol = currency === 'BDT' ? '৳' : '$'
 
-        const bdtPrice = pkg.price?.BDT?.monthly || pkg.price?.BDT?.annual || (isMiddle ? 15400 : isThird ? 22750 : 9600)
-        const struckBdt = Math.round(bdtPrice * 1.25).toLocaleString()
+  const renderCards = activePackages.map((pkg, index) => {
+    const isMiddle = pkg.isPopular || index === 1
+    const isThird = index === 2 || pkg.id.toLowerCase().includes('enterprise')
+    const theme = isMiddle ? 'business' : isThird ? 'enterprise' : 'starter'
+    const badgeColor = isMiddle ? 'badge-blue' : isThird ? 'badge-purple' : 'badge-green'
+    const circleColor = isMiddle ? 'circle-blue' : isThird ? 'circle-purple' : 'circle-green'
+    const iconColor = isMiddle ? '#0070f3' : isThird ? '#7928ca' : '#10b981'
+    const btnClass = isMiddle ? 'btn-blue-plan' : isThird ? 'btn-purple-plan' : 'btn-green-plan'
+    const discountClass = isMiddle ? 'pill-blue' : isThird ? 'pill-purple' : 'pill-green'
+    const priceColor = isMiddle ? 'text-blue' : isThird ? 'text-purple' : 'text-green'
 
-        return {
-          id: pkg.id,
-          theme,
-          isPopular: pkg.isPopular || isMiddle,
-          badgeColor,
-          circleColor,
-          badgeText: pkg.name || 'PLAN',
-          iconColor,
-          title: pkg.name.toLowerCase() === 'basic' ? 'Basic HR Management' : pkg.name.toLowerCase() === 'pro' ? 'Advanced HR Solution' : 'Complete HR Platform',
-          desc: pkg.tagline || (isMiddle ? 'Ideal for growing companies with multiple employees and departments.' : isThird ? 'Built for large organizations, corporate groups and multi-branch businesses.' : 'Perfect for small businesses and startups looking for essential HR features.'),
-          struckPrice: `৳${struckBdt} BDT`,
-          discountPill: pkg.badge || (isMiddle ? 'SAVE 30%' : isThird ? 'SAVE 35%' : 'SAVE 20%'),
-          discountClass,
-          priceColor,
-          price: bdtPrice.toLocaleString(),
-          term: '/ Billed Yearly',
-          quoteLabel: `${pkg.name} - ৳${bdtPrice.toLocaleString()} BDT`,
-          btnClass,
-          features: pkg.features && pkg.features.length > 0
-            ? pkg.features.slice(0, 12).map((f) => ({
-                strong: f.text,
-                small: f.isPremiumOnly ? '(Premium Feature)' : '',
-                highlight: f.text.toLowerCase().includes('everything'),
-              }))
-            : defaultCards[index % defaultCards.length].features,
+    const priceObj = pkg.price?.[currency]
+    const priceVal = priceObj?.[billingCycle] ?? (pkg.id.toLowerCase() === 'basic' ? 0 : isMiddle ? (currency === 'BDT' ? 470 : 3.99) : (currency === 'BDT' ? 1880 : 15.99))
+    const isFree = Number(priceVal) === 0 || pkg.id.toLowerCase() === 'basic'
+
+    let formattedPrice = '0'
+    let struckPrice = ''
+    let discountPill = pkg.badge || ''
+    let billingTerm = '/ Free Forever'
+    let quoteLabel = `${pkg.name} - Free Plan`
+
+    if (isFree) {
+      formattedPrice = '0'
+      discountPill = pkg.badge || 'FREE FOREVER'
+      billingTerm = '/ Free Forever'
+      quoteLabel = `${pkg.name} - Free Forever`
+    } else {
+      formattedPrice = currency === 'BDT' ? Math.round(Number(priceVal)).toLocaleString() : priceVal.toString()
+      if (billingCycle === 'annual') {
+        const monthlyVal = priceObj?.monthly
+        if (monthlyVal && monthlyVal > Number(priceVal)) {
+          const struckFormatted = currency === 'BDT' ? Math.round(Number(monthlyVal)).toLocaleString() : monthlyVal.toString()
+          struckPrice = `${currSymbol}${struckFormatted} ${currency}`
+        } else {
+          const fallbackStruck = currency === 'BDT' ? Math.round(Number(priceVal) * 1.25).toLocaleString() : (Number((Number(priceVal) * 1.25).toFixed(2))).toString()
+          struckPrice = `${currSymbol}${fallbackStruck} ${currency}`
         }
-      })
-    : defaultCards
+        discountPill = pkg.badge || 'SAVE 20%'
+        billingTerm = '/ user / month (Billed Annually)'
+      } else {
+        discountPill = pkg.badge || 'MONTHLY'
+        billingTerm = '/ user / month'
+      }
+      quoteLabel = `${pkg.name} - ${currSymbol}${formattedPrice} ${currency}/mo (${billingCycle})`
+    }
+
+    return {
+      id: pkg.id,
+      theme,
+      isPopular: pkg.isPopular || isMiddle,
+      badgeColor,
+      circleColor,
+      badgeText: pkg.badge || pkg.name.toUpperCase(),
+      iconColor,
+      title: pkg.name,
+      desc: pkg.tagline || (isMiddle ? 'For teams optimizing their work productivity for the long term' : isThird ? 'For large enterprises requiring custom retention, security, and dedicated infrastructure' : 'For teams monitoring their work productivity for the short term'),
+      struckPrice,
+      discountPill,
+      discountClass,
+      priceColor,
+      price: formattedPrice,
+      term: billingTerm,
+      quoteLabel,
+      btnClass,
+      isFree,
+      features: pkg.features && pkg.features.length > 0
+        ? pkg.features.slice(0, 14).map((f) => ({
+            strong: f.text,
+            small: f.isPremiumOnly ? '(Pro / Enterprise)' : '',
+            highlight: f.text.toLowerCase().includes('everything') || f.text.toLowerCase().includes('unlimited'),
+          }))
+        : fallbackPackages[index % fallbackPackages.length].features.map((f) => ({
+            strong: f.text,
+            small: f.isPremiumOnly ? '(Pro / Enterprise)' : '',
+            highlight: f.text.toLowerCase().includes('everything') || f.text.toLowerCase().includes('unlimited'),
+          })),
+    }
+  })
 
   return (
     <section className="pricing-section" id="pricing">
@@ -258,7 +314,7 @@ export default function LandingPricing({
             </div>
 
             <h2 className="pricing-main-title">
-              Simple Plans. <span className="gradient-text-blue">Powerful HR Solutions.</span>
+              Simple Plans. <span className="gradient-text-blue">Powerful Productivity Solutions.</span>
             </h2>
 
             <p className="pricing-main-sub">
@@ -276,12 +332,140 @@ export default function LandingPricing({
             </div>
             <div className="ptb-info">
               <span className="ptb-title">Trusted by</span>
-              <span className="ptb-country">Businesses Across<br />Bangladesh</span>
+              <span className="ptb-country">Businesses Across<br />Bangladesh &amp; Worldwide</span>
             </div>
             <svg className="ptb-curve-arrow" viewBox="0 0 32 32" fill="none">
               <path d="M10 24C16 18 20 12 22 4" stroke="#7928ca" strokeWidth="2" strokeLinecap="round"/>
               <path d="M16 5L22 4L23 10" stroke="#7928ca" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
+          </div>
+        </div>
+
+        {/* Pricing Controls Bar: Billing Period (Monthly/Annual) & Currency (BDT/USD) */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+          margin: '0 auto 45px auto',
+          padding: '10px 22px',
+          background: 'rgba(15, 23, 42, 0.75)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '20px',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          maxWidth: 'fit-content',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)'
+        }}>
+          {/* Billing Cycle Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8' }}>Billing:</span>
+            <div style={{
+              display: 'flex',
+              background: 'rgba(2, 6, 23, 0.85)',
+              padding: '3px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <button
+                type="button"
+                onClick={() => setBillingCycle('monthly')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s ease',
+                  background: billingCycle === 'monthly' ? '#2563EB' : 'transparent',
+                  color: billingCycle === 'monthly' ? '#FFFFFF' : '#94A3B8',
+                }}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillingCycle('annual')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s ease',
+                  background: billingCycle === 'annual' ? '#2563EB' : 'transparent',
+                  color: billingCycle === 'annual' ? '#FFFFFF' : '#94A3B8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>Annual</span>
+                <span style={{
+                  fontSize: '10px',
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  color: '#34D399',
+                  padding: '1px 6px',
+                  borderRadius: '9999px',
+                  border: '1px solid rgba(16, 185, 129, 0.35)',
+                  fontWeight: 800,
+                }}>
+                  SAVE 20%
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div style={{ width: '1px', height: '22px', background: 'rgba(255, 255, 255, 0.12)' }} />
+
+          {/* Currency Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: '#94A3B8' }}>Currency:</span>
+            <div style={{
+              display: 'flex',
+              background: 'rgba(2, 6, 23, 0.85)',
+              padding: '3px',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)'
+            }}>
+              <button
+                type="button"
+                onClick={() => setCurrency('BDT')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s ease',
+                  background: currency === 'BDT' ? '#3B82F6' : 'transparent',
+                  color: currency === 'BDT' ? '#FFFFFF' : '#94A3B8',
+                }}
+              >
+                BDT (৳)
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency('USD')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '9px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s ease',
+                  background: currency === 'USD' ? '#3B82F6' : 'transparent',
+                  color: currency === 'USD' ? '#FFFFFF' : '#94A3B8',
+                }}
+              >
+                USD ($)
+              </button>
+            </div>
           </div>
         </div>
 
@@ -329,11 +513,15 @@ export default function LandingPricing({
                 {/* Price Box */}
                 <div className="pc-price-box">
                   <div className="pc-original-row">
-                    <span className="pc-struck-price">{card.struckPrice}</span>
-                    <span className={`pc-discount-pill ${card.discountClass}`}>{card.discountPill}</span>
+                    {card.struckPrice && (
+                      <span className="pc-struck-price">{card.struckPrice}</span>
+                    )}
+                    {card.discountPill && (
+                      <span className={`pc-discount-pill ${card.discountClass}`}>{card.discountPill}</span>
+                    )}
                   </div>
                   <div className={`pc-main-price ${card.priceColor}`}>
-                    <span className="pc-currency-symbol">&#2547;</span>{card.price} <span className="pc-bdt">BDT</span>
+                    <span className="pc-currency-symbol">{currSymbol}</span>{card.price} <span className="pc-bdt">{currency}</span>
                   </div>
                   <span className="pc-billing-term">{card.term}</span>
                 </div>
@@ -360,7 +548,7 @@ export default function LandingPricing({
 
                 {/* CTA Action Buttons */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 'auto' }}>
-                  {/* Primary Free Trial Button */}
+                  {/* Primary Free Trial / Get Started Button */}
                   <button
                     type="button"
                     className={`btn pc-cta-btn ${card.btnClass}`}
@@ -371,7 +559,7 @@ export default function LandingPricing({
                       <circle cx="9" cy="7" r="4" />
                       <polyline points="16 11 18 13 22 9" />
                     </svg>
-                    <span>Start 14-Day Free Trial</span>
+                    <span>{card.isFree ? 'Get Started Free' : 'Start 14-Day Free Trial'}</span>
                     <span className="pc-arrow">&rarr;</span>
                   </button>
 
@@ -416,7 +604,7 @@ export default function LandingPricing({
                       onMouseEnter={(e) => { e.currentTarget.style.color = '#FFFFFF'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; }}
                     >
-                      bKash / Card
+                      {currency === 'BDT' ? 'bKash / Card' : 'Card / Online'}
                     </button>
                   </div>
                 </div>
