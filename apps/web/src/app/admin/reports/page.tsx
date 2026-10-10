@@ -123,6 +123,43 @@ export default function ReportsPage() {
   const [attendanceRecords, setAttendanceRecords] = useState<EmployeeAttendance[]>([])
   const [keystrokeRecords, setKeystrokeRecords] = useState<KeystrokeActivityRecord[]>([])
   const [loginIpRecords, setLoginIpRecords] = useState<LoginIpRecord[]>([])
+  const [lateRecords, setLateRecords] = useState<
+    Array<{
+      id: string
+      employeeId: string
+      name: string
+      email: string
+      avatar: string
+      clockIn: string
+      expectedTime: string
+      minutesLate: number
+      status: string
+    }>
+  >([])
+  const [overtimeRecords, setOvertimeRecords] = useState<
+    Array<{
+      id: string
+      employeeId: string
+      name: string
+      email: string
+      avatar: string
+      clockIn: string
+      clockOut: string
+      totalWorked: string
+      standardHours: string
+      overtime: string
+    }>
+  >([])
+  const [summaryReport, setSummaryReport] = useState<{
+    totalEmployees: number
+    presentCount: number
+    lateCount: number
+    absentCount: number
+    attendanceRate: number
+    totalWorkHours: string
+    avgWorkHoursPerEmployee: string
+    productiveRate: number
+  } | null>(null)
   const [hourlyDistribution, setHourlyDistribution] = useState<
     Array<{ slot: string; keystrokes: number; mouse: number }>
   >([])
@@ -165,6 +202,9 @@ export default function ReportsPage() {
         setAttendanceRecords(data.attendance || [])
         setKeystrokeRecords(data.keystrokes || [])
         setLoginIpRecords(data.loginIpRecords || [])
+        setLateRecords(data.lateRecords || [])
+        setOvertimeRecords(data.overtimeRecords || [])
+        setSummaryReport(data.summaryReport || null)
         setHourlyDistribution(data.hourlyDistribution || [])
         if (data.appsUsage) setAppsUsage(data.appsUsage)
       }
@@ -214,15 +254,36 @@ export default function ReportsPage() {
   }
 
   const handleExport = () => {
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      'Name,Clock In,Clock Out,Worked Hours,Break,Effective Hours,Status\n' +
-      attendanceRecords
+    let csvContent = 'data:text/csv;charset=utf-8,'
+    if (activeReport === 'late-clock-in') {
+      csvContent += 'Name,Email,Clock In,Expected Time,Minutes Late,Status\n'
+      csvContent += lateRecords
+        .map((r) => `"${r.name}","${r.email}","${r.clockIn}","${r.expectedTime}","${r.minutesLate} mins","${r.status}"`)
+        .join('\n')
+    } else if (activeReport === 'over-time') {
+      csvContent += 'Name,Email,Clock In,Clock Out,Standard Shift,Worked Hours,Overtime\n'
+      csvContent += overtimeRecords
+        .map((r) => `"${r.name}","${r.email}","${r.clockIn}","${r.clockOut}","${r.standardHours}","${r.totalWorked}","${r.overtime}"`)
+        .join('\n')
+    } else if (activeReport === 'input-activity') {
+      csvContent += 'Member,Team,Total Keystrokes,KPM,Mouse Events,Active Typing Time,Intensity\n'
+      csvContent += keystrokeRecords
+        .map((r) => `"${r.employeeName}","${r.team}","${r.totalKeystrokes}","${r.kpm}","${r.mouseEvents}","${r.activeTypingTime}","${r.intensity}"`)
+        .join('\n')
+    } else if (activeReport === 'login-ip') {
+      csvContent += 'Employee,Email,IP Address,Login Time,Logout Time,Device,Status\n'
+      csvContent += loginIpRecords
+        .map((r) => `"${r.employeeName}","${r.email}","${r.ipAddress}","${r.loginTime}","${r.logoutTime}","${r.device}","${r.status}"`)
+        .join('\n')
+    } else {
+      csvContent += 'Name,Clock In,Clock Out,Worked Hours,Break,Effective Hours,Status\n'
+      csvContent += attendanceRecords
         .map(
           (r) =>
             `"${r.name}","${r.clockIn}","${r.clockOut}","${r.workedHours}","${r.breakTime}","${r.effectiveHours}","${r.status}"`
         )
         .join('\n')
+    }
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement('a')
@@ -1010,36 +1071,389 @@ export default function ReportsPage() {
             </div>
           )}
 
-          {/* OTHER REPORT CATEGORIES */}
+          {/* CATEGORY 4: LATE CLOCK-IN REPORT */}
+          {activeReport === 'late-clock-in' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-amber-500" />
+                    <span>Late Clock-In Report</span>
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Employees who clocked in after office threshold (10:15 AM) on {selectedDate}
+                  </p>
+                </div>
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Late Report</span>
+                </button>
+              </div>
+
+              {/* Late Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Late Arrivals Today</span>
+                  <div className="text-2xl font-bold text-amber-500 mt-1">{lateRecords.length}</div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">Employees clocking in after 10:15 AM</span>
+                </div>
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Office Start Time</span>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">10:00 AM</div>
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 inline-block">Grace period: 15 minutes</span>
+                </div>
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Late Rate</span>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                    {attendanceRecords.length > 0 ? Math.round((lateRecords.length / attendanceRecords.length) * 100) : 0}%
+                  </div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">Of tracked workforce</span>
+                </div>
+              </div>
+
+              {/* Late Employees Table */}
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
+                {lateRecords.length === 0 ? (
+                  <div className="p-12 text-center text-xs text-gray-400">
+                    🎉 Excellent! No employees were late on {selectedDate}. All arrived within office hours.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
+                          <th className="py-3 px-5">Employee</th>
+                          <th className="py-3 px-4">Expected Shift</th>
+                          <th className="py-3 px-4">Clocked In At</th>
+                          <th className="py-3 px-4">Delay Duration</th>
+                          <th className="py-3 px-5 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                        {lateRecords.map((r) => (
+                          <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center font-bold text-[10px]">
+                                  {r.avatar}
+                                </span>
+                                <div>
+                                  <span className="font-bold text-gray-900 dark:text-white block">{r.name}</span>
+                                  <span className="text-[10px] text-gray-400">{r.email}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-gray-600 dark:text-gray-300">{r.expectedTime}</td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-amber-600 dark:text-amber-400">{r.clockIn}</td>
+                            <td className="py-3.5 px-4 font-mono font-medium text-rose-500">+{r.minutesLate} mins</td>
+                            <td className="py-3.5 px-5 text-right">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                                <span>Late</span>
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CATEGORY 5: OVER TIME REPORT */}
+          {activeReport === 'over-time' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <span>Over Time Report</span>
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Hours worked beyond standard office schedule (9 hours / 10:00 AM - 7:00 PM) on {selectedDate}
+                  </p>
+                </div>
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Overtime Log</span>
+                </button>
+              </div>
+
+              {/* Overtime Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Overtime Contributors</span>
+                  <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">{overtimeRecords.length}</div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">Employees exceeding 9 hours</span>
+                </div>
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Standard Shift</span>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">09h 00m</div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">10:00 AM – 07:00 PM office hours</span>
+                </div>
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Overtime Status</span>
+                  <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                    {overtimeRecords.length > 0 ? 'Logged' : 'Standard'}
+                  </div>
+                  <span className="text-xs text-gray-400 mt-1 inline-block">Recorded from verified tracking</span>
+                </div>
+              </div>
+
+              {/* Overtime Table */}
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
+                {overtimeRecords.length === 0 ? (
+                  <div className="p-12 text-center text-xs text-gray-400">
+                    No overtime hours recorded beyond the standard 9-hour shift for {selectedDate}.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
+                          <th className="py-3 px-5">Employee</th>
+                          <th className="py-3 px-4">Clock In</th>
+                          <th className="py-3 px-4">Clock Out</th>
+                          <th className="py-3 px-4">Standard Shift</th>
+                          <th className="py-3 px-4">Total Worked</th>
+                          <th className="py-3 px-5 text-right">Overtime</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                        {overtimeRecords.map((r) => (
+                          <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center gap-2.5">
+                                <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                                  {r.avatar}
+                                </span>
+                                <div>
+                                  <span className="font-bold text-gray-900 dark:text-white block">{r.name}</span>
+                                  <span className="text-[10px] text-gray-400">{r.email}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockIn}</td>
+                            <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockOut}</td>
+                            <td className="py-3.5 px-4 font-mono text-gray-400">{r.standardHours}</td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">{r.totalWorked}</td>
+                            <td className="py-3.5 px-5 text-right font-mono font-bold text-blue-600 dark:text-blue-400">
+                              +{r.overtime}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* CATEGORY 11: EXECUTIVE SUMMARY REPORT */}
+          {activeReport === 'summary-report' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <ClipboardList className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <span>Executive Summary Report</span>
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    High-level workforce productivity, presence, and work hours telemetry for {selectedDate}
+                  </p>
+                </div>
+                <button
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Executive Summary</span>
+                </button>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Attendance Rate</span>
+                  <div className="text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
+                    {summaryReport?.attendanceRate ?? 0}%
+                  </div>
+                  <span className="text-xs text-gray-500 mt-1 block">
+                    {summaryReport?.presentCount ?? 0} of {summaryReport?.totalEmployees ?? 0} employees present
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total Hours Worked</span>
+                  <div className="text-3xl font-black text-blue-600 dark:text-blue-400 mt-2">
+                    {summaryReport?.totalWorkHours ?? '00h 00m'}
+                  </div>
+                  <span className="text-xs text-gray-500 mt-1 block">
+                    Avg {summaryReport?.avgWorkHoursPerEmployee ?? '00h 00m'} per active worker
+                  </span>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Productivity Score</span>
+                  <div className="text-3xl font-black text-purple-600 dark:text-purple-400 mt-2">
+                    {summaryReport?.productiveRate ?? 0}%
+                  </div>
+                  <span className="text-xs text-gray-500 mt-1 block">Verified application work ratio</span>
+                </div>
+
+                <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-2xs">
+                  <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Absenteeism</span>
+                  <div className="text-3xl font-black text-rose-500 mt-2">
+                    {summaryReport?.absentCount ?? 0}
+                  </div>
+                  <span className="text-xs text-gray-500 mt-1 block">Employees without logged activity</span>
+                </div>
+              </div>
+
+              {/* Workforce Attendance Breakdown Table */}
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
+                <div className="p-4 border-b border-gray-150 dark:border-gray-800">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">Active Workforce Attendance &amp; Hours</h3>
+                  <p className="text-xs text-gray-400">Individual performance metrics for {selectedDate}</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
+                        <th className="py-3 px-5">Employee</th>
+                        <th className="py-3 px-4">Clock In</th>
+                        <th className="py-3 px-4">Clock Out</th>
+                        <th className="py-3 px-4">Worked Time</th>
+                        <th className="py-3 px-4">Effective Time</th>
+                        <th className="py-3 px-5 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                      {attendanceRecords.map((r) => (
+                        <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                          <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2.5">
+                            <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                              {r.avatar}
+                            </span>
+                            <span>{r.name}</span>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockIn}</td>
+                          <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockOut}</td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">{r.workedHours}</td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">{r.effectiveHours}</td>
+                          <td className="py-3.5 px-5 text-right">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                r.status === 'PRESENT'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                  : r.status === 'LATE'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                  : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                              }`}
+                            >
+                              <span>{r.status}</span>
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ALL OTHER REPORT CATEGORIES (MONTHLY, WORK-ACTIVITY, SHIFT-TIME, CUSTOM) */}
           {activeReport !== 'daily-attendance' &&
             activeReport !== 'input-activity' &&
             activeReport !== 'apps-usage' &&
-            activeReport !== 'login-ip' && (
-              <div className="space-y-6">
-                <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex items-center justify-between">
+            activeReport !== 'login-ip' &&
+            activeReport !== 'late-clock-in' &&
+            activeReport !== 'over-time' &&
+            activeReport !== 'summary-report' && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="border-b border-gray-200 dark:border-gray-800 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white capitalize">
-                      {activeReport.replace(/-/g, ' ')}
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white capitalize flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                      <span>{activeReport.replace(/-/g, ' ')}</span>
                     </h2>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      Detailed telemetry records for {selectedDate}
+                      Detailed telemetry and verified tracking log for {selectedDate}
                     </p>
                   </div>
-                  <button onClick={handleExport} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold">
-                    Export
+                  <button
+                    onClick={handleExport}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors shrink-0"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export {activeReport.replace(/-/g, ' ')}</span>
                   </button>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-12 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
-                    <FileText className="w-6 h-6" />
+                {/* Data Table */}
+                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-2xs">
+                  <div className="p-4 border-b border-gray-150 dark:border-gray-800 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-900 dark:text-white capitalize">
+                        {activeReport.replace(/-/g, ' ')} Records
+                      </h3>
+                      <p className="text-xs text-gray-400">Total {attendanceRecords.length} employees</p>
+                    </div>
                   </div>
-                  <h3 className="font-bold text-sm text-gray-900 dark:text-white">
-                    {activeReport.replace(/-/g, ' ')} Ready
-                  </h3>
-                  <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
-                    Telemetry data compiled live from active tracking sessions on {selectedDate}.
-                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 font-semibold uppercase tracking-wider text-[11px] bg-gray-50/60 dark:bg-gray-950/40">
+                          <th className="py-3 px-5">Employee</th>
+                          <th className="py-3 px-4">Clock In</th>
+                          <th className="py-3 px-4">Clock Out</th>
+                          <th className="py-3 px-4">Logged Work</th>
+                          <th className="py-3 px-4">Break Time</th>
+                          <th className="py-3 px-4">Effective Hours</th>
+                          <th className="py-3 px-5 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
+                        {attendanceRecords.map((r) => (
+                          <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                            <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2.5">
+                              <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                                {r.avatar}
+                              </span>
+                              <span>{r.name}</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockIn}</td>
+                            <td className="py-3.5 px-4 font-mono text-gray-700 dark:text-gray-300">{r.clockOut}</td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">{r.workedHours}</td>
+                            <td className="py-3.5 px-4 font-mono text-gray-400">{r.breakTime}</td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">{r.effectiveHours}</td>
+                            <td className="py-3.5 px-5 text-right">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  r.status === 'PRESENT'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : r.status === 'LATE'
+                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                                    : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                                }`}
+                              >
+                                <span>{r.status}</span>
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
