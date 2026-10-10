@@ -929,36 +929,42 @@ export default function App() {
       }
 
       // 2. Active Window Tracking
-      const activeWin: any = await invoke('get_focused_window');
-      if (activeWin) {
-        const app = activeWin.app_name || 'System';
-        const title = activeWin.title || 'Desktop';
-        setActiveApp(app);
-        setWindowTitle(title);
+      let activeWin: any = null;
+      try {
+        activeWin = await invoke('get_focused_window');
+      } catch (err) {
+        console.warn('Window tracking poll invoke fallback:', err);
+      }
 
-        // 🌐 Extract active web domain if this is a browser
-        const extractedDomain = extractBrowserDomain(app, title);
+      const app = (activeWin && activeWin.app_name) ? activeWin.app_name : 'Active Session';
+      const title = (activeWin && activeWin.title) ? activeWin.title : 'Desktop / Working';
+      setActiveApp(app);
+      setWindowTitle(title);
 
-        const { classification, isReviewed } = getClassificationForApp(app, title, extractedDomain);
-        setAppProductivity({ classification, isReviewed });
+      // 🌐 Extract active web domain if this is a browser
+      const extractedDomain = extractBrowserDomain(app, title);
 
-        if (currentSession?.user?.id && currentTenantId) {
-          const { error } = await supabase.from('activity_events').insert({
-            tenant_id: currentTenantId,
-            user_id: currentSession.user.id,
-            app_name: app,
-            window_title: title,
-            domain: extractedDomain || null,
-            started_at: new Date(Date.now() - 5000).toISOString(),
-            ended_at: new Date().toISOString(),
-            classification,
-          });
+      const { classification, isReviewed } = getClassificationForApp(app, title, extractedDomain);
+      setAppProductivity({ classification, isReviewed });
 
-          if (!error) {
-            setEventsCount((prev) => prev + 1);
-            const label = extractedDomain ? `${extractedDomain} (${app})` : app;
-            setLastSyncStatus(`Activity: ${label} [${classification}]`);
-          }
+      if (currentSession?.user?.id && currentTenantId) {
+        const { error } = await supabase.from('activity_events').insert({
+          tenant_id: currentTenantId,
+          user_id: currentSession.user.id,
+          app_name: app,
+          window_title: title,
+          domain: extractedDomain || null,
+          started_at: new Date(Date.now() - 5000).toISOString(),
+          ended_at: new Date().toISOString(),
+          classification,
+        });
+
+        if (!error) {
+          setEventsCount((prev) => prev + 1);
+          const label = extractedDomain ? `${extractedDomain} (${app})` : app;
+          setLastSyncStatus(`Activity: ${label} [${classification}]`);
+        } else {
+          console.warn('Failed to insert activity_event:', error);
         }
       }
     } catch (e) {

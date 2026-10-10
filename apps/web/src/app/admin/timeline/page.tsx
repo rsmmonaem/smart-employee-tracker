@@ -45,6 +45,8 @@ interface EmployeeTimelineRow {
   team: string
   teams?: string[]
   hasClockedIn: boolean
+  clockedInAt?: string | null
+  clockedOutAt?: string | null
   hasEvents: boolean
   rawEvents?: RawEvent[]
   segments: TimelineSegment[]
@@ -139,71 +141,101 @@ export default function TimelinePage() {
   // Compute Client-Local Timezone Segments for full 24h day accurately
   const processEmployeeSegments = useCallback(
     (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
-      if (!emp.rawEvents || emp.rawEvents.length === 0) {
-        return emp.segments || []
-      }
-
       const clientSegments: TimelineSegment[] = []
 
-      // Filter events that fall on the targetDate in user's browser local timezone
-      const matchingEvents = emp.rawEvents.filter((ev) => {
-        const d = new Date(ev.startedAt)
-        // Match local date (YYYY-MM-DD)
-        const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-        return localDateStr === targetDateStr
-      })
+      // 1. Process real rawEvents from activity_events if present
+      if (emp.rawEvents && emp.rawEvents.length > 0) {
+        // Filter events that fall on the targetDate in user's browser local timezone
+        const matchingEvents = emp.rawEvents.filter((ev) => {
+          const d = new Date(ev.startedAt)
+          // Match local date (YYYY-MM-DD)
+          const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+          return localDateStr === targetDateStr
+        })
 
-      const eventsToUse = matchingEvents.length > 0 ? matchingEvents : emp.rawEvents
+        const eventsToUse = matchingEvents.length > 0 ? matchingEvents : emp.rawEvents
 
-      eventsToUse.forEach((ev, idx) => {
-        const startD = new Date(ev.startedAt)
-        const endD = new Date(ev.endedAt)
+        eventsToUse.forEach((ev, idx) => {
+          const startD = new Date(ev.startedAt)
+          const endD = new Date(ev.endedAt)
 
-        // Exact minutes in client's local timezone from 00:00 (0 to 1440)
-        const startMin = startD.getHours() * 60 + startD.getMinutes()
-        const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
-        const durationMin = Math.max(1, Math.round(diffSec / 60))
+          // Exact minutes in client's local timezone from 00:00 (0 to 1440)
+          const startMin = startD.getHours() * 60 + startD.getMinutes()
+          const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
+          const durationMin = Math.max(1, Math.round(diffSec / 60))
 
-        let type: ActivityType = 'NEUTRAL'
-        const appLower = (ev.appName || '').toLowerCase()
-        const winLower = (ev.windowTitle || '').toLowerCase()
+          let type: ActivityType = 'NEUTRAL'
+          const appLower = (ev.appName || '').toLowerCase()
+          const winLower = (ev.windowTitle || '').toLowerCase()
 
-        if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
-          type = 'UNTRACKED'
-        } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
-          type = 'NOT_IN_WORK'
-        } else if (appLower.includes('idle') || winLower.includes('idle')) {
-          type = 'IDLE'
-        } else if (ev.classification === 'PRODUCTIVE') {
-          type = 'PRODUCTIVE'
-        } else if (ev.classification === 'UNPRODUCTIVE') {
-          type = 'UNPRODUCTIVE'
-        }
+          if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+            type = 'UNTRACKED'
+          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+            type = 'NOT_IN_WORK'
+          } else if (appLower.includes('idle') || winLower.includes('idle')) {
+            type = 'IDLE'
+          } else if (ev.classification === 'PRODUCTIVE') {
+            type = 'PRODUCTIVE'
+          } else if (ev.classification === 'UNPRODUCTIVE') {
+            type = 'UNPRODUCTIVE'
+          }
 
-        const prev = clientSegments[clientSegments.length - 1]
-        if (
-          prev &&
-          prev.type === type &&
-          prev.appName === ev.appName &&
-          startMin <= prev.startMin + prev.durationMin + 2
-        ) {
-          prev.durationMin += durationMin
-          prev.endTimeStr = formatClockTime(endD)
-          prev.durationStr = formatDurationSec(prev.durationMin * 60)
-        } else {
+          const prev = clientSegments[clientSegments.length - 1]
+          if (
+            prev &&
+            prev.type === type &&
+            prev.appName === ev.appName &&
+            startMin <= prev.startMin + prev.durationMin + 2
+          ) {
+            prev.durationMin += durationMin
+            prev.endTimeStr = formatClockTime(endD)
+            prev.durationStr = formatDurationSec(prev.durationMin * 60)
+          } else {
+            clientSegments.push({
+              id: ev.id || `seg-${idx}`,
+              startMin,
+              durationMin,
+              type,
+              appName: ev.appName,
+              windowTitle: ev.windowTitle || 'Application Window',
+              startTimeStr: formatClockTime(startD),
+              endTimeStr: formatClockTime(endD),
+              durationStr: formatDurationSec(diffSec),
+            })
+          }
+        })
+      }
+
+      // 2. Fallback: If clientSegments is empty but user clocked in, render their attendance session
+      if (clientSegments.length === 0 && emp.clockedInAt) {
+        const clockInDate = new Date(emp.clockedInAt)
+        const localClockInDateStr = `${clockInDate.getFullYear()}-${String(clockInDate.getMonth() + 1).padStart(2, '0')}-${String(clockInDate.getDate()).padStart(2, '0')}`
+
+        if (localClockInDateStr === targetDateStr || !emp.rawEvents || emp.rawEvents.length === 0) {
+          const clockOutDate = emp.clockedOutAt ? new Date(emp.clockedOutAt) : new Date()
+          const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
+          const endMin = clockOutDate.getHours() * 60 + clockOutDate.getMinutes()
+          const totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
+          const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+
           clientSegments.push({
-            id: ev.id || `seg-${idx}`,
+            id: `session-${emp.id}`,
             startMin,
             durationMin,
-            type,
-            appName: ev.appName,
-            windowTitle: ev.windowTitle || 'Application Window',
-            startTimeStr: formatClockTime(startD),
-            endTimeStr: formatClockTime(endD),
-            durationStr: formatDurationSec(diffSec),
+            type: 'PRODUCTIVE',
+            appName: 'Tracked Work Session',
+            windowTitle: 'Active Tracker Session',
+            startTimeStr: formatClockTime(clockInDate),
+            endTimeStr: emp.clockedOutAt ? formatClockTime(clockOutDate) : 'In Progress',
+            durationStr: formatDurationSec(totalDiffSec),
           })
         }
-      })
+      }
+
+      // 3. Fallback to server computed segments if any exist
+      if (clientSegments.length === 0 && emp.segments && emp.segments.length > 0) {
+        return emp.segments
+      }
 
       return clientSegments
     },
@@ -284,7 +316,7 @@ export default function TimelinePage() {
 
   const [timelineMode, setTimelineMode] = useState<'OFFICE' | '24H'>('OFFICE')
 
-  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 720
+  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 540
   const activeTicks =
     timelineMode === '24H'
       ? TIME_TICKS_24H
@@ -299,9 +331,6 @@ export default function TimelinePage() {
           { min: 420, label: '17:00' },
           { min: 480, label: '18:00' },
           { min: 540, label: '19:00' },
-          { min: 600, label: '20:00' },
-          { min: 660, label: '21:00' },
-          { min: 720, label: '22:00' },
         ]
 
   return (
@@ -331,7 +360,7 @@ export default function TimelinePage() {
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
               }`}
             >
-              10:00 AM - 10:00 PM
+              10:00 AM - 7:00 PM
             </button>
             <button
               onClick={() => setTimelineMode('24H')}
@@ -405,7 +434,7 @@ export default function TimelinePage() {
                                 widthPct = Math.max(0.6, (seg.durationMin / 1440) * 100)
                               } else {
                                 const officeStartMin = 600 // 10:00 AM
-                                const officeTotalMin = 720 // 10:00 to 22:00 (12 hours)
+                                const officeTotalMin = 540 // 10:00 to 19:00 (9 hours: 10:00 AM - 7:00 PM)
                                 const segStart = seg.startMin
                                 const segEnd = seg.startMin + seg.durationMin
 
