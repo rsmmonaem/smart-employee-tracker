@@ -42,6 +42,16 @@ function formatDuration(totalSec: number): string {
   return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
 }
 
+function getLocalDateString(isoStr?: string | null, timeZone: string = 'Asia/Dhaka'): string {
+  if (!isoStr) return ''
+  try {
+    const d = new Date(isoStr)
+    return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+  } catch {
+    return (isoStr || '').slice(0, 10)
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const session = await getSessionContext()
@@ -75,6 +85,17 @@ export async function GET(req: Request) {
     if (usersErr) {
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
+
+    // Fetch platform settings for organization timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
+    const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
+    const isTargetToday = targetDate === todayStr
 
     // 24-hour timezone offset buffer (+/- 24h) so events in ANY client local timezone are fetched
     const startOfDay = new Date(new Date(targetDate).getTime() - 24 * 3600 * 1000).toISOString()
@@ -138,12 +159,28 @@ export async function GET(req: Request) {
         userTeams = [String(meta.team).trim()]
       }
       const primaryTeam = userTeams[0] || (meta.team || 'General')
-      const userEvents = (events || []).filter((e) => e.user_id === user.id)
+
+      // Strictly filter to events on targetDate in organization timezone
+      const userEvents = (events || []).filter(
+        (e) => e.user_id === user.id && getLocalDateString(e.started_at, orgTimezone) === targetDate
+      )
+
+      // Strictly filter to sessions on targetDate (or currently OPEN if target is today)
       const userSessions = (sessions || [])
-        .filter((s) => s.user_id === user.id)
+        .filter((s) => {
+          if (s.user_id !== user.id) return false
+          const sDate = getLocalDateString(s.clocked_in_at, orgTimezone)
+          if (sDate === targetDate) return true
+          if (isTargetToday && s.status === 'OPEN' && !s.clocked_out_at) return true
+          return false
+        })
         .sort((a, b) => new Date(a.clocked_in_at).getTime() - new Date(b.clocked_in_at).getTime())
+
       const userSession = userSessions[0] || null
-      const userScreenshots = (screenshots || []).filter((s) => s.user_id === user.id)
+
+      const userScreenshots = (screenshots || []).filter(
+        (s) => s.user_id === user.id && getLocalDateString(s.taken_at, orgTimezone) === targetDate
+      )
 
       const segments: Segment[] = []
 

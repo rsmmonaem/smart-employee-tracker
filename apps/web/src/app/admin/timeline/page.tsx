@@ -159,9 +159,8 @@ export default function TimelinePage() {
           return localDateStr === targetDateStr
         })
 
-        const eventsToUse = matchingEvents.length > 0 ? matchingEvents : emp.rawEvents
-
-        eventsToUse.forEach((ev, idx) => {
+        // Strictly use only events that match targetDate in client's local timezone
+        matchingEvents.forEach((ev, idx) => {
           const startD = new Date(ev.startedAt)
           const endD = new Date(ev.endedAt)
 
@@ -212,7 +211,7 @@ export default function TimelinePage() {
         })
       }
 
-      // 2. Fallback: If clientSegments is empty but user clocked in, render ALL attendance sessions
+      // 2. Fallback: If clientSegments is empty but user clocked in on targetDate, render attendance sessions matching targetDateStr
       if (clientSegments.length === 0) {
         const sessionsToUse =
           emp.attendanceSessions && emp.attendanceSessions.length > 0
@@ -232,7 +231,8 @@ export default function TimelinePage() {
           const clockInDate = new Date(sess.clocked_in_at)
           const localClockInDateStr = `${clockInDate.getFullYear()}-${String(clockInDate.getMonth() + 1).padStart(2, '0')}-${String(clockInDate.getDate()).padStart(2, '0')}`
 
-          if (localClockInDateStr === targetDateStr || !emp.rawEvents || emp.rawEvents.length === 0) {
+          // Strictly check localClockInDateStr matches targetDateStr
+          if (localClockInDateStr === targetDateStr) {
             const clockOutDate = sess.clocked_out_at ? new Date(sess.clocked_out_at) : new Date()
             const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
             const endMin = clockOutDate.getHours() * 60 + clockOutDate.getMinutes()
@@ -257,8 +257,8 @@ export default function TimelinePage() {
         })
       }
 
-      // 3. Fallback to server computed segments if any exist
-      if (clientSegments.length === 0 && emp.segments && emp.segments.length > 0) {
+      // 3. Fallback to server computed segments only if employee has activity events on targetDate
+      if (clientSegments.length === 0 && emp.hasEvents && emp.segments && emp.segments.length > 0) {
         return emp.segments
       }
 
