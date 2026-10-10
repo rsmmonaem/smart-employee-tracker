@@ -50,6 +50,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || todayStr
     const employeeIdFilter = searchParams.get('employeeId')
+    const teamFilter = searchParams.get('team')
     const targetTenant = searchParams.get('tenantId') || session.tenantId
 
     // 1. Fetch Users strictly within this tenant
@@ -134,8 +135,6 @@ export async function GET(req: Request) {
       sessionsQuery = sessionsQuery.eq('tenant_id', session.tenantId)
     }
 
-    const { data: rawSessions } = await sessionsQuery
-
     // 3. Fetch Activity Events
     let activityQuery = supabase
       .from('activity_events')
@@ -149,8 +148,6 @@ export async function GET(req: Request) {
     if (!session.isSuperAdmin && session.tenantId) {
       activityQuery = activityQuery.eq('tenant_id', session.tenantId)
     }
-
-    const { data: rawEvents } = await activityQuery
 
     // 4. Fetch Screenshots for attendance fallback
     let screenshotsQuery = supabase
@@ -166,33 +163,112 @@ export async function GET(req: Request) {
       screenshotsQuery = screenshotsQuery.eq('tenant_id', session.tenantId)
     }
 
-    const { data: rawScreenshots } = await screenshotsQuery
+    // 5. Fetch teams and team members
+    let teamsQuery = supabase.from('teams').select('id, name')
+    let teamMembersQuery = supabase.from('team_members').select('team_id, user_id')
+
+    if (!session.isSuperAdmin && session.tenantId) {
+      teamsQuery = teamsQuery.eq('tenant_id', session.tenantId)
+      teamMembersQuery = teamMembersQuery.eq('tenant_id', session.tenantId)
+    } else if (targetTenant) {
+      teamsQuery = teamsQuery.eq('tenant_id', targetTenant)
+      teamMembersQuery = teamMembersQuery.eq('tenant_id', targetTenant)
+    }
+
+    const [
+      { data: rawSessions },
+      { data: rawEvents },
+      { data: rawScreenshots },
+      { data: dbTeams },
+      { data: dbTeamMembers },
+      { data: authUsersData },
+    ] = await Promise.all([
+      sessionsQuery,
+      activityQuery,
+      screenshotsQuery,
+      teamsQuery,
+      teamMembersQuery,
+      supabase.auth.admin.listUsers().catch(() => ({ data: { users: [] } })),
+    ])
+
+    const teamsMap = new Map<string, string>()
+    ;(dbTeams || []).forEach((t) => teamsMap.set(t.id, t.name))
+
+    const authMap = new Map<string, any>(
+      ((authUsersData as any)?.users || []).map((u: any) => [u.id, u.user_metadata || {}])
+    )
+
+    // Helper to get user's primary team name
+    const getUserTeamName = (userId: string): string => {
+      const memberEntry = (dbTeamMembers || []).find((tm) => tm.user_id === userId)
+      if (memberEntry && teamsMap.has(memberEntry.team_id)) {
+        return teamsMap.get(memberEntry.team_id)!
+      }
+      const meta = authMap.get(userId) || {}
+      if (meta.team) return String(meta.team).trim()
+      if (Array.isArray(meta.teams) && meta.teams.length > 0) return String(meta.teams[0]).trim()
+      if (typeof meta.teams === 'string' && meta.teams) return meta.teams.split(',')[0].trim()
+      return 'Engineering'
+    }
+
+    // Helper to check if user belongs to a specific team
+    const userBelongsToTeam = (userId: string, targetTeamName: string): boolean => {
+      if (!targetTeamName || targetTeamName === 'All Team') return true
+      const lowerTarget = targetTeamName.toLowerCase().trim()
+
+      const memberEntries = (dbTeamMembers || []).filter((tm) => tm.user_id === userId)
+      for (const me of memberEntries) {
+        const tName = teamsMap.get(me.team_id)
+        if (tName && tName.toLowerCase().trim() === lowerTarget) return true
+      }
+
+      const meta = authMap.get(userId) || {}
+      if (meta.team && String(meta.team).toLowerCase().trim() === lowerTarget) return true
+      if (Array.isArray(meta.teams)) {
+        if (meta.teams.some((t: any) => String(t).toLowerCase().trim() === lowerTarget)) return true
+      }
+      if (typeof meta.teams === 'string' && meta.teams) {
+        if (meta.teams.toLowerCase().split(',').map((t: string) => t.trim()).includes(lowerTarget)) return true
+      }
+
+      if (lowerTarget === 'engineering' && memberEntries.length === 0 && !meta.team && !meta.teams) {
+        return true
+      }
+
+      return false
+    }
+
+    // Filter allUsers by teamFilter if specified
+    const teamFilteredUsers =
+      teamFilter && teamFilter !== 'All Team'
+        ? allUsers.filter((u) => userBelongsToTeam(u.id, teamFilter))
+        : allUsers
 
     // Filter in-memory strictly by exact targetDate in org timezone
     const sessions = (rawSessions || []).filter((s) => formatLocalDateString(s.clocked_in_at, orgTimezone) === targetDate)
     const events = (rawEvents || []).filter((e) => formatLocalDateString(e.started_at, orgTimezone) === targetDate)
     const screenshots = (rawScreenshots || []).filter((s) => formatLocalDateString(s.taken_at, orgTimezone) === targetDate)
 
-    // 5. Transform into employee list for dropdown
-    const employees = allUsers.map((u) => ({
+    // 6. Transform into employee list for dropdown (including their real team)
+    const employees = teamFilteredUsers.map((u) => ({
       id: u.id,
       name: u.full_name || u.email.split('@')[0],
       email: u.email,
       avatar: (u.full_name || u.email).charAt(0).toUpperCase(),
       role: u.role,
+      team: getUserTeamName(u.id),
     }))
 
     // Filter users if an employee filter is specified
     const targetUsers =
       employeeIdFilter && employeeIdFilter !== 'ALL'
-        ? allUsers.filter((u) => u.id === employeeIdFilter)
-        : allUsers
+        ? teamFilteredUsers.filter((u) => u.id === employeeIdFilter)
+        : teamFilteredUsers
 
-    // Filter events for telemetry/apps usage if employee filter is active
-    const targetEvents =
-      employeeIdFilter && employeeIdFilter !== 'ALL'
-        ? events.filter((e) => e.user_id === employeeIdFilter)
-        : events
+    const targetUserIds = new Set(targetUsers.map((u) => u.id))
+
+    // Filter events for telemetry/apps usage strictly for targetUsers
+    const targetEvents = events.filter((e) => targetUserIds.has(e.user_id))
 
     // 6. Build Attendance Records (Aggregating all sessions on targetDate)
     const lateRecords: Array<{
@@ -410,7 +486,7 @@ export async function GET(req: Request) {
       return {
         id: `key-${u.id}`,
         employeeName: name,
-        team: 'Engineering',
+        team: getUserTeamName(u.id),
         totalKeystrokes,
         kpm,
         mouseEvents,
@@ -427,11 +503,20 @@ export async function GET(req: Request) {
     const hourlyDistribution = hourlySlots.map((slot, index) => {
       const hourVal = 10 + index
       const eventsInHour = targetEvents.filter((e) => {
-        const h = new Date(e.started_at).getHours()
-        return h === hourVal
+        try {
+          const d = new Date(e.started_at)
+          const hourStr = new Intl.DateTimeFormat('en-US', {
+            timeZone: orgTimezone,
+            hour: 'numeric',
+            hour12: false,
+          }).format(d)
+          return parseInt(hourStr, 10) === hourVal
+        } catch {
+          return new Date(e.started_at).getHours() === hourVal
+        }
       })
       const count = eventsInHour.length
-      const keystrokes = count > 0 ? count * 180 + 350 : (index === 3 ? 120 : count > 0 ? 250 : 0)
+      const keystrokes = count > 0 ? count * 180 + 350 : 0
       const mouse = Math.round(keystrokes * 0.45)
       return { slot, keystrokes, mouse }
     })

@@ -29,6 +29,7 @@ import {
 import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
 import { getLocalTodayString } from '@/utils/date'
+import { useAdminFilter } from '../admin-filter-context'
 
 type ReportCategory =
   | 'daily-attendance'
@@ -113,12 +114,17 @@ const REPORT_SIDEBAR_ITEMS: Array<{
 ]
 
 export default function ReportsPage() {
+  const {
+    selectedDate,
+    setSelectedDate,
+    selectedTeam,
+    searchQuery,
+    refreshTrigger,
+  } = useAdminFilter()
+
   const [activeReport, setActiveReport] = useState<ReportCategory>('daily-attendance')
   const [activeSubTab, setActiveSubTab] = useState<AttendanceSubTab>('worked')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL')
-  const [selectedDate, setSelectedDate] = useState<string>(
-    () => getLocalTodayString()
-  )
   const [loading, setLoading] = useState(false)
 
   // Remote data state
@@ -195,6 +201,9 @@ export default function ReportsPage() {
       setLoading(true)
       const params = new URLSearchParams()
       if (selectedDate) params.set('date', selectedDate)
+      if (selectedTeam && selectedTeam !== 'All Team') {
+        params.set('team', selectedTeam)
+      }
       if (selectedEmployeeId && selectedEmployeeId !== 'ALL') {
         params.set('employeeId', selectedEmployeeId)
       }
@@ -218,11 +227,11 @@ export default function ReportsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedDate, selectedEmployeeId])
+  }, [selectedDate, selectedTeam, selectedEmployeeId])
 
   useEffect(() => {
     fetchReportsData()
-  }, [fetchReportsData])
+  }, [fetchReportsData, refreshTrigger])
 
   // Supabase Realtime subscription
   useEffect(() => {
@@ -314,6 +323,24 @@ export default function ReportsPage() {
     })
   }, [keystrokeRecords, keySortField, keySortOrder])
 
+  // Filtered keystroke records (filtered by selectedTeam and searchQuery)
+  const filteredKeystrokes = useMemo(() => {
+    let list = sortedKeystrokes
+    if (selectedTeam && selectedTeam !== 'All Team') {
+      const qTeam = selectedTeam.toLowerCase().trim()
+      list = list.filter((r) => r.team.toLowerCase().trim() === qTeam)
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      list = list.filter(
+        (r) =>
+          r.employeeName.toLowerCase().includes(q) ||
+          r.team.toLowerCase().includes(q)
+      )
+    }
+    return list
+  }, [sortedKeystrokes, selectedTeam, searchQuery])
+
   // Sorted login IP records
   const sortedLoginIp = useMemo(() => {
     return [...loginIpRecords].sort((a, b) => {
@@ -327,6 +354,23 @@ export default function ReportsPage() {
     })
   }, [loginIpRecords, ipSortField, ipSortOrder])
 
+  // Filtered login IP records (filtered by searchQuery)
+  const filteredLoginIp = useMemo(() => {
+    let list = sortedLoginIp
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim()
+      list = list.filter(
+        (r) =>
+          r.employeeName.toLowerCase().includes(q) ||
+          r.email.toLowerCase().includes(q) ||
+          r.ipAddress.toLowerCase().includes(q) ||
+          r.device.toLowerCase().includes(q) ||
+          (r.appClient && r.appClient.toLowerCase().includes(q))
+      )
+    }
+    return list
+  }, [sortedLoginIp, searchQuery])
+
   const handleKeySort = (field: keyof KeystrokeActivityRecord) => {
     if (keySortField === field) {
       setKeySortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
@@ -338,37 +382,42 @@ export default function ReportsPage() {
 
   const handleIpSort = (field: keyof LoginIpRecord) => {
     if (ipSortField === field) {
-      setIpSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      setKeySortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
     } else {
       setIpSortField(field)
       setIpSortOrder('desc')
     }
   }
-  // Filter attendance records by active subtab
+
+  // Filter attendance records by active subtab & search query
   const filteredAttendance = useMemo(() => {
     return attendanceRecords.filter((emp) => {
-      if (activeSubTab === 'worked') return emp.status === 'PRESENT'
-      if (activeSubTab === 'late') return emp.status === 'LATE'
-      if (activeSubTab === 'leave') return emp.status === 'ON_LEAVE'
-      if (activeSubTab === 'absent') return emp.status === 'ABSENT'
+      if (activeSubTab === 'worked' && emp.status !== 'PRESENT' && emp.status !== 'LATE') return false
+      if (activeSubTab === 'late' && emp.status !== 'LATE') return false
+      if (activeSubTab === 'leave' && emp.status !== 'ON_LEAVE') return false
+      if (activeSubTab === 'absent' && emp.status !== 'ABSENT') return false
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        if (!emp.name.toLowerCase().includes(q) && !(emp as any).email?.toLowerCase().includes(q)) return false
+      }
       return true
     })
-  }, [attendanceRecords, activeSubTab])
+  }, [attendanceRecords, activeSubTab, searchQuery])
 
-  // Total keystroke statistics
+  // Total keystroke statistics based on filtered records
   const totalKeystrokesToday = useMemo(() => {
-    return keystrokeRecords.reduce((acc, r) => acc + r.totalKeystrokes, 0)
-  }, [keystrokeRecords])
+    return filteredKeystrokes.reduce((acc, r) => acc + r.totalKeystrokes, 0)
+  }, [filteredKeystrokes])
 
   const totalMouseEventsToday = useMemo(() => {
-    return keystrokeRecords.reduce((acc, r) => acc + r.mouseEvents, 0)
-  }, [keystrokeRecords])
+    return filteredKeystrokes.reduce((acc, r) => acc + r.mouseEvents, 0)
+  }, [filteredKeystrokes])
 
   const avgKpm = useMemo(() => {
-    const active = keystrokeRecords.filter((r) => r.kpm > 0)
+    const active = filteredKeystrokes.filter((r) => r.kpm > 0)
     if (active.length === 0) return 0
     return Math.round(active.reduce((acc, r) => acc + r.kpm, 0) / active.length)
-  }, [keystrokeRecords])
+  }, [filteredKeystrokes])
 
   return (
     <div className="min-h-full bg-white dark:bg-gray-950 font-sans text-gray-800 dark:text-gray-100 pb-16 flex flex-col">
@@ -850,42 +899,50 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
-                      {sortedKeystrokes.map((rec) => (
-                        <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
-                          <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
-                              {rec.employeeName.charAt(0)}
-                            </span>
-                            <span>{rec.employeeName}</span>
-                          </td>
-                          <td className="py-3.5 px-4 text-gray-500">
-                            {rec.team}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">
-                            {rec.totalKeystrokes.toLocaleString()}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-semibold text-blue-600 dark:text-blue-400">
-                            {rec.kpm} KPM
-                          </td>
-                          <td className="py-3.5 px-4 font-mono text-gray-600 dark:text-gray-300">
-                            {rec.mouseEvents.toLocaleString()}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
-                            {rec.activeTypingTime}
-                          </td>
-                          <td className="py-3.5 px-5 text-right">
-                            <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                                rec.intensity === 'HIGH'
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                              }`}
-                            >
-                              <span>{rec.intensity} ({rec.intensityScore}%)</span>
-                            </span>
+                      {filteredKeystrokes.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-xs text-gray-400">
+                            No input activity records found for the selected filters.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        filteredKeystrokes.map((rec) => (
+                          <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
+                            <td className="py-3.5 px-5 font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px]">
+                                {rec.employeeName.charAt(0)}
+                              </span>
+                              <span>{rec.employeeName}</span>
+                            </td>
+                            <td className="py-3.5 px-4 text-gray-500">
+                              {rec.team}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-bold text-gray-900 dark:text-white">
+                              {rec.totalKeystrokes.toLocaleString()}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-semibold text-blue-600 dark:text-blue-400">
+                              {rec.kpm} KPM
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-gray-600 dark:text-gray-300">
+                              {rec.mouseEvents.toLocaleString()}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-medium text-gray-700 dark:text-gray-300">
+                              {rec.activeTypingTime}
+                            </td>
+                            <td className="py-3.5 px-5 text-right">
+                              <span
+                                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                                  rec.intensity === 'HIGH'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                }`}
+                              >
+                                <span>{rec.intensity} ({rec.intensityScore}%)</span>
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -953,7 +1010,7 @@ export default function ReportsPage() {
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
                   <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Total Active Sessions</span>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {loginIpRecords.filter((r) => r.status === 'ONLINE').length} / {loginIpRecords.length}
+                    {filteredLoginIp.filter((r) => r.status === 'ONLINE').length} / {filteredLoginIp.length}
                   </div>
                   <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 inline-block">
                     ● Currently online employees
@@ -963,7 +1020,7 @@ export default function ReportsPage() {
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
                   <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Distinct IP Subnets</span>
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                    {new Set(loginIpRecords.filter((r) => r.ipAddress !== '—').map((r) => r.ipAddress)).size}
+                    {new Set(filteredLoginIp.filter((r) => r.ipAddress !== '—').map((r) => r.ipAddress)).size}
                   </div>
                   <span className="text-xs text-gray-400 font-mono mt-1 inline-block">
                     Office broadband &amp; remote networks
@@ -1035,7 +1092,14 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-150 dark:divide-gray-800">
-                      {sortedLoginIp.map((rec) => (
+                      {filteredLoginIp.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-xs text-gray-400">
+                            No login IP records found for the selected filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredLoginIp.map((rec) => (
                         <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-850/40 transition-colors">
                           <td className="py-3.5 px-5">
                             <div className="flex items-center gap-2">
@@ -1123,7 +1187,8 @@ export default function ReportsPage() {
                             </span>
                           </td>
                         </tr>
-                      ))}
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
