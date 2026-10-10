@@ -54,11 +54,11 @@ export default function LandingHero() {
       <div className="wt-container wt-hero-master-container">
         {/* LEFT COLUMN: Live Semantic Crisp Content */}
         <div className="wt-hero-left-content">
-          {/* Badge: ● Employee Monitoring Software */}
-          <div className="wt-hero-pill-badge">
+          {/* Badge: ● Employee Monitoring Software & What's New */}
+          <div className="wt-hero-pill-badge" style={{ gap: '8px' }}>
             <span className="wt-badge-dot-live"></span>
-            <span className="wt-badge-cyan">Employee</span>
-            <span className="wt-badge-white">Monitoring Software</span>
+            <span className="wt-badge-cyan">Tracmatrix 2.0 Released</span>
+            <span className="wt-badge-white">&bull; Multi-Session &bull; Idle Auto-Pause &bull; Boot Auto-Start</span>
           </div>
 
           {/* Main Headline */}
@@ -90,21 +90,28 @@ export default function LandingHero() {
             </button>
           </div>
 
-          {/* Trust Checkmarks */}
+          {/* Trust Checkmarks featuring major updates */}
           <div className="wt-hero-trust-checks">
             <div className="wt-trust-check-item">
               <svg className="wt-check-icon-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="8" fill="#1E3A8A"/>
                 <path d="M5 8.2L7 10.2L11 6" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>No credit card required</span>
+              <span>Multi-session time tracking</span>
             </div>
             <div className="wt-trust-check-item">
               <svg className="wt-check-icon-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="8" fill="#1E3A8A"/>
                 <path d="M5 8.2L7 10.2L11 6" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              <span>Setup in minutes</span>
+              <span>Idle auto-pause &amp; audio chimes</span>
+            </div>
+            <div className="wt-trust-check-item">
+              <svg className="wt-check-icon-svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="8" fill="#1E3A8A"/>
+                <path d="M5 8.2L7 10.2L11 6" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span>Windows &amp; Mac boot auto-start</span>
             </div>
           </div>
         </div>

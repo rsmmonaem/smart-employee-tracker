@@ -74,7 +74,7 @@ export default function LandingFeatures() {
             </div>
           </div>
 
-          {/* 2. Screenshots & Timelapse */}
+          {/* 2. Screenshots & Smart Retention */}
           <div className="wt-feature-card wt-feat-purple">
             <div className="wt-card-top-row">
               <div className="wt-feature-icon-box wt-bg-grad-purple">
@@ -83,11 +83,11 @@ export default function LandingFeatures() {
                   <circle cx="12" cy="13" r="4"/>
                 </svg>
               </div>
-              <span className="wt-card-tag-badge">AUTOCAPTURE</span>
+              <span className="wt-card-tag-badge">AUTO-RETENTION &amp; CLEANUP</span>
             </div>
 
-            <h3 className="wt-feature-title">Screenshots &amp; Timelapse</h3>
-            <p className="wt-feature-desc">Capture periodic screenshots and timelapse videos for full visibility.</p>
+            <h3 className="wt-feature-title">Screenshots &amp; Smart Retention</h3>
+            <p className="wt-feature-desc">Capture periodic screenshots with day-wise storage stats, bulk deletion, and automated 7/30-day retention policies.</p>
 
             {/* Micro Software UI Simulation: 3 Screenshots strip */}
             <div className="wt-feature-micro-demo">
@@ -104,13 +104,13 @@ export default function LandingFeatures() {
                 </div>
               </div>
               <div className="wt-shot-footer">
-                <span className="wt-shutter-status">Interval: Every 5 Mins &bull; 1080p HD</span>
-                <span className="wt-privacy-blur">Privacy Blur: ON</span>
+                <span className="wt-shutter-status">Day-Wise Size Breakdown &bull; 1080p</span>
+                <span className="wt-privacy-blur">Auto-Purge: 30 Days</span>
               </div>
             </div>
           </div>
 
-          {/* 3. Time Tracking */}
+          {/* 3. Multi-Session Time Tracking */}
           <div className="wt-feature-card wt-feat-mint">
             <div className="wt-card-top-row">
               <div className="wt-feature-icon-box wt-bg-grad-mint">
@@ -119,11 +119,11 @@ export default function LandingFeatures() {
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
               </div>
-              <span className="wt-card-tag-badge">ACCURATE</span>
+              <span className="wt-card-tag-badge">MULTI-SESSION SYNC</span>
             </div>
 
-            <h3 className="wt-feature-title">Time Tracking</h3>
-            <p className="wt-feature-desc">Track productive hours, idle time and detailed work logs.</p>
+            <h3 className="wt-feature-title">Multi-Session Smart Timesheets</h3>
+            <p className="wt-feature-desc">Flawlessly records multiple daily clock-in/out shifts and breaks into an interactive visual timeline without losing hours.</p>
 
             {/* Micro Software UI Simulation: Live Digital Stopwatch */}
             <div className="wt-feature-micro-demo">
@@ -135,15 +135,15 @@ export default function LandingFeatures() {
                 </div>
                 <div className="wt-timer-pill">
                   <span className="wt-pulse-core"></span>
-                  TRACKING
+                  3 SESSIONS
                 </div>
               </div>
               <div className="wt-timer-bar-wrap">
                 <div className="wt-timer-bar-fill" style={{ width: '88%' }}></div>
               </div>
               <div className="wt-timer-split">
-                <span>Productive: 6h 52m</span>
-                <span className="wt-text-green font-bold">88% Score</span>
+                <span>Total Worked: 6h 52m</span>
+                <span className="wt-text-green font-bold">100% Synced</span>
               </div>
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function LandingFeatures() {
             </div>
           </div>
 
-          {/* 5. Attendance Management */}
+          {/* 5. Attendance & Single Session Guard */}
           <div className="wt-feature-card wt-feat-indigo">
             <div className="wt-card-top-row">
               <div className="wt-feature-icon-box wt-bg-grad-indigo">
@@ -199,27 +199,27 @@ export default function LandingFeatures() {
                   <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/>
                 </svg>
               </div>
-              <span className="wt-card-tag-badge">AUTOMATED</span>
+              <span className="wt-card-tag-badge">1-DEVICE GUARD &bull; AUTO-BOOT</span>
             </div>
 
-            <h3 className="wt-feature-title">Attendance Management</h3>
-            <p className="wt-feature-desc">Track check-ins, check-outs, leaves and overtime hours automatically.</p>
+            <h3 className="wt-feature-title">Session Guard &amp; Boot Auto-Start</h3>
+            <p className="wt-feature-desc">Guarantees one active session per user to eliminate duplicate shifts, with native Windows &amp; Mac auto-launch on startup.</p>
 
             {/* Micro Software UI Simulation: Punch Status Card */}
             <div className="wt-feature-micro-demo">
               <div className="wt-punch-card">
                 <div className="wt-punch-left">
-                  <span className="wt-punch-type">Clock In</span>
-                  <strong className="wt-punch-time">09:00 AM</strong>
+                  <span className="wt-punch-type">Single Session</span>
+                  <strong className="wt-punch-time">Device Secured</strong>
                 </div>
                 <div className="wt-punch-badge on-time">
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>
-                  On-Time
+                  Boot Sync ON
                 </div>
               </div>
               <div className="wt-punch-sub">
-                <span>Work Shift: 9:00 AM &ndash; 6:00 PM</span>
-                <span className="wt-overtime-pill">+0.5h OT</span>
+                <span>Multi-Device Conflict Protection</span>
+                <span className="wt-overtime-pill">Enforced</span>
               </div>
             </div>
           </div>
@@ -262,7 +262,7 @@ export default function LandingFeatures() {
             </div>
           </div>
 
-          {/* 7. Alerts & Risk Users */}
+          {/* 7. Interactive Idle Auto-Pause & Audio Alerts */}
           <div className="wt-feature-card wt-feat-rose">
             <div className="wt-card-top-row">
               <div className="wt-feature-icon-box wt-bg-grad-rose">
@@ -271,26 +271,26 @@ export default function LandingFeatures() {
                   <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                 </svg>
               </div>
-              <span className="wt-card-alert-badge">SECURITY</span>
+              <span className="wt-card-alert-badge">INTERACTIVE IDLE PAUSE</span>
             </div>
 
-            <h3 className="wt-feature-title">Alerts &amp; Risk Users</h3>
-            <p className="wt-feature-desc">Detect unusual behavior, policy violations and high-risk users instantly.</p>
+            <h3 className="wt-feature-title">Idle Auto-Pause &amp; Audio Chimes</h3>
+            <p className="wt-feature-desc">Interactive &ldquo;Are you still working?&rdquo; alert with custom admin-uploaded audio tunes before pausing idle work time.</p>
 
             {/* Micro Software UI Simulation: Instant Security Toast Alert */}
             <div className="wt-feature-micro-demo">
               <div className="wt-alert-toast">
                 <span className="wt-alert-icon-ring">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E11D48" strokeWidth="3"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E11D48" strokeWidth="3"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                 </span>
                 <div className="wt-alert-msg">
-                  <strong className="wt-alert-title">Excessive Idle Detected</strong>
-                  <span className="wt-alert-sub">User away from desk &gt; 45 mins</span>
+                  <strong className="wt-alert-title">Are you still working?</strong>
+                  <span className="wt-alert-sub">Chime Playing &bull; 60s countdown</span>
                 </div>
               </div>
               <div className="wt-alert-status-bar">
-                <span>Smart Audit Protection: Active</span>
-                <span className="wt-text-green font-bold">&check; Secured</span>
+                <span>Custom Chime Tune: Synced</span>
+                <span className="wt-text-green font-bold">&check; Interactive</span>
               </div>
             </div>
           </div>

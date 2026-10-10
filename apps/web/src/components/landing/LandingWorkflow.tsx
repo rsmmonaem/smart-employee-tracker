@@ -367,7 +367,7 @@ export default function LandingWorkflow() {
                   <path d="M3.5 8.2L6.5 11.2L12.5 4.8" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="wt-check-text">Monitor from any device</span>
+              <span className="wt-check-text"><strong>Multi-Session Tracking:</strong> Zero missed hours across multiple daily clock-ins</span>
             </div>
 
             <div className="wt-check-item">
@@ -376,7 +376,7 @@ export default function LandingWorkflow() {
                   <path d="M3.5 8.2L6.5 11.2L12.5 4.8" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="wt-check-text">Easy and simple to use</span>
+              <span className="wt-check-text"><strong>Idle Auto-Pause:</strong> Interactive &ldquo;Still working?&rdquo; alert with custom audio chimes</span>
             </div>
 
             <div className="wt-check-item">
@@ -385,7 +385,7 @@ export default function LandingWorkflow() {
                   <path d="M3.5 8.2L6.5 11.2L12.5 4.8" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="wt-check-text">Secure and reliable</span>
+              <span className="wt-check-text"><strong>Single Session Guard:</strong> Enforces one active workstation per user seamlessly</span>
             </div>
 
             <div className="wt-check-item">
@@ -394,7 +394,7 @@ export default function LandingWorkflow() {
                   <path d="M3.5 8.2L6.5 11.2L12.5 4.8" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-              <span className="wt-check-text">Improve productivity &amp; performance</span>
+              <span className="wt-check-text"><strong>Smart Retention &amp; Auto-Start:</strong> Day-wise screenshot cleanup and boot startup</span>
             </div>
           </div>
 
