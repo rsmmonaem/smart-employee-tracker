@@ -231,30 +231,69 @@ export async function GET(req: Request) {
       })
 
       // Multi-session Pause-Resume duration accumulation
-      // Work hour counter only counts from expectedClockInMs onwards
-      // Work after expectedClockOutMs is classified as Overtime
-      let totalRegularWorkSec = 0
-      let totalOvertimeSec = 0
+      // Calculate start and end of targetDate in ms
+      const dayStartMs = getTargetTimeMs(targetDate, 0, orgTimezone)
+      const dayEndMs = getTargetTimeMs(targetDate, 1440, orgTimezone)
+      const nowMs = Date.now()
+      const effectiveCapMs = Math.min(dayEndMs, nowMs)
 
+      // Collect valid intervals clamped to the target day
+      const intervals: { start: number; end: number }[] = []
       todaySessions.forEach((s) => {
         const rawStart = new Date(s.clocked_in_at).getTime()
         const rawEnd = s.clocked_out_at
           ? new Date(s.clocked_out_at).getTime()
           : s.status === 'OPEN'
-          ? Date.now()
+          ? effectiveCapMs
           : rawStart
 
-        // 1. Regular shift window: max(rawStart, expectedClockInMs) up to min(rawEnd, expectedClockOutMs)
-        const regularStart = Math.max(rawStart, expectedClockInMs)
-        const regularEnd = Math.min(rawEnd, expectedClockOutMs)
-        if (regularEnd > regularStart) {
-          totalRegularWorkSec += Math.floor((regularEnd - regularStart) / 1000)
+        const clampedStart = Math.max(rawStart, dayStartMs)
+        const clampedEnd = Math.min(rawEnd, effectiveCapMs)
+
+        if (clampedEnd > clampedStart) {
+          intervals.push({ start: clampedStart, end: clampedEnd })
+        }
+      })
+
+      // Merge overlapping intervals so duplicate/open sessions NEVER double count
+      intervals.sort((a, b) => a.start - b.start)
+      const mergedIntervals: { start: number; end: number }[] = []
+      for (const int of intervals) {
+        if (mergedIntervals.length === 0) {
+          mergedIntervals.push({ ...int })
+        } else {
+          const last = mergedIntervals[mergedIntervals.length - 1]
+          if (int.start <= last.end) {
+            last.end = Math.max(last.end, int.end)
+          } else {
+            mergedIntervals.push({ ...int })
+          }
+        }
+      }
+
+      let totalRegularWorkSec = 0
+      let totalOvertimeSec = 0
+
+      mergedIntervals.forEach((int) => {
+        // 1. Regular shift window: max(start, expectedClockInMs) up to min(end, expectedClockOutMs)
+        const regStart = Math.max(int.start, expectedClockInMs)
+        const regEnd = Math.min(int.end, expectedClockOutMs)
+        if (regEnd > regStart) {
+          totalRegularWorkSec += Math.floor((regEnd - regStart) / 1000)
         }
 
-        // 2. Overtime window: work performed after expectedClockOutMs
-        const overtimeStart = Math.max(rawStart, expectedClockOutMs)
-        if (rawEnd > overtimeStart) {
-          totalOvertimeSec += Math.floor((rawEnd - overtimeStart) / 1000)
+        // 2. Overtime window: work performed after expectedClockOutMs or before expectedClockInMs
+        if (int.start < expectedClockInMs) {
+          const earlyEnd = Math.min(int.end, expectedClockInMs)
+          if (earlyEnd > int.start) {
+            totalOvertimeSec += Math.floor((earlyEnd - int.start) / 1000)
+          }
+        }
+        if (int.end > expectedClockOutMs) {
+          const lateStart = Math.max(int.start, expectedClockOutMs)
+          if (int.end > lateStart) {
+            totalOvertimeSec += Math.floor((int.end - lateStart) / 1000)
+          }
         }
       })
 

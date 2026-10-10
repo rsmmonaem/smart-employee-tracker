@@ -104,11 +104,34 @@ export async function GET(req: Request) {
       let totalWorkSec = 0
       let totalBreakSec = 0
 
+      const intervals: { start: number; end: number }[] = []
+      const nowMs = Date.now()
       userSessions.forEach((s) => {
         const inT = new Date(s.clocked_in_at).getTime()
-        const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : Date.now()
-        totalWorkSec += Math.max(0, Math.round((outT - inT) / 1000))
+        const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+        if (outT > inT) {
+          intervals.push({ start: inT, end: outT })
+        }
         totalBreakSec += s.total_break_sec || 0
+      })
+
+      intervals.sort((a, b) => a.start - b.start)
+      const merged: { start: number; end: number }[] = []
+      for (const int of intervals) {
+        if (merged.length === 0) {
+          merged.push({ ...int })
+        } else {
+          const last = merged[merged.length - 1]
+          if (int.start <= last.end) {
+            last.end = Math.max(last.end, int.end)
+          } else {
+            merged.push({ ...int })
+          }
+        }
+      }
+
+      merged.forEach((m) => {
+        totalWorkSec += Math.floor((m.end - m.start) / 1000)
       })
 
       let idleSec = 0
@@ -127,15 +150,15 @@ export async function GET(req: Request) {
         }
       })
 
-      // If user has not clocked in today, skip from risk assessment
-      if (userSessions.length === 0 && userEvents.length === 0) {
+      // If user has not worked or has less than 1 minute of work, skip from active leaderboard/risk assessment
+      const activeEffectiveSec = Math.max(0, totalWorkSec - totalBreakSec)
+      if (activeEffectiveSec < 60 && userEvents.length === 0) {
         return
       }
 
-      const activeEffectiveSec = Math.max(1, totalWorkSec - totalBreakSec)
-      const idlePercent = Math.min(100, Math.round((idleSec / activeEffectiveSec) * 100))
-      const unprodPercent = Math.min(100, Math.round((unprodSec / activeEffectiveSec) * 100))
-      const prodPercent = Math.min(100, Math.round((prodSec / activeEffectiveSec) * 100))
+      const idlePercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((idleSec / activeEffectiveSec) * 100)) : 0
+      const unprodPercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((unprodSec / activeEffectiveSec) * 100)) : 0
+      const prodPercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((prodSec / activeEffectiveSec) * 100)) : 0
 
       // Check Late
       const firstSession = userSessions[0]
@@ -150,7 +173,8 @@ export async function GET(req: Request) {
       // Check Burnout: working > 5 hours with zero break
       const isBurnout = totalWorkSec > 18000 && totalBreakSec < 300
 
-      // Performance Score (0-100%)
+      // Performance Score (0-100%) - Minimum 10%
+      // Base score is weighted on productive time (up to 50 pts), low idle (up to 30 pts), punctuality (20 pts)
       const performanceScore = Math.max(
         10,
         Math.min(

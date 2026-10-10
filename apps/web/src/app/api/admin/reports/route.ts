@@ -240,14 +240,37 @@ export async function GET(req: Request) {
           ? formatClockTime(lastSession.clocked_out_at)
           : '-'
 
-        let totalSec = 0
         let breakSec = 0
+        const intervals: { start: number; end: number }[] = []
+        const nowMs = Date.now()
 
         userSessions.forEach((s) => {
           const inT = new Date(s.clocked_in_at).getTime()
-          const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : Date.now()
-          totalSec += Math.max(0, Math.round((outT - inT) / 1000))
+          const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+          if (outT > inT) {
+            intervals.push({ start: inT, end: outT })
+          }
           breakSec += s.total_break_sec || 0
+        })
+
+        intervals.sort((a, b) => a.start - b.start)
+        const merged: { start: number; end: number }[] = []
+        for (const int of intervals) {
+          if (merged.length === 0) {
+            merged.push({ ...int })
+          } else {
+            const last = merged[merged.length - 1]
+            if (int.start <= last.end) {
+              last.end = Math.max(last.end, int.end)
+            } else {
+              merged.push({ ...int })
+            }
+          }
+        }
+
+        let totalSec = 0
+        merged.forEach((m) => {
+          totalSec += Math.floor((m.end - m.start) / 1000)
         })
 
         const effectiveSec = Math.max(0, totalSec - breakSec)
