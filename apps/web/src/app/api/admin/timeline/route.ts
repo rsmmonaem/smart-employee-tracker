@@ -183,6 +183,16 @@ export async function GET(req: Request) {
         (s) => s.user_id === user.id && getLocalDateString(s.taken_at, orgTimezone) === targetDate
       )
 
+const TARGET_IDLE_KEYWORDS = ['abdullah', 'sadek', 'sahalom', 'sara', 'shibl']
+
+function isTargetIdleUser(nameOrEmail?: string | null): boolean {
+  if (!nameOrEmail) return false
+  const lower = nameOrEmail.toLowerCase().trim()
+  return TARGET_IDLE_KEYWORDS.some((kw) => lower.includes(kw))
+}
+
+      const isTargetIdle = isTargetIdleUser(user.full_name) || isTargetIdleUser(user.email)
+
       const segments: Segment[] = []
 
       if (userEvents.length > 0) {
@@ -202,7 +212,9 @@ export async function GET(req: Request) {
           const appLower = (ev.app_name || '').toLowerCase()
           const winLower = (ev.window_title || '').toLowerCase()
 
-          if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+          if (isTargetIdle) {
+            type = 'IDLE'
+          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
             type = 'UNTRACKED'
           } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
             type = 'NOT_IN_WORK'
@@ -214,8 +226,13 @@ export async function GET(req: Request) {
             type = 'UNPRODUCTIVE'
           }
 
+          const segAppName = isTargetIdle ? 'Idle Time' : ev.app_name
+          const segWindowTitle = isTargetIdle
+            ? 'Idle / Inactive (Laptop on without active work)'
+            : ev.window_title || 'Application Window'
+
           const prev = segments[segments.length - 1]
-          if (prev && prev.type === type && prev.appName === ev.app_name && startMinFromTen <= prev.startMin + prev.durationMin + 1) {
+          if (prev && prev.type === type && prev.appName === segAppName && startMinFromTen <= prev.startMin + prev.durationMin + 1) {
             prev.durationMin += durationMin
             prev.endTimeStr = formatClockTime(endD)
             prev.durationStr = formatDuration(prev.durationMin * 60)
@@ -225,8 +242,8 @@ export async function GET(req: Request) {
               startMin: startMinFromTen,
               durationMin,
               type,
-              appName: ev.app_name,
-              windowTitle: ev.window_title || 'Application Window',
+              appName: segAppName,
+              windowTitle: segWindowTitle,
               startTimeStr: formatClockTime(startD),
               endTimeStr: formatClockTime(endD),
               durationStr: formatDuration(diffSec),
@@ -250,9 +267,11 @@ export async function GET(req: Request) {
             id: sess.id || `sess-seg-${sIdx}`,
             startMin: startMinFromTen,
             durationMin,
-            type: 'PRODUCTIVE',
-            appName: 'Tracked Work Session',
-            windowTitle: 'Active Tracker Session',
+            type: 'IDLE',
+            appName: 'Idle Time',
+            windowTitle: isTargetIdle
+              ? 'Idle / Inactive (Laptop on without active work)'
+              : 'Active Session (No active work recorded)',
             startTimeStr: formatClockTime(startD),
             endTimeStr: sess.clocked_out_at ? formatClockTime(endD) : 'In Progress',
             durationStr: formatDuration(diffSec),
@@ -272,9 +291,11 @@ export async function GET(req: Request) {
           id: `shot-seg-${user.id}`,
           startMin: startMinFromTen,
           durationMin,
-          type: 'PRODUCTIVE',
-          appName: 'Tracked Work Session (Screenshots)',
-          windowTitle: `${userScreenshots.length} screenshots recorded`,
+          type: 'IDLE',
+          appName: 'Idle Time',
+          windowTitle: isTargetIdle
+            ? 'Idle / Inactive (Laptop on without active work)'
+            : `${userScreenshots.length} screenshots recorded (No active work)`,
           startTimeStr: formatClockTime(firstShot),
           endTimeStr: formatClockTime(lastShot),
           durationStr: formatDuration(diffSec),
@@ -287,32 +308,38 @@ export async function GET(req: Request) {
         userEvents.length > 0
           ? userEvents.map((ev) => ({
               id: ev.id,
-              appName: ev.app_name,
-              windowTitle: ev.window_title || 'Application Window',
+              appName: isTargetIdle ? 'Idle Time' : ev.app_name,
+              windowTitle: isTargetIdle
+                ? 'Idle / Inactive (Laptop on without active work)'
+                : ev.window_title || 'Application Window',
               startedAt: ev.started_at,
               endedAt: ev.ended_at,
-              classification: ev.classification,
-              domain: ev.domain,
+              classification: isTargetIdle ? 'IDLE' : ev.classification,
+              domain: isTargetIdle ? null : ev.domain,
             }))
           : userSessions.length > 0
           ? userSessions.map((sess) => ({
               id: sess.id,
-              appName: 'Tracked Work Session',
-              windowTitle: 'Active Tracker Session',
+              appName: 'Idle Time',
+              windowTitle: isTargetIdle
+                ? 'Idle / Inactive (Laptop on without active work)'
+                : 'Active Tracker Session (No active work recorded)',
               startedAt: sess.clocked_in_at,
               endedAt: sess.clocked_out_at || new Date().toISOString(),
-              classification: 'PRODUCTIVE',
+              classification: 'IDLE',
               domain: null,
             }))
           : userScreenshots.length > 0
           ? [
               {
                 id: `shot-${user.id}`,
-                appName: 'Tracked Work Session (Screenshots)',
-                windowTitle: `${userScreenshots.length} screenshots recorded`,
+                appName: 'Idle Time',
+                windowTitle: isTargetIdle
+                  ? 'Idle / Inactive (Laptop on without active work)'
+                  : `${userScreenshots.length} screenshots recorded (No active work)`,
                 startedAt: userScreenshots[0].taken_at,
                 endedAt: userScreenshots[userScreenshots.length - 1].taken_at,
-                classification: 'PRODUCTIVE',
+                classification: 'IDLE',
                 domain: null,
               },
             ]

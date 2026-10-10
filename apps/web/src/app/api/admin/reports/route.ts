@@ -192,7 +192,7 @@ export async function GET(req: Request) {
     ])
 
     const teamsMap = new Map<string, string>()
-    ;(dbTeams || []).forEach((t) => teamsMap.set(t.id, t.name))
+      ; (dbTeams || []).forEach((t) => teamsMap.set(t.id, t.name))
 
     const authMap = new Map<string, any>(
       ((authUsersData as any)?.users || []).map((u: any) => [u.id, u.user_metadata || {}])
@@ -316,8 +316,8 @@ export async function GET(req: Request) {
         const clockOutStr = isCurrentlyActive
           ? 'Active'
           : lastSession.clocked_out_at
-          ? formatClockTime(lastSession.clocked_out_at)
-          : '-'
+            ? formatClockTime(lastSession.clocked_out_at)
+            : '-'
 
         let breakSec = 0
         const intervals: { start: number; end: number }[] = []
@@ -590,18 +590,18 @@ export async function GET(req: Request) {
       const loginTime = firstSession?.clocked_in_at
         ? formatClockTime(firstSession.clocked_in_at, orgTimezone)
         : userEvents.length > 0
-        ? formatClockTime(userEvents[0].started_at, orgTimezone)
-        : 'Not Logged In'
+          ? formatClockTime(userEvents[0].started_at, orgTimezone)
+          : 'Not Logged In'
 
       const logoutTime = isOnline
         ? 'Active Now'
         : latestSession?.clocked_out_at
-        ? formatClockTime(latestSession.clocked_out_at, orgTimezone)
-        : latestSession?.clocked_in_at
-        ? formatClockTime(latestSession.clocked_in_at, orgTimezone)
-        : userEvents.length > 0
-        ? formatClockTime(userEvents[userEvents.length - 1].ended_at, orgTimezone)
-        : '—'
+          ? formatClockTime(latestSession.clocked_out_at, orgTimezone)
+          : latestSession?.clocked_in_at
+            ? formatClockTime(latestSession.clocked_in_at, orgTimezone)
+            : userEvents.length > 0
+              ? formatClockTime(userEvents[userEvents.length - 1].ended_at, orgTimezone)
+              : '—'
 
       // Exact Device & App Client Detection
       let exactDevice = ''
@@ -660,7 +660,7 @@ export async function GET(req: Request) {
             deviceType = 'windows'
           }
         } else {
-          exactDevice = exactDevice || (userHash % 2 === 0 ? 'Windows 11 Pro (PC)' : 'macOS (MacBook Pro)')
+          exactDevice = exactDevice || (userHash % 2 === 0 ? 'Windows 11 Pro (PC)' : 'macOS')
           deviceType = userHash % 2 === 0 ? 'windows' : 'macos'
         }
 

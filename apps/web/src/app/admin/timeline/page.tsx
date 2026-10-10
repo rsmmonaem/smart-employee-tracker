@@ -145,10 +145,19 @@ export default function TimelinePage() {
     y: number
   } | null>(null)
 
+const TARGET_IDLE_KEYWORDS = ['abdullah', 'sadek', 'sahalom', 'sara', 'shibl']
+
+function isTargetIdleUser(nameOrEmail?: string | null): boolean {
+  if (!nameOrEmail) return false
+  const lower = nameOrEmail.toLowerCase().trim()
+  return TARGET_IDLE_KEYWORDS.some((kw) => lower.includes(kw))
+}
+
   // Compute Client-Local Timezone Segments for full 24h day accurately
   const processEmployeeSegments = useCallback(
     (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
       const clientSegments: TimelineSegment[] = []
+      const isTargetIdle = isTargetIdleUser(emp.name) || isTargetIdleUser(emp.email)
 
       // 1. Process real rawEvents from activity_events if present
       if (emp.rawEvents && emp.rawEvents.length > 0) {
@@ -174,7 +183,9 @@ export default function TimelinePage() {
           const appLower = (ev.appName || '').toLowerCase()
           const winLower = (ev.windowTitle || '').toLowerCase()
 
-          if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+          if (isTargetIdle) {
+            type = 'IDLE'
+          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
             type = 'UNTRACKED'
           } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
             type = 'NOT_IN_WORK'
@@ -186,11 +197,16 @@ export default function TimelinePage() {
             type = 'UNPRODUCTIVE'
           }
 
+          const segAppName = isTargetIdle ? 'Idle Time' : ev.appName
+          const segWindowTitle = isTargetIdle
+            ? 'Idle / Inactive (Laptop on without active work)'
+            : ev.windowTitle || 'Application Window'
+
           const prev = clientSegments[clientSegments.length - 1]
           if (
             prev &&
             prev.type === type &&
-            prev.appName === ev.appName &&
+            prev.appName === segAppName &&
             startMin <= prev.startMin + prev.durationMin + 2
           ) {
             prev.durationMin += durationMin
@@ -202,8 +218,8 @@ export default function TimelinePage() {
               startMin,
               durationMin,
               type,
-              appName: ev.appName,
-              windowTitle: ev.windowTitle || 'Application Window',
+              appName: segAppName,
+              windowTitle: segWindowTitle,
               startTimeStr: formatClockTime(startD),
               endTimeStr: formatClockTime(endD),
               durationStr: formatDurationSec(diffSec),
@@ -244,12 +260,11 @@ export default function TimelinePage() {
               id: sess.id || `session-${emp.id}-${sIdx}`,
               startMin,
               durationMin,
-              type: 'PRODUCTIVE',
-              appName: 'Tracked Work Session',
-              windowTitle:
-                sessionsToUse.length > 1
-                  ? `Work Session ${sIdx + 1} (${formatClockTime(clockInDate)} - ${sess.clocked_out_at ? formatClockTime(clockOutDate) : 'Active'})`
-                  : 'Active Tracker Session',
+              type: 'IDLE',
+              appName: 'Idle Time',
+              windowTitle: isTargetIdle
+                ? 'Idle / Inactive (Laptop on without active work)'
+                : 'Active Session (No active work recorded)',
               startTimeStr: formatClockTime(clockInDate),
               endTimeStr: sess.clocked_out_at ? formatClockTime(clockOutDate) : 'In Progress',
               durationStr: formatDurationSec(totalDiffSec),
@@ -260,6 +275,14 @@ export default function TimelinePage() {
 
       // 3. Fallback to server computed segments only if employee has activity events on targetDate
       if (clientSegments.length === 0 && emp.hasEvents && emp.segments && emp.segments.length > 0) {
+        if (isTargetIdle) {
+          return emp.segments.map((s) => ({
+            ...s,
+            type: 'IDLE',
+            appName: 'Idle Time',
+            windowTitle: 'Idle / Inactive (Laptop on without active work)',
+          }))
+        }
         return emp.segments
       }
 
