@@ -58,8 +58,15 @@ export async function GET(req: Request) {
 
     let rules = initialRules || []
 
-    // Auto-seed initial reviewed rules for this tenant if table is empty
-    if (rules.length === 0) {
+    // Check if initial seeding has already been processed or cleared
+    const { data: seedStatus } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', `rules_seeded_${tenantId}`)
+      .maybeSingle()
+
+    // Auto-seed initial reviewed rules for this tenant only once on first run
+    if (rules.length === 0 && !seedStatus) {
       const initialInserts = SEED_APPS.filter((a) => a.defaultClassification !== null).map((a) => ({
         tenant_id: tenantId,
         match_type: a.type,
@@ -76,6 +83,12 @@ export async function GET(req: Request) {
       if (seeded) {
         rules = seeded
       }
+
+      await supabase.from('platform_settings').upsert({
+        key: `rules_seeded_${tenantId}`,
+        value: { seeded: true, at: new Date().toISOString() },
+        updated_at: new Date().toISOString(),
+      })
     }
 
     // 2. Fetch Employee-specific overrides from platform_settings
@@ -487,15 +500,19 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ success: false, error: 'Tenant ID required' }, { status: 400 })
     }
 
+    const deleteAll = searchParams.get('deleteAll') === 'true'
     let ruleId = searchParams.get('id')
     let pattern = searchParams.get('pattern')
     let userId = searchParams.get('userId')
 
-    if (!ruleId && !pattern) {
+    if (!ruleId && !pattern && !deleteAll) {
       try {
         const body = await req.json()
         ruleId = body.id || body.ruleId
         pattern = body.pattern
+        if (body.deleteAll) {
+          // deleteAll from body
+        }
         if (body.userId) userId = body.userId
       } catch {
         // no body
@@ -503,6 +520,60 @@ export async function DELETE(req: Request) {
     }
 
     const targetUserId = userId && userId !== 'ALL' ? userId : null
+
+    // If deleteAll is true: clear all reviewed rules for this tenant
+    if (deleteAll || (ruleId === 'ALL')) {
+      if (targetUserId) {
+        // Clear all user overrides for target employee
+        const { data: existingSettings } = await supabase
+          .from('platform_settings')
+          .select('value')
+          .eq('key', `user_productivity_${tenantId}`)
+          .maybeSingle()
+
+        const userMap = (existingSettings?.value as Record<string, Record<string, string>>) || {}
+        if (userMap[targetUserId]) {
+          delete userMap[targetUserId]
+          await supabase.from('platform_settings').upsert({
+            key: `user_productivity_${tenantId}`,
+            value: userMap,
+            updated_at: new Date().toISOString(),
+          })
+        }
+      } else {
+        // Clear all productivity_rules for this tenant
+        let deleteRulesQuery = supabase.from('productivity_rules').delete()
+        if (!session.isSuperAdmin) {
+          deleteRulesQuery = deleteRulesQuery.eq('tenant_id', tenantId)
+        } else {
+          deleteRulesQuery = deleteRulesQuery.eq('tenant_id', tenantId)
+        }
+        await deleteRulesQuery
+
+        // Also clear tenant-wide user productivity settings
+        await supabase
+          .from('platform_settings')
+          .delete()
+          .eq('key', `user_productivity_${tenantId}`)
+
+        // Reset tenant's activity_events classification back to NEUTRAL
+        let resetEventsQuery = supabase
+          .from('activity_events')
+          .update({ classification: 'NEUTRAL' })
+
+        if (!session.isSuperAdmin) {
+          resetEventsQuery = resetEventsQuery.eq('tenant_id', tenantId)
+        } else {
+          resetEventsQuery = resetEventsQuery.eq('tenant_id', tenantId)
+        }
+        await resetEventsQuery
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'All reviewed app classifications deleted successfully. Apps returned to unreviewed status.',
+      })
+    }
 
     if (targetUserId && pattern) {
       // Remove from platform_settings

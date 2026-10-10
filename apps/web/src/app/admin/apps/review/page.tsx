@@ -208,6 +208,55 @@ export default function ReviewAppsPage() {
     }
   }
 
+  // Delete all reviewed apps (reset all classifications)
+  const handleDeleteAllReviewed = async () => {
+    const isSpecific = selectedEmployee && selectedEmployee !== 'ALL'
+    const targetLabel = isSpecific
+      ? employees.find((e) => e.id === selectedEmployee)?.name || 'this employee'
+      : 'the entire organization'
+
+    if (
+      !confirm(
+        `Are you sure you want to delete and reset ALL reviewed apps for ${targetLabel}? All classified apps will return to unreviewed status.`
+      )
+    ) {
+      return
+    }
+
+    try {
+      setActionLoading('ALL')
+      const url = isSpecific
+        ? `/api/admin/apps/review?deleteAll=true&userId=${encodeURIComponent(selectedEmployee)}`
+        : '/api/admin/apps/review?deleteAll=true'
+
+      const res = await fetch(url, { method: 'DELETE' })
+      const json = await res.json()
+      if (json.success) {
+        // Move all reviewed apps to unreviewed
+        setUnreviewedApps((prev) => [
+          ...reviewedApps.map((a) => ({
+            ...a,
+            classification: undefined,
+            isUserSpecific: false,
+            id: `unrev-${a.name.toLowerCase()}`,
+          })),
+          ...prev.filter((u) => !reviewedApps.some((r) => r.name.toLowerCase() === u.name.toLowerCase())),
+        ])
+        setReviewedApps([])
+        triggerRefresh()
+        alert(json.message || 'All reviewed apps have been deleted successfully!')
+      } else {
+        alert(json.error || 'Failed to delete reviewed apps')
+      }
+    } catch (err) {
+      console.error('Error deleting all reviewed apps:', err)
+      alert('Error deleting all reviewed apps')
+    } finally {
+      setActionLoading(null)
+      fetchReviewData()
+    }
+  }
+
   // Toggle Idle Exclusion
   const handleToggleIdleExclusion = async (appName: string, excluded: boolean) => {
     try {
@@ -528,24 +577,43 @@ export default function ReviewAppsPage() {
         {/* Tab 2: Reviewed Apps (matching Screenshot 2) */}
         {activeTab === 'reviewed' && (
           <div className="space-y-4">
-            {/* Search Bar */}
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(searchQuery)}
-                  placeholder="Search Reviewed apps"
-                  className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 shadow-2xs"
-                />
+            {/* Search Bar & Actions */}
+            <div className="flex flex-wrap items-center gap-2 justify-between">
+              <div className="flex gap-2 flex-1 min-w-[280px]">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && setAppliedSearch(searchQuery)}
+                    placeholder="Search Reviewed apps"
+                    className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-2 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+                <button
+                  onClick={() => setAppliedSearch(searchQuery)}
+                  className="bg-[#1677ff] hover:bg-blue-600 text-white px-5 py-2 text-xs font-semibold rounded-lg shadow-2xs transition-colors shrink-0"
+                >
+                  Search Apps
+                </button>
               </div>
-              <button
-                onClick={() => setAppliedSearch(searchQuery)}
-                className="bg-[#1677ff] hover:bg-blue-600 text-white px-5 py-2 text-xs font-semibold rounded-lg shadow-2xs transition-colors"
-              >
-                Search Apps
-              </button>
+
+              {reviewedApps.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteAllReviewed}
+                  disabled={actionLoading === 'ALL'}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all shrink-0 cursor-pointer"
+                  title="Delete all reviewed classifications and return apps to unreviewed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {actionLoading === 'ALL'
+                      ? 'Deleting All...'
+                      : `Delete All Reviewed Apps (${reviewedApps.length})`}
+                  </span>
+                </button>
+              )}
             </div>
 
             {/* List with active pill states */}
