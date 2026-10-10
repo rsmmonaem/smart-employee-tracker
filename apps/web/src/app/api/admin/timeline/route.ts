@@ -59,9 +59,21 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
     const supabase = createAdminClient()
+
+    // Fetch platform settings for organization timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
+    const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
+
+    const { searchParams } = new URL(req.url)
+    const targetDate = searchParams.get('date') || todayStr
+    const isTargetToday = targetDate === todayStr
 
     // 1. Fetch real users filtered strictly by tenant
     let usersQuery = supabase
@@ -85,17 +97,6 @@ export async function GET(req: Request) {
     if (usersErr) {
       return NextResponse.json({ success: false, error: usersErr.message }, { status: 500 })
     }
-
-    // Fetch platform settings for organization timezone
-    const { data: settingsRow } = await supabase
-      .from('platform_settings')
-      .select('value')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
-
-    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
-    const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
-    const isTargetToday = targetDate === todayStr
 
     // 24-hour timezone offset buffer (+/- 24h) so events in ANY client local timezone are fetched
     const startOfDay = new Date(new Date(targetDate).getTime() - 24 * 3600 * 1000).toISOString()

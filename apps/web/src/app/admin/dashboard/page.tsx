@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
+import { getLocalTodayString } from '@/utils/date'
 
 type ScreenshotCard = {
   id: string
@@ -129,7 +130,7 @@ export default function DashboardPage() {
       if (!isBackground) {
         setLoading(true)
       }
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const todayStr = getLocalTodayString()
 
       const [timesheetRes, appsRes, screenshotsRes, riskRes] = await Promise.all([
         fetch(`/api/admin/timesheet?date=${todayStr}`, { cache: 'no-store' }),

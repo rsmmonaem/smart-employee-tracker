@@ -23,6 +23,8 @@ export interface CurrentUserProfile {
   isEmployee: boolean
 }
 
+import { getLocalTodayString } from '@/utils/date'
+
 interface AdminFilterContextType {
   searchQuery: string
   setSearchQuery: (query: string) => void
@@ -45,7 +47,7 @@ const AdminFilterContext = createContext<AdminFilterContextType | undefined>(und
 
 export function AdminFilterProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('')
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = getLocalTodayString()
   const [selectedDate, setSelectedDate] = useState(todayStr)
   const [selectedPreset, setSelectedPreset] = useState<PeriodPreset>('Today')
   const [selectedTeam, setSelectedTeam] = useState('All Team')

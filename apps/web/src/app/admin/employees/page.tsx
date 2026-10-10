@@ -24,6 +24,7 @@ import {
 import { createClient } from '@/utils/supabase/client'
 import { useAdminFilter } from '../admin-filter-context'
 import AdminHeader from '../admin-header'
+import { getLocalTodayString } from '@/utils/date'
 
 type StatusPill =
   | 'ALL'
@@ -99,7 +100,7 @@ export default function EmployeesPage() {
         setLoading(true)
       }
       // Fetch both timesheet metrics and user directory
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const todayStr = getLocalTodayString()
       const [timesheetRes, usersRes] = await Promise.all([
         fetch(`/api/admin/timesheet?date=${todayStr}`, { cache: 'no-store' }),
         fetch('/api/admin/users', { cache: 'no-store' }),

@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react'
 import AdminHeader from '../../admin-header'
 import { CalendarPlus, Send, CheckCircle2, AlertCircle } from 'lucide-react'
+import { getLocalTodayString } from '@/utils/date'
 
 export default function ApplyLeavePage() {
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [leaveType, setLeaveType] = useState('Casual Leave')
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [startDate, setStartDate] = useState(() => getLocalTodayString())
+  const [endDate, setEndDate] = useState(() => getLocalTodayString())
   const [days, setDays] = useState(1)
   const [reason, setReason] = useState('')
   const [errorMsg, setErrorMsg] = useState('')

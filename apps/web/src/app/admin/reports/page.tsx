@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
+import { getLocalTodayString } from '@/utils/date'
 
 type ReportCategory =
   | 'daily-attendance'
@@ -112,7 +113,7 @@ export default function ReportsPage() {
   const [activeSubTab, setActiveSubTab] = useState<AttendanceSubTab>('worked')
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('ALL')
   const [selectedDate, setSelectedDate] = useState<string>(
-    () => new Date().toISOString().slice(0, 10)
+    () => getLocalTodayString()
   )
   const [loading, setLoading] = useState(false)
 

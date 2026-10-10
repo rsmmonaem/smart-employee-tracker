@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getSessionContext } from '@/utils/supabase/auth-context'
+import { formatLocalDateString, getTodayInTimezone, DEFAULT_TIMEZONE } from '@/utils/date'
 
 export const dynamic = 'force-dynamic'
-
-function isSameLocalDate(isoStr?: string | null, targetDateStr?: string): boolean {
-  if (!isoStr || !targetDateStr) return false
-  const d = new Date(isoStr)
-  if (isNaN(d.getTime())) return false
-  const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  const utcDate = isoStr.slice(0, 10)
-  return localDate === targetDateStr || utcDate === targetDateStr
-}
 
 function formatDuration(totalSeconds: number): string {
   if (totalSeconds <= 0) return '00h 00m'
@@ -27,9 +19,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
     const supabase = createAdminClient()
+
+    // Fetch platform settings for organization timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || DEFAULT_TIMEZONE
+    const todayStr = getTodayInTimezone(orgTimezone)
+
+    const { searchParams } = new URL(req.url)
+    const targetDate = searchParams.get('date') || todayStr
 
     let usersQuery = supabase
       .from('users')
@@ -86,8 +89,8 @@ export async function GET(req: Request) {
       .lte('started_at', queryEnd)
       .limit(20000)
 
-    const sessions = (rawSessions || []).filter((s) => isSameLocalDate(s.clocked_in_at, targetDate))
-    const events = (rawEvents || []).filter((e) => isSameLocalDate(e.started_at, targetDate))
+    const sessions = (rawSessions || []).filter((s) => formatLocalDateString(s.clocked_in_at, orgTimezone) === targetDate)
+    const events = (rawEvents || []).filter((e) => formatLocalDateString(e.started_at, orgTimezone) === targetDate)
 
     const riskUsersList: any[] = []
     let criticalCount = 0

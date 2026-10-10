@@ -18,6 +18,7 @@ import {
 import { useAdminFilter, PeriodPreset } from './admin-filter-context'
 import { useTheme } from '@/components/theme-provider'
 import AddUserModal from './add-user-modal'
+import { getLocalTodayString, getLocalYesterdayString } from '@/utils/date'
 
 export interface AdminHeaderProps {
   title: string
@@ -152,14 +153,14 @@ export default function AdminHeader({
     return d
   }
 
-  const todayActual = new Date().toISOString().slice(0, 10)
-  const yesterdayActual = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const todayActual = getLocalTodayString()
+  const yesterdayActual = getLocalYesterdayString()
 
   const dateTag = formatDateLabel(selectedDate)
   const dateLabel =
-    selectedDate === todayActual || selectedDate === '2026-09-10'
+    selectedDate === todayActual
       ? 'Today'
-      : selectedDate === yesterdayActual || selectedDate === '2026-09-09'
+      : selectedDate === yesterdayActual
       ? 'Yesterday'
       : dateTag
 
@@ -173,8 +174,8 @@ export default function AdminHeader({
 
     setSelectedDate(nextDate)
     setSelectedCalendarDays([d.getDate()])
-    if (nextDate === todayActual || nextDate === '2026-09-10') setSelectedPreset('Today')
-    else if (nextDate === yesterdayActual || nextDate === '2026-09-09') setSelectedPreset('Yesterday')
+    if (nextDate === todayActual) setSelectedPreset('Today')
+    else if (nextDate === yesterdayActual) setSelectedPreset('Yesterday')
     else setSelectedPreset('Custom')
   }
 
@@ -183,9 +184,12 @@ export default function AdminHeader({
     const now = new Date()
     if (preset === 'Today') {
       setSelectedCalendarDays([now.getDate()])
+      setSelectedDate(todayActual)
     } else if (preset === 'Yesterday') {
-      const yest = new Date(Date.now() - 86400000)
+      const yest = new Date()
+      yest.setDate(yest.getDate() - 1)
       setSelectedCalendarDays([yest.getDate()])
+      setSelectedDate(yesterdayActual)
     } else if (preset === 'Last 7 Days' || preset === 'This Week') {
       setSelectedCalendarDays([now.getDate()])
     } else if (preset === 'This Month') {

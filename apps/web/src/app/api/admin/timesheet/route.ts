@@ -92,9 +92,20 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
     const supabase = createAdminClient()
+
+    // 0. Fetch platform settings for timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
+    const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
+
+    const { searchParams } = new URL(req.url)
+    const targetDate = searchParams.get('date') || todayStr
 
     // 1. Fetch real users filtered by current tenant
     let usersQuery = supabase
@@ -145,14 +156,7 @@ export async function GET(req: Request) {
       })
     }
 
-    // 2. Fetch platform settings for expected clock-in/out and timezone
-    const { data: settingsRow } = await supabase
-      .from('platform_settings')
-      .select('value')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
-
-    const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
+    // 2. Expected clock-in/out and timezone
     const expectedClockInStr: string = settingsRow?.value?.expectedClockIn || '10:00'
     const expectedClockOutStr: string = settingsRow?.value?.expectedClockOut || '19:00'
 

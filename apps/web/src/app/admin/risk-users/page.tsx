@@ -18,6 +18,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import AdminHeader from '../admin-header'
+import { getLocalTodayString } from '@/utils/date'
 
 interface RiskUserItem {
   id: string
@@ -51,7 +52,7 @@ interface RiskSummary {
 export default function RiskUsersPage() {
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState<string>(
-    () => new Date().toISOString().slice(0, 10)
+    () => getLocalTodayString()
   )
   const [riskFilter, setRiskFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING' | 'ADVISORY' | 'HEALTHY'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')

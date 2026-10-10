@@ -5,6 +5,7 @@ import { RefreshCw } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useAdminFilter } from '../admin-filter-context'
 import AdminHeader from '../admin-header'
+import { getLocalTodayString, getLocalYesterdayString } from '@/utils/date'
 
 // Timeline Activity Classification
 type ActivityType =
@@ -329,13 +330,13 @@ export default function TimelinePage() {
     return matchesSearch && matchesTeam
   })
 
-  const todayActual = new Date().toISOString().slice(0, 10)
-  const yesterdayActual = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+  const todayActual = getLocalTodayString()
+  const yesterdayActual = getLocalYesterdayString()
 
   const dayTitle =
-    selectedDate === todayActual || selectedDate === '2026-09-10'
+    selectedDate === todayActual
       ? 'Today Activities'
-      : selectedDate === yesterdayActual || selectedDate === '2026-09-09'
+      : selectedDate === yesterdayActual
       ? 'Yesterday Activities'
       : `${selectedDate} Activities`
 

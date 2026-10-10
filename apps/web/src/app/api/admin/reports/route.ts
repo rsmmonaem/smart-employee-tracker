@@ -1,15 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getSessionContext } from '@/utils/supabase/auth-context'
+import { formatLocalDateString, getTodayInTimezone, DEFAULT_TIMEZONE } from '@/utils/date'
 
 export const dynamic = 'force-dynamic'
 
-function formatClockTime(isoStr?: string | null): string {
+function formatClockTime(isoStr?: string | null, timeZone: string = DEFAULT_TIMEZONE): string {
   if (!isoStr) return '-'
   try {
     const d = new Date(isoStr)
     if (isNaN(d.getTime())) return '-'
     return d.toLocaleTimeString('en-US', {
+      timeZone,
       hour: '2-digit',
       minute: '2-digit',
       hour12: true,
@@ -26,15 +28,6 @@ function formatDuration(totalSeconds: number): string {
   return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m`
 }
 
-function isSameLocalDate(isoStr?: string | null, targetDateStr?: string): boolean {
-  if (!isoStr || !targetDateStr) return false
-  const d = new Date(isoStr)
-  if (isNaN(d.getTime())) return false
-  const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  const utcDate = isoStr.slice(0, 10)
-  return localDate === targetDateStr || utcDate === targetDateStr
-}
-
 export async function GET(req: Request) {
   try {
     const session = await getSessionContext()
@@ -42,12 +35,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
+    const supabase = createAdminClient()
+
+    // Fetch platform settings for organization timezone
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'organization_track_settings')
+      .maybeSingle()
+
+    const orgTimezone: string = settingsRow?.value?.timezone || DEFAULT_TIMEZONE
+    const todayStr = getTodayInTimezone(orgTimezone)
+
     const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || new Date().toISOString().slice(0, 10)
+    const targetDate = searchParams.get('date') || todayStr
     const employeeIdFilter = searchParams.get('employeeId')
     const targetTenant = searchParams.get('tenantId') || session.tenantId
-
-    const supabase = createAdminClient()
 
     // 1. Fetch Users strictly within this tenant
     let usersQuery = supabase
@@ -165,10 +168,10 @@ export async function GET(req: Request) {
 
     const { data: rawScreenshots } = await screenshotsQuery
 
-    // Filter in-memory by exact targetDate (matching local date or UTC date)
-    const sessions = (rawSessions || []).filter((s) => isSameLocalDate(s.clocked_in_at, targetDate))
-    const events = (rawEvents || []).filter((e) => isSameLocalDate(e.started_at, targetDate))
-    const screenshots = (rawScreenshots || []).filter((s) => isSameLocalDate(s.taken_at, targetDate))
+    // Filter in-memory strictly by exact targetDate in org timezone
+    const sessions = (rawSessions || []).filter((s) => formatLocalDateString(s.clocked_in_at, orgTimezone) === targetDate)
+    const events = (rawEvents || []).filter((e) => formatLocalDateString(e.started_at, orgTimezone) === targetDate)
+    const screenshots = (rawScreenshots || []).filter((s) => formatLocalDateString(s.taken_at, orgTimezone) === targetDate)
 
     // 5. Transform into employee list for dropdown
     const employees = allUsers.map((u) => ({
