@@ -4,21 +4,6 @@ import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
-// Pre-seeded standard apps and domains for initial directory
-const SEED_APPS = [
-  { name: 'Antigravity', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'Visual Studio Code', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'Google Chrome', type: 'APP', defaultClassification: 'NEUTRAL' },
-  { name: 'TimeGuard', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'Slack', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'Figma', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'YouTube', type: 'DOMAIN', defaultClassification: 'UNPRODUCTIVE' },
-  { name: 'admin.truckpointbd.com', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'admin.wajobab.chat', type: 'DOMAIN', defaultClassification: 'PRODUCTIVE' },
-  { name: 'accounts.google.com', type: 'DOMAIN', defaultClassification: null },
-  { name: 'Notion', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-  { name: 'Zoom', type: 'APP', defaultClassification: 'PRODUCTIVE' },
-]
 
 export async function GET(req: Request) {
   try {
@@ -56,40 +41,7 @@ export async function GET(req: Request) {
       console.error('Error fetching productivity_rules:', rulesErr)
     }
 
-    let rules = initialRules || []
-
-    // Check if initial seeding has already been processed or cleared
-    const { data: seedStatus } = await supabase
-      .from('platform_settings')
-      .select('value')
-      .eq('key', `rules_seeded_${tenantId}`)
-      .maybeSingle()
-
-    // Auto-seed initial reviewed rules for this tenant only once on first run
-    if (rules.length === 0 && !seedStatus) {
-      const initialInserts = SEED_APPS.filter((a) => a.defaultClassification !== null).map((a) => ({
-        tenant_id: tenantId,
-        match_type: a.type,
-        pattern: a.name,
-        classification: a.defaultClassification,
-        priority: 1,
-      }))
-
-      const { data: seeded } = await supabase
-        .from('productivity_rules')
-        .insert(initialInserts)
-        .select('id, pattern, classification, match_type, priority')
-
-      if (seeded) {
-        rules = seeded
-      }
-
-      await supabase.from('platform_settings').upsert({
-        key: `rules_seeded_${tenantId}`,
-        value: { seeded: true, at: new Date().toISOString() },
-        updated_at: new Date().toISOString(),
-      })
-    }
+    const rules = initialRules || []
 
     // 2. Fetch Employee-specific overrides from platform_settings
     const { data: userRulesData } = await supabase
@@ -176,32 +128,50 @@ export async function GET(req: Request) {
       appStatsMap.set(key, existing)
     })
 
-    // Combine distinct apps from SEED_APPS, real events, and user rules
+    // Combine distinct apps from real events and active productivity rules
     const allKnownApps = new Map<string, { name: string; type: 'APP' | 'DOMAIN'; totalSeconds: number; count: number; usedBy: string[] }>()
 
-    SEED_APPS.forEach((sa) => {
-      const stats = appStatsMap.get(sa.name.toLowerCase()) || { count: 0, totalSeconds: 0, type: sa.type as 'APP' | 'DOMAIN', users: new Set<string>() }
-      allKnownApps.set(sa.name.toLowerCase(), {
-        name: sa.name,
-        type: sa.type as 'APP' | 'DOMAIN',
-        totalSeconds: stats.totalSeconds,
-        count: stats.count,
-        usedBy: Array.from(stats.users),
-      })
-    })
-
+    // 1. Add from real activity events
     ;(events || []).forEach((ev) => {
       const rawName = ev.domain || ev.app_name
       if (!rawName || rawName === 'Untracked Activity') return
       const key = rawName.toLowerCase()
       if (!allKnownApps.has(key)) {
-        const stats = appStatsMap.get(key) || { count: 1, totalSeconds: 60, type: 'APP', users: new Set<string>() }
+        const stats = appStatsMap.get(key) || { count: 1, totalSeconds: 60, type: rawName.includes('.') ? 'DOMAIN' : 'APP', users: new Set<string>() }
         allKnownApps.set(key, {
           name: rawName,
           type: stats.type,
           totalSeconds: stats.totalSeconds,
           count: stats.count,
           usedBy: Array.from(stats.users),
+        })
+      }
+    })
+
+    // 2. Add any active productivity rules that may not have current events logged
+    rules.forEach((r) => {
+      const key = r.pattern.toLowerCase()
+      if (!allKnownApps.has(key)) {
+        allKnownApps.set(key, {
+          name: r.pattern,
+          type: (r.match_type as 'APP' | 'DOMAIN') || (r.pattern.includes('.') ? 'DOMAIN' : 'APP'),
+          totalSeconds: 0,
+          count: 0,
+          usedBy: [],
+        })
+      }
+    })
+
+    // 3. Add any employee-specific override patterns
+    Object.keys(targetEmployeeOverrides).forEach((patternKey) => {
+      const key = patternKey.toLowerCase()
+      if (!allKnownApps.has(key)) {
+        allKnownApps.set(key, {
+          name: patternKey,
+          type: patternKey.includes('.') ? 'DOMAIN' : 'APP',
+          totalSeconds: 0,
+          count: 0,
+          usedBy: [],
         })
       }
     })
