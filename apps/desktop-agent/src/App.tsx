@@ -89,6 +89,7 @@ interface TrackingPolicy {
   idleTimeoutStr: string;
   lastSyncedAt: string | null;
   expectedClockIn?: string; // e.g. "09:00" or "10:00 AM"
+  idleAlertSound?: string; // custom audio base64/url from admin
 }
 
 interface ProductivityRule {
@@ -402,6 +403,7 @@ export default function App() {
       idleTimeoutStr: idleStr,
       lastSyncedAt: new Date().toLocaleTimeString(),
       expectedClockIn,
+      idleAlertSound: val.idleAlertSound || '',
     });
     setLastSyncStatus(`⚡ Realtime: ${intervalStr} ${blurCapture ? '(Blur ON)' : ''}`);
   };
@@ -951,20 +953,36 @@ export default function App() {
           // 🔔 Bring minimized/background app to front immediately so employee notices!
           invoke('bring_to_front').catch(() => {});
 
-          // Play subtle system alert sound
+          // Play custom alert sound or synthesized chime
           try {
-            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-            osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
-            gain.gain.setValueAtTime(0.2, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-            osc.start(ctx.currentTime);
-            osc.stop(ctx.currentTime + 0.4);
+            const playChime = () => {
+              try {
+                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5
+                gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.4);
+              } catch {
+                // AudioContext blocked
+              }
+            };
+
+            if (policyRef.current.idleAlertSound) {
+              const audio = new Audio(policyRef.current.idleAlertSound);
+              audio.volume = 0.8;
+              audio.play().catch(() => {
+                playChime();
+              });
+            } else {
+              playChime();
+            }
           } catch {
             // Audio context not available or user gesture blocked
           }

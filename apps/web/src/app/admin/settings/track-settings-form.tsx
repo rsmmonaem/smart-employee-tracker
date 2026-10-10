@@ -10,7 +10,12 @@ import {
   ExternalLink,
   Search,
   CheckCircle2,
-  X
+  X,
+  Volume2,
+  Upload,
+  Mic,
+  Play,
+  Trash2,
 } from 'lucide-react'
 
 // Generate 15-minute intervals up to 15 hour 45 mins
@@ -130,6 +135,10 @@ interface TrackSettings {
   screenshotInterval?: string
   allowTimelapseVideo?: boolean
   idleTimeout?: string
+  idleAlertSound?: string // Base64 data URL or audio URL
+  idleAlertSoundName?: string
+  autoDeleteScreenshots?: boolean
+  screenshotRetentionDays?: number
   hideAdminTrackingAndLeaveFromHeads?: boolean
   allowEmployeeSeeScreenshot?: boolean
   allowEmployeeDeleteScreenshot?: boolean
@@ -955,19 +964,56 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
               onChange={() => handleToggle('allowTimelapseVideo')}
             />
           </div>
+
+          {/* Auto-Delete Old Screenshots Setting */}
+          <div className="border-t border-gray-150 dark:border-gray-800 pt-3 mt-2">
+            <div className="flex items-center justify-between py-1">
+              <div>
+                <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                  Auto-delete old screenshots
+                </p>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  Automatically purge screenshots older than a specified duration to free storage space.
+                </p>
+              </div>
+              <Toggle
+                checked={!!settings.autoDeleteScreenshots}
+                onChange={() => handleToggle('autoDeleteScreenshots')}
+              />
+            </div>
+
+            {settings.autoDeleteScreenshots && (
+              <div className="flex items-center justify-between bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 rounded-xl p-3 mt-2 animate-in fade-in">
+                <span className="text-xs font-medium text-blue-900 dark:text-blue-200">
+                  Purge screenshots older than:
+                </span>
+                <select
+                  value={settings.screenshotRetentionDays || 7}
+                  onChange={(e) => handleChange('screenshotRetentionDays', parseInt(e.target.value, 10))}
+                  className="rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-800 shadow-2xs focus:border-blue-500 focus:outline-none dark:border-blue-700 dark:bg-gray-800 dark:text-blue-300"
+                >
+                  <option value={7}>7 Days (1 Week)</option>
+                  <option value={14}>14 Days (2 Weeks)</option>
+                  <option value={30}>30 Days (1 Month)</option>
+                  <option value={60}>60 Days (2 Months)</option>
+                  <option value={90}>90 Days (3 Months)</option>
+                </select>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
-      {/* 11. Idle Time Settings */}
+      {/* 11. Idle Time Settings & Custom Audio Alert */}
       <section className="rounded-xl border border-gray-200/80 bg-white p-5 shadow-xs dark:border-gray-800 dark:bg-gray-900">
         <div className="mb-3">
-          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Idle Time Settings</h3>
+          <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Idle Time &amp; Alert Sound Settings</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            Determine the inactivity threshold before time is classified as idle.
+            Determine the inactivity threshold and customize the alert sound played on employee computers.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-b border-gray-100 dark:border-gray-800 pb-4">
           <div>
             <p className="text-xs font-medium text-gray-800 dark:text-gray-200">
               Start to consider as idle if the employee is inactive for
@@ -987,6 +1033,108 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Custom Audio Alert Upload & Preview */}
+        <div className="pt-4 space-y-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Volume2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <h4 className="text-xs font-bold text-gray-900 dark:text-white">
+                Interactive Idle Pop-up Audio Chime
+              </h4>
+            </div>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+              Choose the sound played when the "Are you still working?" modal pops up on the employee desktop.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Play Current Audio */}
+            <button
+              type="button"
+              onClick={() => {
+                if (settings.idleAlertSound) {
+                  const audio = new Audio(settings.idleAlertSound)
+                  audio.play().catch(() => {})
+                } else {
+                  // Default synthesizer chime
+                  try {
+                    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+                    const osc = ctx.createOscillator()
+                    const gain = ctx.createGain()
+                    osc.connect(gain)
+                    gain.connect(ctx.destination)
+                    osc.type = 'sine'
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime)
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15)
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime)
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45)
+                    osc.start(ctx.currentTime)
+                    osc.stop(ctx.currentTime + 0.45)
+                  } catch {}
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 transition-colors shadow-2xs"
+            >
+              <Play className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
+              <span>Test Current Sound</span>
+            </button>
+
+            {/* Upload File Input */}
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 cursor-pointer transition-colors shadow-2xs">
+              <Upload className="w-3.5 h-3.5" />
+              <span>Upload Custom Audio (MP3 / WAV)</span>
+              <input
+                type="file"
+                accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    if (file.size > 2 * 1024 * 1024) {
+                      alert('Audio file size must be less than 2MB')
+                      return
+                    }
+                    const reader = new FileReader()
+                    reader.onload = (event) => {
+                      const base64 = event.target?.result as string
+                      handleChange('idleAlertSound', base64)
+                      handleChange('idleAlertSoundName', file.name)
+                    }
+                    reader.readAsDataURL(file)
+                  }
+                }}
+              />
+            </label>
+
+            {/* Reset to Default Button */}
+            {settings.idleAlertSound && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleChange('idleAlertSound', '')
+                  handleChange('idleAlertSoundName', '')
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                title="Reset to default chime"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Reset to Default</span>
+              </button>
+            )}
+          </div>
+
+          <div className="text-[11px] text-gray-500 dark:text-gray-400">
+            {settings.idleAlertSoundName ? (
+              <span className="font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Custom alert: {settings.idleAlertSoundName}
+              </span>
+            ) : (
+              <span>Currently using: <strong className="text-gray-700 dark:text-gray-300">Default Built-in Attention Chime (D5 → A5)</strong></span>
+            )}
+          </div>
         </div>
       </section>
 

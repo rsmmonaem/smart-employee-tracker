@@ -18,10 +18,36 @@ import {
   Square,
   Sparkles,
   Users,
+  HardDrive,
+  Sliders,
+  CalendarDays,
+  AlertCircle,
+  Check,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useAdminFilter } from '../admin-filter-context'
 import AdminHeader from '../admin-header'
 import ProUpgradeModal from '../pro-upgrade-modal'
+
+type StorageStats = {
+  totalCount: number
+  totalBytes: number
+  totalFormatted: string
+  selectedDate: string | null
+  selectedDateCount: number
+  selectedDateBytes: number
+  selectedDateFormatted: string
+  dailyBreakdown: Array<{
+    date: string
+    count: number
+    bytes: number
+    formattedSize: string
+  }>
+  retention: {
+    autoDelete: boolean
+    retentionDays: number
+  }
+}
 
 type ScreenshotItem = {
   id: string
@@ -48,6 +74,9 @@ export default function ScreenshotsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [tenantPlan, setTenantPlan] = useState<'BASIC' | 'PRO' | 'ENTERPRISE'>('BASIC')
   const [showProModal, setShowProModal] = useState(false)
+  const [storageStats, setStorageStats] = useState<StorageStats | null>(null)
+  const [showStorageModal, setShowStorageModal] = useState(false)
+  const [isPurging, setIsPurging] = useState(false)
 
   const [employees, setEmployees] = useState<Array<{ id: string; name: string; email: string }>>([])
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -121,6 +150,9 @@ export default function ScreenshotsPage() {
           setTotalPages(json.totalPages)
         } else {
           setTotalPages(Math.max(1, Math.ceil((json.screenshots.length || 0) / size)))
+        }
+        if (json.storageStats) {
+          setStorageStats(json.storageStats)
         }
       }
     } catch (err) {
@@ -289,6 +321,60 @@ export default function ScreenshotsPage() {
     }
   }
 
+  const handleDeleteDate = async (date: string) => {
+    if (!confirm(`Are you sure you want to permanently delete ALL screenshots for ${date}? This cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setIsPurging(true)
+      const res = await fetch('/api/admin/screenshots', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deleteDate: date }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        alert(json.message || `Deleted screenshots for ${date}`)
+        fetchScreenshots()
+      } else {
+        alert(json.error || 'Failed to delete day screenshots')
+      }
+    } catch (err) {
+      console.error('Error deleting day screenshots:', err)
+      alert('Error deleting day screenshots')
+    } finally {
+      setIsPurging(false)
+    }
+  }
+
+  const handlePurgeRetention = async (days: number) => {
+    if (!confirm(`Are you sure you want to permanently purge all screenshots older than ${days} days?`)) {
+      return
+    }
+
+    try {
+      setIsPurging(true)
+      const res = await fetch('/api/admin/screenshots', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purgeOlderThan: days }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        alert(json.message || `Purged screenshots older than ${days} days`)
+        fetchScreenshots()
+      } else {
+        alert(json.error || 'Failed to purge screenshots')
+      }
+    } catch (err) {
+      console.error('Error purging old screenshots:', err)
+      alert('Error purging old screenshots')
+    } finally {
+      setIsPurging(false)
+    }
+  }
+
   const getPublicUrl = (path: string) => {
     return `${baseUrl}/storage/v1/object/public/screenshots/${path}`
   }
@@ -433,6 +519,37 @@ export default function ScreenshotsPage() {
             />
             <span>{autoRefresh ? 'Live Sync (8s)' : 'Sync Paused'}</span>
           </button>
+
+          {/* Storage Size Stats Badge */}
+          {storageStats && (
+            <div
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-700 dark:text-gray-300 font-medium"
+              title={`Total Tenant Storage: ${storageStats.totalFormatted} (${storageStats.totalCount} screenshots)`}
+            >
+              <HardDrive className="w-3.5 h-3.5 text-indigo-500" />
+              <span>
+                Storage: <strong className="font-semibold text-gray-900 dark:text-gray-100">{storageStats.totalFormatted}</strong>
+              </span>
+              {selectedDate && (
+                <span className="text-gray-400 dark:text-gray-500 text-[11px] border-l border-gray-200 dark:border-gray-700 pl-1.5 ml-0.5">
+                  Day: {storageStats.selectedDateFormatted}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Storage & Day Cleanup Modal Button (Admin only) */}
+          {currentUser?.role !== 'EMPLOYEE' && (
+            <button
+              type="button"
+              onClick={() => setShowStorageModal(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 transition-colors shadow-2xs cursor-pointer"
+              title="Manage day-wise screenshot storage & cleanup retention"
+            >
+              <Sliders className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Storage & Cleanup</span>
+            </button>
+          )}
         </div>
 
         {/* Right: Multi-Select & Bulk Actions */}
@@ -857,6 +974,189 @@ export default function ScreenshotsPage() {
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Screenshot Storage & Day-wise Cleanup Modal */}
+      {showStorageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-gray-850 rounded-2xl max-w-2xl w-full border border-gray-200 dark:border-gray-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                  <HardDrive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    Screenshot Storage & Day-wise Cleanup
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Track storage usage, configure retention, and delete screenshots by date.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStorageModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-150 dark:hover:bg-gray-750 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Storage Overview Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
+                    Total Storage
+                  </span>
+                  <div className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                    {storageStats?.totalFormatted || '0 B'}
+                  </div>
+                  <span className="text-xs text-gray-400 block mt-0.5">
+                    {storageStats?.totalCount || 0} total captures
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
+                    Selected Date ({selectedDate || 'Today'})
+                  </span>
+                  <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mt-1">
+                    {storageStats?.selectedDateFormatted || '0 B'}
+                  </div>
+                  <span className="text-xs text-gray-400 block mt-0.5">
+                    {storageStats?.selectedDateCount || 0} captures
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
+                    Auto-Retention
+                  </span>
+                  <div className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-1.5 flex items-center gap-1.5">
+                    {storageStats?.retention?.autoDelete ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>Active ({storageStats.retention.retentionDays} Days)</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span>Disabled</span>
+                      </>
+                    )}
+                  </div>
+                  <Link
+                    href="/admin/settings"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline mt-1 inline-block"
+                  >
+                    Configure in Settings →
+                  </Link>
+                </div>
+              </div>
+
+              {/* Quick Retention Purge Buttons */}
+              <div className="p-4 rounded-xl border border-amber-200/80 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-xs font-bold text-gray-800 dark:text-gray-200">
+                    Quick Storage Purge & Cleanups
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handlePurgeRetention(7)}
+                    disabled={isPurging}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <span>Purge Older than 7 Days</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handlePurgeRetention(30)}
+                    disabled={isPurging}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    <span>Purge Older than 30 Days</span>
+                  </button>
+
+                  {selectedDate && (storageStats?.selectedDateCount || 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDate(selectedDate)}
+                      disabled={isPurging}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete All for {selectedDate} ({storageStats?.selectedDateCount} shots)</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Day-Wise Breakdown Table */}
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2.5">
+                  Day-wise Screenshot Storage Breakdown
+                </h4>
+                {storageStats?.dailyBreakdown && storageStats.dailyBreakdown.length > 0 ? (
+                  <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden divide-y divide-gray-200 dark:divide-gray-800">
+                    {storageStats.dailyBreakdown.map((row) => (
+                      <div
+                        key={row.date}
+                        className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <CalendarDays className="w-4 h-4 text-gray-400" />
+                          <div>
+                            <div className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                              {row.date} {row.date === selectedDate ? '(Selected Day)' : ''}
+                            </div>
+                            <div className="text-[11px] text-gray-400">
+                              {row.count} screenshots · ~{row.formattedSize}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDate(row.date)}
+                          disabled={isPurging}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg border border-red-200 dark:border-red-900/50 transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete Day</span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-xs text-gray-400">
+                    No screenshot storage records found.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 border-t border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowStorageModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-100 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

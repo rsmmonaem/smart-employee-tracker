@@ -49,9 +49,13 @@ const DEFAULT_TRACK_SETTINGS = {
   blurScreenCapture: false,
   screenshotInterval: 'Every 10 mins',
   allowTimelapseVideo: true,
+  autoDeleteScreenshots: false,
+  screenshotRetentionDays: 7,
 
   // 11. Idle Time Settings
   idleTimeout: '1 min',
+  idleAlertSound: '',
+  idleAlertSoundName: '',
 
   // 12. Permissions
   hideAdminTrackingAndLeaveFromHeads: false,
