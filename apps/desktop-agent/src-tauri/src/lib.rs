@@ -18,8 +18,19 @@ pub struct CapturedScreen {
 }
 
 #[tauri::command]
-async fn capture_all_screens() -> Result<Vec<CapturedScreen>, String> {
-    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+fn capture_all_screens() -> Result<Vec<CapturedScreen>, String> {
+    let monitors = match Monitor::all() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Failed to list monitors: {e}");
+            return capture_single_screen_fallback();
+        }
+    };
+
+    if monitors.is_empty() {
+        return capture_single_screen_fallback();
+    }
+
     let mut screens = Vec::new();
 
     for (idx, monitor) in monitors.into_iter().enumerate() {
@@ -31,31 +42,46 @@ async fn capture_all_screens() -> Result<Vec<CapturedScreen>, String> {
             name
         };
 
-        if let Ok(image) = monitor.capture_image() {
-            let rgb_image = image::DynamicImage::ImageRgba8(image).to_rgb8();
-            let mut buffer = Vec::new();
-            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 75);
-            if rgb_image.write_with_encoder(encoder).is_ok() {
-                let base64_image = BASE64.encode(&buffer);
-                screens.push(CapturedScreen {
-                    screen_index: idx + 1,
-                    screen_name: display_name,
-                    is_primary,
-                    base64_image,
-                });
+        match monitor.capture_image() {
+            Ok(image) => {
+                let rgb_image = image::DynamicImage::ImageRgba8(image).to_rgb8();
+                let mut buffer = Vec::new();
+                let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 75);
+                if rgb_image.write_with_encoder(encoder).is_ok() {
+                    let base64_image = BASE64.encode(&buffer);
+                    screens.push(CapturedScreen {
+                        screen_index: idx + 1,
+                        screen_name: display_name,
+                        is_primary,
+                        base64_image,
+                    });
+                }
+            }
+            Err(err) => {
+                eprintln!("Failed to capture monitor {idx} ({display_name}): {err}");
             }
         }
     }
 
     if screens.is_empty() {
-        return Err("No monitor could be captured".to_string());
+        return capture_single_screen_fallback();
     }
 
     Ok(screens)
 }
 
+fn capture_single_screen_fallback() -> Result<Vec<CapturedScreen>, String> {
+    let base64_img = capture_screen()?;
+    Ok(vec![CapturedScreen {
+        screen_index: 1,
+        screen_name: "Screen 1".to_string(),
+        is_primary: true,
+        base64_image: base64_img,
+    }])
+}
+
 #[tauri::command]
-async fn capture_screen() -> Result<String, String> {
+fn capture_screen() -> Result<String, String> {
     let monitors = Monitor::all().map_err(|e| e.to_string())?;
     
     // Grab the primary monitor (or first one)
@@ -75,7 +101,7 @@ async fn capture_screen() -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn get_focused_window() -> Result<ActiveWindowData, String> {
+fn get_focused_window() -> Result<ActiveWindowData, String> {
     match get_active_window() {
         Ok(active_window) => {
             Ok(ActiveWindowData {
@@ -88,6 +114,20 @@ async fn get_focused_window() -> Result<ActiveWindowData, String> {
             Err(format!("Could not get active window: {:?}", e))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+#[allow(non_snake_case)]
+#[repr(C)]
+struct LASTINPUTINFO {
+    cbSize: u32,
+    dwTime: u32,
+}
+
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
+    fn GetTickCount() -> u32;
 }
 
 #[tauri::command]
@@ -118,7 +158,19 @@ fn get_system_idle_seconds() -> Result<f64, String> {
 
     #[cfg(target_os = "windows")]
     {
-        // Simple fallback or standard Windows LASTINPUTINFO if needed
+        let mut lii = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
+        unsafe {
+            if GetLastInputInfo(&mut lii) != 0 {
+                let current_tick = GetTickCount();
+                // Handle potential 49.7 day wrap-around with wrapping_sub
+                let elapsed_ms = current_tick.wrapping_sub(lii.dwTime);
+                let seconds = (elapsed_ms as f64) / 1000.0;
+                return Ok(seconds);
+            }
+        }
         Ok(0.0)
     }
 

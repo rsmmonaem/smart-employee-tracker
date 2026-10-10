@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
+import { type as getOsType, arch as getArch } from '@tauri-apps/plugin-os';
+import { open as openUrl } from '@tauri-apps/plugin-shell';
 
 const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   try {
@@ -250,6 +252,22 @@ export default function App() {
   const [updateStatusText, setUpdateStatusText] = useState('');
   const [updateToastMessage, setUpdateToastMessage] = useState<string | null>(null);
 
+  const getPlatformUpdateTarget = async () => {
+    try {
+      const osType = await getOsType();
+      const osArch = await getArch();
+      if (osType === 'windows') {
+        return 'windows-x86_64';
+      }
+      if (osType === 'macos') {
+        return osArch === 'x86_64' ? 'darwin-x86_64' : 'darwin-aarch64';
+      }
+      return 'windows-x86_64';
+    } catch {
+      return 'windows-x86_64';
+    }
+  };
+
   const checkForAppUpdates = async (silent = true) => {
     setIsCheckingUpdate(true);
     try {
@@ -267,7 +285,8 @@ export default function App() {
       // 2. HTTP fallback check if native updater didn't find one
       if (!foundUpdate) {
         try {
-          const res = await fetch('https://app.tracmatrix.com/api/agent/update/darwin-aarch64/1.0.0');
+          const target = await getPlatformUpdateTarget();
+          const res = await fetch(`https://app.tracmatrix.com/api/agent/update/${target}/1.0.0`);
           if (res.status === 200) {
             const data = await res.json();
             if (data?.version && data.version !== '1.0.0') {
@@ -309,33 +328,48 @@ export default function App() {
     try {
       setIsUpdating(true);
       setUpdateStatusText('Downloading update...');
-      let downloaded = 0;
-      let contentLength = 0;
 
-      await updateAvailable.downloadAndInstall((event: any) => {
-        switch (event.event) {
-          case 'Started':
-            contentLength = event.data.contentLength || 0;
-            setUpdateStatusText('Starting download...');
-            break;
-          case 'Progress':
-            downloaded += event.data.chunkLength;
-            if (contentLength > 0) {
-              const pct = Math.round((downloaded / contentLength) * 100);
-              setUpdateStatusText(`Downloading: ${pct}%`);
-            } else {
-              setUpdateStatusText(`Downloading...`);
-            }
-            break;
-          case 'Finished':
-            setUpdateStatusText('Installing & Restarting...');
-            break;
-        }
-      });
-      // App will restart or prompt
+      if (typeof updateAvailable.downloadAndInstall === 'function') {
+        let downloaded = 0;
+        let contentLength = 0;
+
+        await updateAvailable.downloadAndInstall((event: any) => {
+          switch (event.event) {
+            case 'Started':
+              contentLength = event.data.contentLength || 0;
+              setUpdateStatusText('Starting download...');
+              break;
+            case 'Progress':
+              downloaded += event.data.chunkLength;
+              if (contentLength > 0) {
+                const pct = Math.round((downloaded / contentLength) * 100);
+                setUpdateStatusText(`Downloading: ${pct}%`);
+              } else {
+                setUpdateStatusText(`Downloading...`);
+              }
+              break;
+            case 'Finished':
+              setUpdateStatusText('Installing & Restarting...');
+              break;
+          }
+        });
+      } else {
+        // Fallback for standalone / direct download link
+        const targetUrl = updateAvailable.url || 'https://app.tracmatrix.com/downloads/Smart-Employee-Tracker.exe';
+        setUpdateStatusText('Opening download...');
+        await openUrl(targetUrl);
+        setUpdateToastMessage('Opening browser to download the latest installer.');
+      }
     } catch (err: any) {
-      console.error('Failed to install update:', err);
-      alert(`Update failed: ${err?.message || err}`);
+      console.error('Failed to install update directly, opening download link:', err);
+      const targetUrl = updateAvailable.url || 'https://app.tracmatrix.com/downloads/Smart-Employee-Tracker.exe';
+      try {
+        await openUrl(targetUrl);
+      } catch {
+        window.open(targetUrl, '_blank');
+      }
+      setUpdateToastMessage('Update download link opened.');
+    } finally {
       setIsUpdating(false);
     }
   };
