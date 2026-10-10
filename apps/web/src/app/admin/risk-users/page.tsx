@@ -88,7 +88,7 @@ export default function RiskUsersPage() {
   })
 
   return (
-    <div className="min-h-full bg-white dark:bg-gray-950 pb-16 font-sans text-gray-800 dark:text-gray-100 flex flex-col">
+    <div className="min-h-full bg-[#f8f9fa] dark:bg-gray-950 pb-16 font-sans text-gray-800 dark:text-gray-100 flex flex-col">
       <AdminHeader
         title="Risk & Anomaly Center"
         subtitle="AI-assisted behavior analytics, excessive idle detection & burnout prevention"

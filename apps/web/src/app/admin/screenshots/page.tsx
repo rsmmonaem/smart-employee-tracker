@@ -422,7 +422,7 @@ export default function ScreenshotsPage() {
   })
 
   return (
-    <div className="min-h-full bg-white dark:bg-gray-900 pb-16">
+    <div className="min-h-full bg-[#f8f9fa] dark:bg-gray-950 pb-16">
       {/* Top Header Bar */}
       <AdminHeader
         title={currentUser?.role === 'EMPLOYEE' ? 'My Screenshots' : 'Screenshots'}
@@ -465,7 +465,7 @@ export default function ScreenshotsPage() {
       />
 
       {/* Dedicated Screenshots Action & Filter Toolbar */}
-      <div className="bg-gray-50/90 dark:bg-gray-850/60 border-b border-gray-200 dark:border-gray-800 px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs sticky top-16 z-20 backdrop-blur-sm">
+      <div className="bg-white/90 dark:bg-gray-900/90 border-b border-gray-200 dark:border-gray-800 px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs sticky top-16 z-20 backdrop-blur-md">
         {/* Left: Filters & Counters */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Member Dropdown Selector (Only for Admins) */}
@@ -480,7 +480,7 @@ export default function ScreenshotsPage() {
                     setSelectedUser(e.target.value)
                     setCurrentPage(1)
                   }}
-                  className="appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-8 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer"
+                  className="appearance-none bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg pl-8 pr-8 py-1.5 text-xs font-semibold text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 shadow-2xs cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
                 >
                   <option value="all">🏢 All Employees</option>
                   {employees.map((emp) => (
@@ -507,8 +507,8 @@ export default function ScreenshotsPage() {
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
               autoRefresh
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
-                : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-white text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750'
             }`}
             title="Toggle live screenshot updates"
           >
@@ -543,7 +543,7 @@ export default function ScreenshotsPage() {
             <button
               type="button"
               onClick={() => setShowStorageModal(true)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800 transition-colors shadow-2xs cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/80 dark:hover:bg-indigo-900/40 transition-colors shadow-2xs cursor-pointer"
               title="Manage day-wise screenshot storage & cleanup retention"
             >
               <Sliders className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -825,8 +825,8 @@ export default function ScreenshotsPage() {
         </>
       ) : (
         /* Empty State */
-        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-12 text-center shadow-2xs">
-          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-4">
+        <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-800 bg-white dark:bg-gray-900 p-12 text-center shadow-2xs">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900/40">
             <ImageIcon className="w-7 h-7" />
           </div>
           <h3 className="text-base font-bold text-gray-900 dark:text-white">
@@ -837,10 +837,10 @@ export default function ScreenshotsPage() {
             client.
           </p>
 
-          <div className="mt-6 p-4 max-w-md mx-auto bg-gray-50 dark:bg-gray-900 rounded-xl text-left border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 space-y-2">
+          <div className="mt-6 p-4 max-w-md mx-auto bg-gray-50 dark:bg-gray-950/70 rounded-xl text-left border border-gray-200 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-300 space-y-2">
             <p className="font-semibold text-gray-900 dark:text-white">How to test live tracking:</p>
             <ol className="list-decimal list-inside space-y-1 text-gray-500 dark:text-gray-400">
-              <li>Open terminal and run: <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-blue-600 font-mono">npm run dev:agent</code></li>
+              <li>Open terminal and run: <code className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400 font-mono">npm run dev:agent</code></li>
               <li>Sign in with <code className="font-mono text-gray-800 dark:text-gray-200">employee@example.com</code> / <code className="font-mono text-gray-800 dark:text-gray-200">password123</code></li>
               <li>Click <strong>Start Tracking</strong> (or the camera button)</li>
               <li>Screenshots will appear here live!</li>

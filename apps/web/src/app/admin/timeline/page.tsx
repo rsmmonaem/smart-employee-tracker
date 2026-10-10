@@ -360,7 +360,7 @@ export default function TimelinePage() {
         ]
 
   return (
-    <div className="min-h-full bg-white dark:bg-gray-900 pb-16">
+    <div className="min-h-full bg-[#f8f9fa] dark:bg-gray-950 pb-16">
       {/* Top Header Bar */}
       <AdminHeader
         title={currentUser?.role === 'EMPLOYEE' ? 'My Timeline' : 'Timeline'}
