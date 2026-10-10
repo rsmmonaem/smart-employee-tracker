@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download } from 'lucide-react';
+import { Play, Square, LogOut, Activity, Camera, RefreshCw, CheckCircle2, AlertCircle, Sliders, Zap, Download, Clock, Coffee, Bell } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { type as getOsType, arch as getArch } from '@tauri-apps/plugin-os';
@@ -244,6 +244,11 @@ export default function App() {
   const [isUserIdle, setIsUserIdle] = useState(false);
   const isUserIdleRef = useRef(false);
   isUserIdleRef.current = isUserIdle;
+
+  // Interactive Idle Auto-Pause Modal state
+  const [showIdlePrompt, setShowIdlePrompt] = useState(false);
+  const [idleCountdown, setIdleCountdown] = useState(60);
+  const idlePromptActiveRef = useRef(false);
 
   // Auto-updater state
   const [updateAvailable, setUpdateAvailable] = useState<any>(null);
@@ -908,6 +913,13 @@ export default function App() {
         setWindowTitle(`User away for ${Math.round(systemIdleSeconds)}s`);
         setAppProductivity({ classification: 'NEUTRAL', isReviewed: true });
 
+        // Trigger interactive prompt if not already showing
+        if (!idlePromptActiveRef.current) {
+          idlePromptActiveRef.current = true;
+          setShowIdlePrompt(true);
+          setIdleCountdown(60);
+        }
+
         if (currentSession?.user?.id && currentTenantId) {
           const { error } = await supabase.from('activity_events').insert({
             tenant_id: currentTenantId,
@@ -926,6 +938,13 @@ export default function App() {
           }
         }
         return;
+      } else {
+        // User has returned and is active with mouse/keyboard
+        if (idlePromptActiveRef.current) {
+          idlePromptActiveRef.current = false;
+          setShowIdlePrompt(false);
+          setIdleCountdown(60);
+        }
       }
 
       // 2. Active Window Tracking
@@ -1093,6 +1112,53 @@ export default function App() {
     });
     if (error) alert(error.message);
     setLoading(false);
+  };
+
+  // Idle Modal Countdown & Auto-action Handler
+  useEffect(() => {
+    let interval: any = null;
+    if (showIdlePrompt && idleCountdown > 0) {
+      interval = setInterval(() => {
+        setIdleCountdown((prev) => {
+          if (prev <= 1) {
+            // Countdown expired! Automatically pause tracking
+            handleIdleAutoPause();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showIdlePrompt, idleCountdown]);
+
+  const handleIdleResumeWorking = () => {
+    setShowIdlePrompt(false);
+    idlePromptActiveRef.current = false;
+    setIdleCountdown(60);
+    setLastSyncStatus('🚀 Resumed active tracking (user confirmed)');
+  };
+
+  const handleIdleTakeBreak = async () => {
+    setShowIdlePrompt(false);
+    idlePromptActiveRef.current = false;
+    setIdleCountdown(60);
+    if (isTrackingRef.current) {
+      await toggleTracking();
+      setLastSyncStatus('☕ On Break: Tracking paused');
+    }
+  };
+
+  const handleIdleAutoPause = async () => {
+    setShowIdlePrompt(false);
+    idlePromptActiveRef.current = false;
+    setIdleCountdown(60);
+    if (isTrackingRef.current) {
+      await toggleTracking();
+      setLastSyncStatus('⏸️ Inactivity timeout: Tracking auto-paused');
+    }
   };
 
   const toggleTracking = async () => {
@@ -1507,6 +1573,55 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Interactive Idle Auto-Pause Modal */}
+      {showIdlePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 max-w-sm w-full p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner border border-amber-200">
+              <Clock className="w-7 h-7 animate-pulse" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 tracking-tight">Are you still working?</h3>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                You haven't been active for a while. We noticed no keyboard or mouse activity.
+              </p>
+            </div>
+
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 flex items-center justify-center gap-2 text-xs font-semibold text-amber-800">
+              <Bell className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Auto-pausing tracker in <span className="font-mono text-sm font-bold text-amber-900">{idleCountdown}s</span></span>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={handleIdleResumeWorking}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all active:scale-[0.98]"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>Yes, Keep Working</span>
+              </button>
+
+              <button
+                onClick={handleIdleTakeBreak}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-all active:scale-[0.98]"
+              >
+                <Coffee className="w-4 h-4 text-amber-600" />
+                <span>Take a Break</span>
+              </button>
+
+              <button
+                onClick={handleIdleAutoPause}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition-all"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" />
+                <span>Stop Tracking</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

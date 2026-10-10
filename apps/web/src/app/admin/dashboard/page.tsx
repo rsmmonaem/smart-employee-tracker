@@ -112,6 +112,14 @@ export default function DashboardPage() {
 
   const [topAppsList, setTopAppsList] = useState<TopAppItem[]>([])
   const [dbScreenshots, setDbScreenshots] = useState<ScreenshotCard[]>([])
+  const [leaderboard, setLeaderboard] = useState<any[]>([])
+  const [riskSummary, setRiskSummary] = useState<{
+    criticalCount: number
+    warningCount: number
+    burnoutCount: number
+    healthyCount: number
+    totalTracked: number
+  } | null>(null)
 
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
   const supabase = useMemo(() => createClient(), [])
@@ -123,15 +131,17 @@ export default function DashboardPage() {
       }
       const todayStr = new Date().toISOString().slice(0, 10)
 
-      const [timesheetRes, appsRes, screenshotsRes] = await Promise.all([
+      const [timesheetRes, appsRes, screenshotsRes, riskRes] = await Promise.all([
         fetch(`/api/admin/timesheet?date=${todayStr}`, { cache: 'no-store' }),
         fetch('/api/admin/apps/review', { cache: 'no-store' }),
         fetch('/api/admin/screenshots?limit=6', { cache: 'no-store' }),
+        fetch(`/api/admin/risk-users?date=${todayStr}`, { cache: 'no-store' }),
       ])
 
       const timesheetJson = await timesheetRes.json()
       const appsJson = await appsRes.json()
       const screenshotsJson = await screenshotsRes.json()
+      const riskJson = await riskRes.json()
 
       let newStats = {
         totalMembers: 0,
@@ -208,6 +218,17 @@ export default function DashboardPage() {
       if (screenshotsJson.success && screenshotsJson.screenshots) {
         newScreenshots = screenshotsJson.screenshots as ScreenshotCard[]
         setDbScreenshots(newScreenshots)
+      }
+
+      // 4. Process Risk & Leaderboard
+      if (riskJson.success) {
+        if (riskJson.summary) {
+          setRiskSummary(riskJson.summary)
+        }
+        if (Array.isArray(riskJson.riskUsers)) {
+          const sorted = [...riskJson.riskUsers].sort((a: any, b: any) => b.performanceScore - a.performanceScore)
+          setLeaderboard(sorted.slice(0, 5))
+        }
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -444,46 +465,140 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Late Clock-in Employees (5 Columns) */}
+          {/* Team Performance Leaderboard (5 Columns) */}
           <div className="lg:col-span-5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-6 shadow-2xs flex flex-col justify-between min-h-[300px]">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-              Late Clock-in Employees
-            </h3>
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span>🏆 Team Leaderboard</span>
+                </h3>
+                <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-full">
+                  Today
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">Top performers ranked by AI productivity score</p>
 
-            <div className="flex-1 flex items-center justify-center p-6 text-center">
-              <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">
-                Late clock-in report is available for one day selection only
-              </p>
+              {leaderboard.length === 0 ? (
+                <div className="py-8 text-center text-xs text-gray-400">
+                  No active tracked sessions recorded yet today.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {leaderboard.map((user, idx) => {
+                    const rankMedal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}th`
+                    return (
+                      <div
+                        key={user.id}
+                        className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-xs"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <span className="font-bold text-sm w-5 text-center shrink-0">{rankMedal}</span>
+                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0">
+                            {user.avatar}
+                          </span>
+                          <span className="font-bold text-gray-900 dark:text-white truncate">
+                            {user.name}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="font-mono text-gray-500 text-[11px]">
+                            {user.workedHours}
+                          </span>
+                          <span
+                            className={`font-black font-mono px-2 py-0.5 rounded-md text-[11px] ${
+                              user.performanceScore >= 80
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                : user.performanceScore >= 60
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                            }`}
+                          >
+                            {user.performanceScore}%
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
 
-            <div className="text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3 flex items-center justify-between">
-              <span>Automated Attendance Engine</span>
-              <span className="text-blue-600 dark:text-blue-400 font-medium">Smart Tracker Time</span>
+            <div className="text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3 flex items-center justify-between mt-3">
+              <span>Weighted Productivity Score (0-100%)</span>
+              <Link href="/admin/reports" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
+                View Reports →
+              </Link>
             </div>
           </div>
         </div>
 
-        {/* ROW 3: Absence Last 7 Days & Recent Screenshots */}
+        {/* ROW 3: Workforce Behavioral Risk Watch & Recent Screenshots */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          {/* Absence Last 7 Days (5 Columns) */}
+          {/* Workforce Behavioral Health & Risk Watch (5 Columns) */}
           <div className="lg:col-span-5 bg-white dark:bg-gray-900 rounded-xl border border-gray-200/80 dark:border-gray-800 p-6 shadow-2xs flex flex-col justify-between min-h-[280px]">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-              Absence Last 7 Days
-            </h3>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-rose-500" />
+                  <span>Workforce Risk Pulse</span>
+                </h3>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold">
+                  AI Guard
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">Real-time anomalous idle &amp; burnout monitor</p>
 
-            <div className="flex-1 flex items-center justify-center p-6 text-center">
-              <p className="text-sm text-gray-400 dark:text-gray-500 max-w-xs">
-                Leave report is available for one day selection only
-              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50">
+                  <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-300 block">
+                    Critical Anomalies
+                  </span>
+                  <span className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1 block">
+                    {riskSummary?.criticalCount || 0}
+                  </span>
+                  <span className="text-[10px] text-rose-600/80 dark:text-rose-400/80">Idle &gt;35% or high distraction</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50">
+                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 block">
+                    Moderate Warnings
+                  </span>
+                  <span className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1 block">
+                    {riskSummary?.warningCount || 0}
+                  </span>
+                  <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80">Late arrivals or dips</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/50">
+                  <span className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 block">
+                    Burnout Watch
+                  </span>
+                  <span className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1 block">
+                    {riskSummary?.burnoutCount || 0}
+                  </span>
+                  <span className="text-[10px] text-purple-600/80 dark:text-purple-400/80">&gt;5h continuous without break</span>
+                </div>
+
+                <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
+                  <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 block">
+                    Healthy Members
+                  </span>
+                  <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
+                    {riskSummary?.healthyCount || 0}
+                  </span>
+                  <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">Optimal work parameters</span>
+                </div>
+              </div>
             </div>
 
-            <div className="text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3 flex items-center justify-between">
-              <span>Leave &amp; Absence Policy</span>
+            <div className="text-[11px] text-gray-400 border-t border-gray-100 dark:border-gray-800 pt-3 flex items-center justify-between mt-4">
+              <span>Automated behavioral telemetry</span>
               <Link
-                href="/admin/leave/summary"
-                className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
+                href="/admin/risk-users"
+                className="text-rose-600 dark:text-rose-400 font-bold hover:underline"
               >
-                View Leave Summary →
+                Open Risk Center →
               </Link>
             </div>
           </div>
