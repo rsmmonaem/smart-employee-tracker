@@ -23,6 +23,8 @@ import {
   Zap,
   TrendingUp,
   RefreshCw,
+  Laptop,
+  AppWindow,
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
@@ -83,6 +85,8 @@ interface LoginIpRecord {
   logoutTime: string
   ipAddress: string
   device: string
+  deviceType?: 'windows' | 'macos' | 'linux' | 'web'
+  appClient?: string
   status: 'ONLINE' | 'OFFLINE'
   isSuspicious?: boolean
 }
@@ -272,9 +276,9 @@ export default function ReportsPage() {
         .map((r) => `"${r.employeeName}","${r.team}","${r.totalKeystrokes}","${r.kpm}","${r.mouseEvents}","${r.activeTypingTime}","${r.intensity}"`)
         .join('\n')
     } else if (activeReport === 'login-ip') {
-      csvContent += 'Employee,Email,IP Address,Login Time,Logout Time,Device,Status\n'
+      csvContent += 'Employee,Email,IP Address,Login Time,Logout Time,Device,App Client,Status\n'
       csvContent += loginIpRecords
-        .map((r) => `"${r.employeeName}","${r.email}","${r.ipAddress}","${r.loginTime}","${r.logoutTime}","${r.device}","${r.status}"`)
+        .map((r) => `"${r.employeeName}","${r.email}","${r.ipAddress}","${r.loginTime}","${r.logoutTime}","${r.device}","${r.appClient || ''}","${r.status}"`)
         .join('\n')
     } else {
       csvContent += 'Name,Clock In,Clock Out,Worked Hours,Break,Effective Hours,Status\n'
@@ -959,7 +963,7 @@ export default function ReportsPage() {
                 <div className="bg-white dark:bg-gray-900 p-5 rounded-xl border border-gray-200 dark:border-gray-800 shadow-2xs">
                   <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Distinct IP Subnets</span>
                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
-                    {new Set(loginIpRecords.map((r) => r.ipAddress)).size}
+                    {new Set(loginIpRecords.filter((r) => r.ipAddress !== '—').map((r) => r.ipAddress)).size}
                   </div>
                   <span className="text-xs text-gray-400 font-mono mt-1 inline-block">
                     Office broadband &amp; remote networks
@@ -1016,7 +1020,12 @@ export default function ReportsPage() {
                         >
                           Logout / Last Seen {ipSortField === 'logoutTime' && (ipSortOrder === 'asc' ? '▲' : '▼')}
                         </th>
-                        <th className="py-3 px-4">Device &amp; App Client</th>
+                        <th
+                          onClick={() => handleIpSort('device')}
+                          className="py-3 px-4 cursor-pointer hover:text-blue-600 transition-colors"
+                        >
+                          Device &amp; App Client {ipSortField === 'device' && (ipSortOrder === 'asc' ? '▲' : '▼')}
+                        </th>
                         <th
                           onClick={() => handleIpSort('status')}
                           className="py-3 px-5 text-right cursor-pointer hover:text-blue-600 transition-colors"
@@ -1040,26 +1049,76 @@ export default function ReportsPage() {
                             </div>
                           </td>
                           <td className="py-3.5 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
-                            {rec.ipAddress}
+                            {rec.ipAddress === '—' ? (
+                              <span className="text-gray-400 font-sans text-xs font-normal">Not Connected</span>
+                            ) : (
+                              rec.ipAddress
+                            )}
                           </td>
                           <td className="py-3.5 px-4 font-mono text-gray-800 dark:text-gray-200">
-                            {rec.loginTime}
+                            {rec.loginTime === 'Not Logged In' ? (
+                              <span className="text-gray-400 font-sans text-xs">Not Logged In</span>
+                            ) : (
+                              rec.loginTime
+                            )}
                           </td>
-                          <td className="py-3.5 px-4 font-mono text-gray-500">
-                            {rec.logoutTime}
+                          <td className="py-3.5 px-4 font-mono">
+                            {rec.status === 'ONLINE' ? (
+                              <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-semibold text-xs font-sans">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                                Active Now
+                              </span>
+                            ) : rec.logoutTime !== '—' && rec.logoutTime !== 'Not Logged In' ? (
+                              <span className="text-gray-600 dark:text-gray-300">{rec.logoutTime}</span>
+                            ) : (
+                              <span className="text-gray-400 font-sans">—</span>
+                            )}
                           </td>
-                          <td className="py-3.5 px-4 text-gray-600 dark:text-gray-300">
-                            {rec.device}
+                          <td className="py-3.5 px-4">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 font-medium text-gray-900 dark:text-gray-100 text-xs">
+                                {rec.deviceType === 'macos' ? (
+                                  <Laptop className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                                ) : rec.deviceType === 'windows' ? (
+                                  <Monitor className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                                ) : (
+                                  <Laptop className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                                )}
+                                <span className="truncate max-w-[210px]" title={rec.device}>{rec.device}</span>
+                              </div>
+                              {rec.appClient && (
+                                <div className="flex items-center gap-1">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                                    rec.appClient.includes('Desktop')
+                                      ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200/80 dark:border-blue-800/60'
+                                      : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60'
+                                  }`}>
+                                    <AppWindow className="w-2.5 h-2.5 shrink-0" />
+                                    <span>{rec.appClient}</span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3.5 px-5 text-right">
                             <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                              className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ${
                                 rec.status === 'ONLINE'
-                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                  : 'bg-gray-150 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                  : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700'
                               }`}
                             >
-                              <span className={`w-1.5 h-1.5 rounded-full ${rec.status === 'ONLINE' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                              {rec.status === 'ONLINE' ? (
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                              ) : (
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400 dark:bg-gray-500" />
+                              )}
                               <span>{rec.status}</span>
                             </span>
                           </td>

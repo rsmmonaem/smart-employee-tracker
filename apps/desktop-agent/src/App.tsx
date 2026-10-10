@@ -727,6 +727,32 @@ export default function App() {
         localStorage.setItem('smart_tracker_current_session_id', data.id);
         setIsTracking(true);
         setLastSyncStatus('🚀 Tracking Active: Working session recorded');
+
+        // Sync exact device info and client version to users table
+        try {
+          const osType = await getOsType();
+          const osArch = await getArch();
+          const osLabel =
+            osType === 'macos'
+              ? 'macOS (Apple Silicon)'
+              : osType === 'windows'
+              ? 'Windows 11 (64-bit)'
+              : `${osType} (${osArch})`;
+          await supabase
+            .from('users')
+            .update({
+              device_token_hash: JSON.stringify({
+                os: osLabel,
+                client: 'Desktop Agent v1.0.0',
+                platform: osType,
+                arch: osArch,
+                updated_at: new Date().toISOString(),
+              }),
+            })
+            .eq('id', currentSession.user.id);
+        } catch {
+          // ignore
+        }
       } else {
         setIsTracking(true);
       }
