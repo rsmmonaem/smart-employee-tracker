@@ -27,12 +27,47 @@ interface Segment {
   durationStr: string
 }
 
-function formatClockTime(date: Date): string {
-  return date.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
+function formatClockTime(date: Date, timeZone: string = 'Asia/Dhaka'): string {
+  try {
+    return date.toLocaleTimeString('en-US', {
+      timeZone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+  } catch {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
+  }
+}
+
+function getTimezoneMinutes(date: Date, timeZone: string = 'Asia/Dhaka'): number {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    })
+    const parts = formatter.formatToParts(date)
+    let h = 0
+    let m = 0
+    for (const part of parts) {
+      if (part.type === 'hour') {
+        const val = parseInt(part.value, 10)
+        h = val === 24 ? 0 : val
+      }
+      if (part.type === 'minute') {
+        m = parseInt(part.value, 10)
+      }
+    }
+    return h * 60 + m
+  } catch {
+    return date.getHours() * 60 + date.getMinutes()
+  }
 }
 
 function formatDuration(totalSec: number): string {
@@ -281,10 +316,8 @@ export async function GET(req: Request) {
             if (endD.getTime() > nowMs) endD = new Date(nowMs)
           }
 
-          // Minutes from midnight (0 to 1440) matching standard 24h timeline
-          const startH = startD.getHours()
-          const startM = startD.getMinutes()
-          const startMin = startH * 60 + startM
+          // Minutes from midnight (0 to 1440) matching standard 24h timeline in organization timezone
+          const startMin = getTimezoneMinutes(startD, orgTimezone)
 
           const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
           const durationMin = Math.max(1, Math.round(diffSec / 60))
@@ -311,7 +344,7 @@ export async function GET(req: Request) {
           const prev = segments[segments.length - 1]
           if (prev && prev.type === type && prev.appName === segAppName && startMin <= prev.startMin + prev.durationMin + 1) {
             prev.durationMin += durationMin
-            prev.endTimeStr = formatClockTime(endD)
+            prev.endTimeStr = formatClockTime(endD, orgTimezone)
             prev.durationStr = formatDuration(prev.durationMin * 60)
           } else {
             segments.push({
@@ -321,8 +354,8 @@ export async function GET(req: Request) {
               type,
               appName: segAppName,
               windowTitle: segWindowTitle,
-              startTimeStr: formatClockTime(startD),
-              endTimeStr: formatClockTime(endD),
+              startTimeStr: formatClockTime(startD, orgTimezone),
+              endTimeStr: formatClockTime(endD, orgTimezone),
               durationStr: formatDuration(diffSec),
             })
           }
@@ -339,9 +372,7 @@ export async function GET(req: Request) {
             if (endD.getTime() > nowMs) endD = new Date(nowMs)
           }
 
-          const startH = startD.getHours()
-          const startM = startD.getMinutes()
-          const startMin = startH * 60 + startM
+          const startMin = getTimezoneMinutes(startD, orgTimezone)
 
           const diffSec = Math.max(60, Math.round((endD.getTime() - startD.getTime()) / 1000))
           const durationMin = Math.max(1, Math.round(diffSec / 60))
@@ -355,8 +386,8 @@ export async function GET(req: Request) {
             type: 'IDLE',
             appName: 'Idle Time',
             windowTitle: 'Active Tracker Session (No active app activity recorded)',
-            startTimeStr: formatClockTime(startD),
-            endTimeStr: isOngoing ? 'In Progress' : formatClockTime(endD),
+            startTimeStr: formatClockTime(startD, orgTimezone),
+            endTimeStr: isOngoing ? 'In Progress' : formatClockTime(endD, orgTimezone),
             durationStr: formatDuration(diffSec),
           })
         })
@@ -370,9 +401,7 @@ export async function GET(req: Request) {
           if (lastShot.getTime() > nowMs) lastShot = new Date(nowMs)
         }
 
-        const startH = firstShot.getHours()
-        const startM = firstShot.getMinutes()
-        const startMin = startH * 60 + startM
+        const startMin = getTimezoneMinutes(firstShot, orgTimezone)
         const diffSec = Math.max(60, Math.round((lastShot.getTime() - firstShot.getTime()) / 1000))
         const durationMin = Math.max(1, Math.round(diffSec / 60))
 
@@ -383,8 +412,8 @@ export async function GET(req: Request) {
           type: 'IDLE',
           appName: 'Idle Time',
           windowTitle: `${userScreenshots.length} screenshots recorded (No active work)`,
-          startTimeStr: formatClockTime(firstShot),
-          endTimeStr: formatClockTime(lastShot),
+          startTimeStr: formatClockTime(firstShot, orgTimezone),
+          endTimeStr: formatClockTime(lastShot, orgTimezone),
           durationStr: formatDuration(diffSec),
         })
       }

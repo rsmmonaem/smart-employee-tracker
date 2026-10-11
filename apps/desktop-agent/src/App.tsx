@@ -270,7 +270,7 @@ export default function App() {
     blurScreenCapture: false,
     screenshotIntervalStr: 'Every 10 mins',
     screenshotIntervalMs: 600000,
-    idleTimeoutStr: '1 min',
+    idleTimeoutStr: '5 mins',
     lastSyncedAt: null,
   });
 
