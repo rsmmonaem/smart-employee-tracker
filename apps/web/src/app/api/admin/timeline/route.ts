@@ -52,6 +52,31 @@ function getLocalDateString(isoStr?: string | null, timeZone: string = 'Asia/Dha
   }
 }
 
+function getTargetTimeMs(dateStr: string, minutesFromMidnight: number, timeZone: string = 'Asia/Dhaka'): number {
+  try {
+    const testDate = new Date(`${dateStr}T12:00:00Z`)
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    })
+    const parts = dtf.formatToParts(testDate)
+    const tzPart = parts.find((p) => p.type === 'timeZoneName')?.value
+    let offsetMinutes = 0
+    if (tzPart) {
+      const match = tzPart.match(/GMT([+-])(\d{1,2}):(\d{2})/)
+      if (match) {
+        const sign = match[1] === '+' ? 1 : -1
+        offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
+      }
+    }
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const totalUtcMinutes = minutesFromMidnight - offsetMinutes
+    return new Date(Date.UTC(y, m - 1, d, 0, totalUtcMinutes, 0)).getTime()
+  } catch {
+    return new Date(`${dateStr}T10:00:00Z`).getTime()
+  }
+}
+
 export async function GET(req: Request) {
   try {
     const session = await getSessionContext()
@@ -74,6 +99,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || todayStr
     const isTargetToday = targetDate === todayStr
+
+    const nowMs = Date.now()
+    const now = new Date(nowMs)
 
     // 1. Fetch real users filtered strictly by tenant
     let usersQuery = supabase
@@ -127,15 +155,27 @@ export async function GET(req: Request) {
       .order('started_at', { ascending: true })
       .limit(25000)
 
+    const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
+    const startOfTodayIso = new Date(startOfTodayMs).toISOString()
+
     // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
     await supabase
       .from('attendance_sessions')
       .update({
         status: 'CLOSED',
-        clocked_out_at: new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 1000).toISOString(),
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
       })
       .eq('status', 'OPEN')
-      .lt('clocked_in_at', new Date(todayStr + 'T00:00:00Z').toISOString())
+      .lt('clocked_in_at', startOfTodayIso)
+
+    // Clamp any future clocked_out_at timestamps on Today to now
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        clocked_out_at: new Date(nowMs).toISOString(),
+      })
+      .gt('clocked_out_at', new Date(nowMs).toISOString())
+      .gte('clocked_in_at', startOfTodayIso)
 
     // 3. Fetch attendance sessions strictly for those userIds
     const { data: sessions } = await supabase
@@ -191,22 +231,18 @@ export async function GET(req: Request) {
         (s) => s.user_id === user.id && getLocalDateString(s.taken_at, orgTimezone) === targetDate
       )
 
-const TARGET_IDLE_KEYWORDS = ['abdullah', 'sadek', 'sahalom', 'sara', 'shibl']
-
-function isTargetIdleUser(nameOrEmail?: string | null): boolean {
-  if (!nameOrEmail) return false
-  const lower = nameOrEmail.toLowerCase().trim()
-  return TARGET_IDLE_KEYWORDS.some((kw) => lower.includes(kw))
-}
-
-      const isTargetIdle = isTargetIdleUser(user.full_name) || isTargetIdleUser(user.email)
-
       const segments: Segment[] = []
 
       if (userEvents.length > 0) {
         userEvents.forEach((ev, idx) => {
           const startD = new Date(ev.started_at)
-          const endD = new Date(ev.ended_at)
+          let endD = new Date(ev.ended_at)
+
+          // On Today, strictly discard future events and clamp ongoing ones to now
+          if (isTargetToday) {
+            if (startD.getTime() >= nowMs) return
+            if (endD.getTime() > nowMs) endD = new Date(nowMs)
+          }
 
           // Minutes from midnight (0 to 1440) matching standard 24h timeline
           const startH = startD.getHours()
@@ -220,24 +256,20 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
           const appLower = (ev.app_name || '').toLowerCase()
           const winLower = (ev.window_title || '').toLowerCase()
 
-          if (isTargetIdle) {
-            type = 'IDLE'
-          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
-            type = 'UNTRACKED'
-          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
-            type = 'NOT_IN_WORK'
-          } else if (appLower.includes('idle') || winLower.includes('idle')) {
+          if (appLower.includes('idle') || winLower.includes('idle')) {
             type = 'IDLE'
           } else if (ev.classification === 'PRODUCTIVE') {
             type = 'PRODUCTIVE'
           } else if (ev.classification === 'UNPRODUCTIVE') {
             type = 'UNPRODUCTIVE'
+          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+            type = 'UNTRACKED'
+          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+            type = 'NOT_IN_WORK'
           }
 
-          const segAppName = isTargetIdle ? 'Idle Time' : ev.app_name
-          const segWindowTitle = isTargetIdle
-            ? 'Idle / Inactive (Laptop on without active work)'
-            : ev.window_title || 'Application Window'
+          const segAppName = ev.app_name || 'Active Application'
+          const segWindowTitle = ev.window_title || 'Application Window'
 
           const prev = segments[segments.length - 1]
           if (prev && prev.type === type && prev.appName === segAppName && startMin <= prev.startMin + prev.durationMin + 1) {
@@ -262,7 +294,13 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
         // Fallback: If no activity_events recorded, synthesize segments from attendance session(s)
         userSessions.forEach((sess, sIdx) => {
           const startD = new Date(sess.clocked_in_at)
-          const endD = sess.clocked_out_at ? new Date(sess.clocked_out_at) : new Date()
+          let endD = sess.clocked_out_at ? new Date(sess.clocked_out_at) : new Date(nowMs)
+
+          // On Today, strictly discard future sessions and clamp to now
+          if (isTargetToday) {
+            if (startD.getTime() >= nowMs) return
+            if (endD.getTime() > nowMs) endD = new Date(nowMs)
+          }
 
           const startH = startD.getHours()
           const startM = startD.getMinutes()
@@ -271,24 +309,30 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
           const diffSec = Math.max(60, Math.round((endD.getTime() - startD.getTime()) / 1000))
           const durationMin = Math.max(1, Math.round(diffSec / 60))
 
+          const isOngoing = !sess.clocked_out_at || sess.status === 'OPEN' || (isTargetToday && new Date(sess.clocked_out_at).getTime() >= nowMs)
+
           segments.push({
             id: sess.id || `sess-seg-${sIdx}`,
             startMin,
             durationMin,
             type: 'IDLE',
             appName: 'Idle Time',
-            windowTitle: isTargetIdle
-              ? 'Idle / Inactive (Laptop on without active work)'
-              : 'Active Session (No active work recorded)',
+            windowTitle: 'Active Tracker Session (No active app activity recorded)',
             startTimeStr: formatClockTime(startD),
-            endTimeStr: sess.clocked_out_at ? formatClockTime(endD) : 'In Progress',
+            endTimeStr: isOngoing ? 'In Progress' : formatClockTime(endD),
             durationStr: formatDuration(diffSec),
           })
         })
       } else if (userScreenshots.length > 0) {
         // Fallback: If screenshots recorded without activity events or session, synthesize from screenshots
         const firstShot = new Date(userScreenshots[0].taken_at)
-        const lastShot = new Date(userScreenshots[userScreenshots.length - 1].taken_at)
+        let lastShot = new Date(userScreenshots[userScreenshots.length - 1].taken_at)
+
+        if (isTargetToday) {
+          if (firstShot.getTime() >= nowMs) return
+          if (lastShot.getTime() > nowMs) lastShot = new Date(nowMs)
+        }
+
         const startH = firstShot.getHours()
         const startM = firstShot.getMinutes()
         const startMin = startH * 60 + startM
@@ -301,9 +345,7 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
           durationMin,
           type: 'IDLE',
           appName: 'Idle Time',
-          windowTitle: isTargetIdle
-            ? 'Idle / Inactive (Laptop on without active work)'
-            : `${userScreenshots.length} screenshots recorded (No active work)`,
+          windowTitle: `${userScreenshots.length} screenshots recorded (No active work)`,
           startTimeStr: formatClockTime(firstShot),
           endTimeStr: formatClockTime(lastShot),
           durationStr: formatDuration(diffSec),
@@ -316,24 +358,20 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
         userEvents.length > 0
           ? userEvents.map((ev) => ({
               id: ev.id,
-              appName: isTargetIdle ? 'Idle Time' : ev.app_name,
-              windowTitle: isTargetIdle
-                ? 'Idle / Inactive (Laptop on without active work)'
-                : ev.window_title || 'Application Window',
+              appName: ev.app_name || 'Active Application',
+              windowTitle: ev.window_title || 'Application Window',
               startedAt: ev.started_at,
               endedAt: ev.ended_at,
-              classification: isTargetIdle ? 'IDLE' : ev.classification,
-              domain: isTargetIdle ? null : ev.domain,
+              classification: ev.classification || 'NEUTRAL',
+              domain: ev.domain || null,
             }))
           : userSessions.length > 0
           ? userSessions.map((sess) => ({
               id: sess.id,
               appName: 'Idle Time',
-              windowTitle: isTargetIdle
-                ? 'Idle / Inactive (Laptop on without active work)'
-                : 'Active Tracker Session (No active work recorded)',
+              windowTitle: 'Active Tracker Session (No active work recorded)',
               startedAt: sess.clocked_in_at,
-              endedAt: sess.clocked_out_at || new Date().toISOString(),
+              endedAt: sess.clocked_out_at || new Date(nowMs).toISOString(),
               classification: 'IDLE',
               domain: null,
             }))
@@ -342,9 +380,7 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
               {
                 id: `shot-${user.id}`,
                 appName: 'Idle Time',
-                windowTitle: isTargetIdle
-                  ? 'Idle / Inactive (Laptop on without active work)'
-                  : `${userScreenshots.length} screenshots recorded (No active work)`,
+                windowTitle: `${userScreenshots.length} screenshots recorded (No active work)`,
                 startedAt: userScreenshots[0].taken_at,
                 endedAt: userScreenshots[userScreenshots.length - 1].taken_at,
                 classification: 'IDLE',

@@ -145,19 +145,14 @@ export default function TimelinePage() {
     y: number
   } | null>(null)
 
-const TARGET_IDLE_KEYWORDS = ['abdullah', 'sadek', 'sahalom', 'sara', 'shibl']
-
-function isTargetIdleUser(nameOrEmail?: string | null): boolean {
-  if (!nameOrEmail) return false
-  const lower = nameOrEmail.toLowerCase().trim()
-  return TARGET_IDLE_KEYWORDS.some((kw) => lower.includes(kw))
-}
-
   // Compute Client-Local Timezone Segments for full 24h day accurately
   const processEmployeeSegments = useCallback(
     (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
       const clientSegments: TimelineSegment[] = []
-      const isTargetIdle = isTargetIdleUser(emp.name) || isTargetIdleUser(emp.email)
+      const localTodayStr = getLocalTodayString()
+      const isTargetToday = targetDateStr === localTodayStr
+      const nowMs = Date.now()
+      const localNow = new Date(nowMs)
 
       // 1. Process real rawEvents from activity_events if present
       if (emp.rawEvents && emp.rawEvents.length > 0) {
@@ -172,7 +167,13 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
         // Strictly use only events that match targetDate in client's local timezone
         matchingEvents.forEach((ev, idx) => {
           const startD = new Date(ev.startedAt)
-          const endD = new Date(ev.endedAt)
+          let endD = new Date(ev.endedAt)
+
+          // On Today, strictly discard future events and clamp ongoing ones to now
+          if (isTargetToday) {
+            if (startD.getTime() >= nowMs) return
+            if (endD.getTime() > nowMs) endD = localNow
+          }
 
           // Exact minutes in client's local timezone from 00:00 (0 to 1440)
           const startMin = startD.getHours() * 60 + startD.getMinutes()
@@ -183,24 +184,20 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
           const appLower = (ev.appName || '').toLowerCase()
           const winLower = (ev.windowTitle || '').toLowerCase()
 
-          if (isTargetIdle) {
-            type = 'IDLE'
-          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
-            type = 'UNTRACKED'
-          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
-            type = 'NOT_IN_WORK'
-          } else if (appLower.includes('idle') || winLower.includes('idle')) {
+          if (appLower.includes('idle') || winLower.includes('idle')) {
             type = 'IDLE'
           } else if (ev.classification === 'PRODUCTIVE') {
             type = 'PRODUCTIVE'
           } else if (ev.classification === 'UNPRODUCTIVE') {
             type = 'UNPRODUCTIVE'
+          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+            type = 'UNTRACKED'
+          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+            type = 'NOT_IN_WORK'
           }
 
-          const segAppName = isTargetIdle ? 'Idle Time' : ev.appName
-          const segWindowTitle = isTargetIdle
-            ? 'Idle / Inactive (Laptop on without active work)'
-            : ev.windowTitle || 'Application Window'
+          const segAppName = ev.appName || 'Active Application'
+          const segWindowTitle = ev.windowTitle || 'Application Window'
 
           const prev = clientSegments[clientSegments.length - 1]
           if (
@@ -250,11 +247,19 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
 
           // Strictly check localClockInDateStr matches targetDateStr
           if (localClockInDateStr === targetDateStr) {
-            const clockOutDate = sess.clocked_out_at ? new Date(sess.clocked_out_at) : new Date()
+            let clockOutDate = sess.clocked_out_at ? new Date(sess.clocked_out_at) : localNow
+
+            // On Today, strictly discard future sessions and clamp to now
+            if (isTargetToday) {
+              if (clockInDate.getTime() >= nowMs) return
+              if (clockOutDate.getTime() > nowMs) clockOutDate = localNow
+            }
+
             const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
-            const endMin = clockOutDate.getHours() * 60 + clockOutDate.getMinutes()
             const totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
             const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+
+            const isOngoing = !sess.clocked_out_at || sess.status === 'OPEN' || (isTargetToday && new Date(sess.clocked_out_at).getTime() >= nowMs)
 
             clientSegments.push({
               id: sess.id || `session-${emp.id}-${sIdx}`,
@@ -262,11 +267,9 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
               durationMin,
               type: 'IDLE',
               appName: 'Idle Time',
-              windowTitle: isTargetIdle
-                ? 'Idle / Inactive (Laptop on without active work)'
-                : 'Active Session (No active work recorded)',
+              windowTitle: 'Active Tracker Session (No active app activity recorded)',
               startTimeStr: formatClockTime(clockInDate),
-              endTimeStr: sess.clocked_out_at ? formatClockTime(clockOutDate) : 'In Progress',
+              endTimeStr: isOngoing ? 'In Progress' : formatClockTime(clockOutDate),
               durationStr: formatDurationSec(totalDiffSec),
             })
           }
@@ -275,14 +278,6 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
 
       // 3. Fallback to server computed segments only if employee has activity events on targetDate
       if (clientSegments.length === 0 && emp.hasEvents && emp.segments && emp.segments.length > 0) {
-        if (isTargetIdle) {
-          return emp.segments.map((s) => ({
-            ...s,
-            type: 'IDLE',
-            appName: 'Idle Time',
-            windowTitle: 'Idle / Inactive (Laptop on without active work)',
-          }))
-        }
         return emp.segments
       }
 
@@ -479,23 +474,43 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
                               let isVisible = true
 
                               if (timelineMode === '24H') {
-                                leftPct = (seg.startMin / 1440) * 100
-                                widthPct = Math.max(0.6, (seg.durationMin / 1440) * 100)
+                                const segStart = seg.startMin
+                                let segEnd = seg.startMin + seg.durationMin
+                                if (selectedDate === todayActual) {
+                                  const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                                  segEnd = Math.min(segEnd, nowMin)
+                                }
+                                if (segEnd <= segStart) {
+                                  isVisible = false
+                                } else {
+                                  leftPct = (segStart / 1440) * 100
+                                  widthPct = Math.max(0.6, ((segEnd - segStart) / 1440) * 100)
+                                }
                               } else {
                                 const officeStartMin = 600 // 10:00 AM
                                 const officeTotalMin = 540 // 10:00 to 19:00 (9 hours: 10:00 AM - 7:00 PM)
                                 const segStart = seg.startMin
-                                const segEnd = seg.startMin + seg.durationMin
+                                let segEnd = seg.startMin + seg.durationMin
 
                                 if (segEnd <= officeStartMin || segStart >= officeStartMin + officeTotalMin) {
                                   isVisible = false
                                 } else {
                                   const visibleStart = Math.max(officeStartMin, segStart)
-                                  const visibleEnd = Math.min(officeStartMin + officeTotalMin, segEnd)
-                                  const visibleDuration = visibleEnd - visibleStart
+                                  let visibleEnd = Math.min(officeStartMin + officeTotalMin, segEnd)
 
-                                  leftPct = ((visibleStart - officeStartMin) / officeTotalMin) * 100
-                                  widthPct = Math.max(0.6, (visibleDuration / officeTotalMin) * 100)
+                                  // Strictly clamp visibleEnd to current time on Today so bars never exceed now!
+                                  if (selectedDate === todayActual) {
+                                    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                                    visibleEnd = Math.min(visibleEnd, nowMin)
+                                  }
+
+                                  if (visibleEnd <= visibleStart) {
+                                    isVisible = false
+                                  } else {
+                                    const visibleDuration = visibleEnd - visibleStart
+                                    leftPct = ((visibleStart - officeStartMin) / officeTotalMin) * 100
+                                    widthPct = Math.max(0.6, (visibleDuration / officeTotalMin) * 100)
+                                  }
                                 }
                               }
 
@@ -526,6 +541,26 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
                               )
                             })
                           )}
+
+                          {/* Current Time Line Marker on Today */}
+                          {selectedDate === todayActual && (() => {
+                            const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                            const nowPct =
+                              timelineMode === '24H'
+                                ? (nowMin / 1440) * 100
+                                : ((nowMin - 600) / 540) * 100
+                            if (nowPct >= 0 && nowPct <= 100) {
+                              return (
+                                <div
+                                  key="now-marker"
+                                  className="absolute top-0 bottom-0 w-0.5 bg-rose-500/80 z-20 pointer-events-none"
+                                  style={{ left: `${nowPct}%` }}
+                                  title="Current Time"
+                                />
+                              )
+                            }
+                            return null
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -538,6 +573,29 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
             <div className="grid grid-cols-12 items-center gap-4 mt-6 pt-3 border-t border-gray-150 dark:border-gray-800">
               <div className="col-span-2" />
               <div className="col-span-10 relative h-6">
+                {/* Now Badge on Axis */}
+                {selectedDate === todayActual && (() => {
+                  const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                  const nowPct =
+                    timelineMode === '24H'
+                      ? (nowMin / 1440) * 100
+                      : ((nowMin - 600) / 540) * 100
+                  if (nowPct >= 0 && nowPct <= 100) {
+                    return (
+                      <div
+                        key="now-badge"
+                        className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none z-30"
+                        style={{ left: `${nowPct}%` }}
+                      >
+                        <span className="text-[9px] font-bold text-white bg-rose-500 px-1 py-0.5 rounded shadow-2xs">
+                          Now
+                        </span>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+
                 {activeTicks.map((tick, idx) => {
                   const leftPct = (tick.min / activeTotalMinutes) * 100
                   const isHour = !tick.label.startsWith(':')
