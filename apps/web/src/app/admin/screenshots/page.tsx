@@ -84,6 +84,17 @@ export default function ScreenshotsPage() {
   const [totalCount, setTotalCount] = useState<number>(0)
   const [totalPages, setTotalPages] = useState<number>(1)
 
+  // Card display sizing mode (normal, large, ultra for UWQHD 3440x1440)
+  const [cardSize, setCardSize] = useState<'normal' | 'large' | 'ultra'>('normal')
+  const [modalZoom100, setModalZoom100] = useState<boolean>(false)
+
+  // Automatically detect UWQHD or high-resolution wide screens (width >= 2400) on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 2400) {
+      setCardSize('ultra')
+    }
+  }, [])
+
   const selectedUserRef = useRef(selectedUser)
   selectedUserRef.current = selectedUser
 
@@ -494,12 +505,72 @@ export default function ScreenshotsPage() {
             </div>
           )}
 
+          {/* Filtered Employee Clear Pill */}
+          {selectedUser !== 'all' && (
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-300 font-semibold animate-in fade-in">
+              <Users className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span>{employees.find((e) => e.id === selectedUser)?.name || 'Filtered Employee'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedUser('all')
+                  setCurrentPage(1)
+                }}
+                className="ml-1 p-0.5 rounded-full hover:bg-blue-200/60 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-400 hover:text-red-600 transition-colors cursor-pointer"
+                title="Clear employee filter (Show all)"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           {/* Counter Badge */}
           <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-300 font-medium">
             <ImageIcon className="w-3.5 h-3.5 text-blue-500" />
             <span>
               {filteredScreenshots.length} {filteredScreenshots.length === 1 ? 'Screenshot' : 'Screenshots'}
             </span>
+          </div>
+
+          {/* View Size Switcher (Normal, Large, UWQHD 3440x1440) */}
+          <div className="inline-flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs font-semibold border border-gray-200/60 dark:border-gray-700">
+            <button
+              type="button"
+              onClick={() => setCardSize('normal')}
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                cardSize === 'normal'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+              title="Standard grid cards"
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              onClick={() => setCardSize('large')}
+              className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                cardSize === 'large'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+              title="Large cards view"
+            >
+              Large
+            </button>
+            <button
+              type="button"
+              onClick={() => setCardSize('ultra')}
+              className={`px-2.5 py-0.5 rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                cardSize === 'ultra'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-bold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+              title="Ultra-Wide Screen View (UWQHD 3440 x 1440)"
+            >
+              <Sparkles className="w-3 h-3 text-amber-500" />
+              <span>UWQHD (Ultra)</span>
+            </button>
           </div>
 
           {/* Auto Refresh Toggle */}
@@ -619,7 +690,15 @@ export default function ScreenshotsPage() {
       {/* Grid of Screenshots & Pagination */}
       {filteredScreenshots.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div
+            className={
+              cardSize === 'ultra'
+                ? 'grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-2 3xl:grid-cols-3 gap-8'
+                : cardSize === 'large'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-3 gap-6'
+                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5'
+            }
+          >
             {filteredScreenshots.map((item) => {
             const imageUrl = getPublicUrl(item.storage_path)
             const userName = item.users?.full_name || item.users?.email?.split('@')[0] || 'Employee'
@@ -652,10 +731,16 @@ export default function ScreenshotsPage() {
                   </div>
                 </div>
 
-                {/* Image Preview */}
+                {/* Image Preview with Dynamic UWQHD Ultra-wide Scaling */}
                 <div
                   onClick={() => setSelectedImage(item)}
-                  className="relative aspect-video bg-gray-950 cursor-pointer overflow-hidden group/img"
+                  className={`relative bg-gray-950 cursor-pointer overflow-hidden group/img ${
+                    cardSize === 'ultra'
+                      ? 'aspect-video min-h-[320px] 2xl:min-h-[440px]'
+                      : cardSize === 'large'
+                      ? 'aspect-video min-h-[240px] 2xl:min-h-[300px]'
+                      : 'aspect-video'
+                  }`}
                 >
                   <img
                     src={imageUrl}
@@ -678,17 +763,48 @@ export default function ScreenshotsPage() {
                   )}
                 </div>
 
-                {/* Card Metadata with Large & Prominent Highlighted User Info */}
+                {/* Card Metadata with Large & Prominent Clickable User Info (Click filters by employee) */}
                 <div className="p-4 flex flex-col justify-between flex-1 bg-white dark:bg-gray-850">
-                  <div className="bg-blue-50/60 dark:bg-blue-950/30 p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/40">
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (selectedUser === item.user_id) {
+                        setSelectedUser('all')
+                      } else {
+                        setSelectedUser(item.user_id)
+                      }
+                      setCurrentPage(1)
+                    }}
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
+                      selectedUser === item.user_id
+                        ? 'bg-blue-100/90 dark:bg-blue-900/60 border-blue-500 ring-2 ring-blue-500/30'
+                        : 'bg-blue-50/60 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/40 hover:bg-blue-100/80 dark:hover:bg-blue-900/40 hover:border-blue-300'
+                    }`}
+                    title={
+                      selectedUser === item.user_id
+                        ? 'Click to show all employees'
+                        : `Click to show all screenshots of ${userName}`
+                    }
+                  >
                     <div className="flex items-center space-x-3">
                       <div className="w-9 h-9 rounded-full bg-blue-600 text-white flex items-center justify-center font-extrabold text-sm shrink-0 shadow-xs ring-2 ring-blue-400/30">
                         {userName.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-gray-950 dark:text-white truncate tracking-tight">
-                          {userName}
-                        </p>
+                        <div className="flex items-center justify-between gap-1">
+                          <p className="text-sm font-bold text-gray-950 dark:text-white truncate tracking-tight hover:underline">
+                            {userName}
+                          </p>
+                          {selectedUser === item.user_id ? (
+                            <span className="text-[10px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded shadow-2xs">
+                              Viewing All
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold opacity-75 group-hover:opacity-100">
+                              View all →
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 truncate mt-0.5">
                           {userEmail}
                         </p>
@@ -849,27 +965,45 @@ export default function ScreenshotsPage() {
         </div>
       )}
 
-      {/* Lightbox / Modal for Full Size Inspection */}
+      {/* Lightbox / Modal for Full Size Inspection with UWQHD Ultra-wide Support */}
       {selectedImage && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6"
-          onClick={() => setSelectedImage(null)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 md:p-6"
+          onClick={() => {
+            setSelectedImage(null)
+            setModalZoom100(false)
+          }}
         >
           <div
-            className="relative max-w-5xl w-full bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800"
+            className="relative w-full max-w-[98vw] 2xl:max-w-[95vw] max-h-[96vh] bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-800 flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-gray-950 border-b border-gray-800 flex items-center justify-between">
+            <div className="px-6 py-3.5 bg-gray-950 border-b border-gray-800 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-3.5">
                 <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-black text-sm ring-2 ring-blue-400/40">
                   {(selectedImage.users?.full_name || selectedImage.users?.email || 'E').charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-white tracking-tight">
-                      {selectedImage.users?.full_name || selectedImage.users?.email?.split('@')[0] || 'Employee'}
-                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedUser(selectedImage.user_id)
+                        setCurrentPage(1)
+                        setSelectedImage(null)
+                        setModalZoom100(false)
+                      }}
+                      className="text-base font-bold text-white tracking-tight hover:underline flex items-center gap-1.5 cursor-pointer text-left"
+                      title={`Click to view all screenshots of ${selectedImage.users?.full_name || 'this employee'}`}
+                    >
+                      <span>
+                        {selectedImage.users?.full_name || selectedImage.users?.email?.split('@')[0] || 'Employee'}
+                      </span>
+                      <span className="text-xs text-blue-400 font-semibold bg-blue-950/80 px-1.5 py-0.5 rounded border border-blue-800/60">
+                        View all →
+                      </span>
+                    </button>
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-950 text-blue-300 border border-blue-800">
                       {selectedImage.users?.email || selectedImage.user_id}
                     </span>
@@ -886,6 +1020,21 @@ export default function ScreenshotsPage() {
               </div>
 
               <div className="flex items-center space-x-2">
+                {/* 100% Native UWQHD Zoom Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setModalZoom100(!modalZoom100)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center space-x-1.5 border cursor-pointer ${
+                    modalZoom100
+                      ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
+                      : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
+                  }`}
+                  title="Toggle 100% Native UWQHD Pixel Zoom (3440 x 1440)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{modalZoom100 ? 'Fit to Screen' : '100% Native (UWQHD)'}</span>
+                </button>
+
                 <a
                   href={getPublicUrl(selectedImage.storage_path)}
                   target="_blank"
@@ -904,20 +1053,31 @@ export default function ScreenshotsPage() {
                   <span>Delete</span>
                 </button>
                 <button
-                  onClick={() => setSelectedImage(null)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                  onClick={() => {
+                    setSelectedImage(null)
+                    setModalZoom100(false)
+                  }}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Modal Image */}
-            <div className="relative max-h-[75vh] overflow-auto bg-black flex items-center justify-center p-2">
+            {/* Modal Image with UWQHD Display */}
+            <div
+              className={`relative flex-1 bg-black/95 flex items-center justify-center p-2 sm:p-4 overflow-auto min-h-[400px] max-h-[85vh] 2xl:max-h-[88vh] ${
+                modalZoom100 ? 'block cursor-move' : ''
+              }`}
+            >
               <img
                 src={getPublicUrl(selectedImage.storage_path)}
                 alt="Full screen capture"
-                className="max-h-[70vh] w-auto object-contain rounded"
+                className={`transition-all rounded-lg shadow-2xl ${
+                  modalZoom100
+                    ? 'w-auto max-w-none'
+                    : 'max-h-[82vh] 2xl:max-h-[85vh] max-w-full w-auto object-contain'
+                }`}
               />
             </div>
           </div>
