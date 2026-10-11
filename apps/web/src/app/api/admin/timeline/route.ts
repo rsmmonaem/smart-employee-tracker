@@ -207,15 +207,42 @@ export async function GET(req: Request) {
     }
     const authMap = cachedAuthMap
 
-    // 2. Fetch real activity events strictly for those userIds (allow up to 25000 events to prevent 1000 row truncation)
-    const { data: events } = await supabase
-      .from('activity_events')
-      .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
-      .in('user_id', userIds)
-      .gte('started_at', startOfDay)
-      .lte('started_at', endOfDay)
-      .order('started_at', { ascending: true })
-      .limit(25000)
+    // Exact 24-hour boundary for targetDate in organization timezone (plus 2 hour buffer for edge overlap)
+    const targetDayStartMs = getTargetTimeMs(targetDate, 0, orgTimezone) - 2 * 3600 * 1000
+    const targetDayEndMs = getTargetTimeMs(targetDate, 1440, orgTimezone) + 2 * 3600 * 1000
+    const targetDayStartIso = new Date(targetDayStartMs).toISOString()
+    const targetDayEndIso = new Date(targetDayEndMs).toISOString()
+
+    // 2. Fetch real activity events per user in parallel to strictly leverage idx_activity_events_tenant_user_time
+    const userEventBatches = await Promise.all(
+      userIds.map(async (uid) => {
+        try {
+          let q = supabase
+            .from('activity_events')
+            .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
+            .eq('user_id', uid)
+            .gte('started_at', targetDayStartIso)
+            .lte('started_at', targetDayEndIso)
+            .order('started_at', { ascending: true })
+            .limit(3000)
+
+          if (session.tenantId) {
+            q = q.eq('tenant_id', session.tenantId)
+          }
+
+          const { data, error } = await q
+          if (error) {
+            console.warn(`Activity events query error for user ${uid}:`, error.message)
+            return []
+          }
+          return data || []
+        } catch (e: any) {
+          console.warn(`Activity events query exception for user ${uid}:`, e?.message)
+          return []
+        }
+      })
+    )
+    const events = userEventBatches.flat()
 
     const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
     const startOfTodayIso = new Date(startOfTodayMs).toISOString()
@@ -254,25 +281,37 @@ export async function GET(req: Request) {
         .gte('clocked_in_at', startOfTodayIso)
     }
 
-    // 3. Fetch attendance sessions strictly for those userIds
-    const { data: sessions } = await supabase
+    // 3. Fetch attendance sessions strictly for those userIds with Tenant Isolation
+    let sessionsQuery = supabase
       .from('attendance_sessions')
       .select('*')
       .in('user_id', userIds)
-      .gte('clocked_in_at', startOfDay)
-      .lte('clocked_in_at', endOfDay)
+      .gte('clocked_in_at', targetDayStartIso)
+      .lte('clocked_in_at', targetDayEndIso)
       .order('clocked_in_at', { ascending: true })
       .limit(5000)
 
-    // 4. Fetch screenshots strictly for those userIds to support users with screenshots
-    const { data: screenshots } = await supabase
+    if (session.tenantId) {
+      sessionsQuery = sessionsQuery.eq('tenant_id', session.tenantId)
+    }
+
+    const { data: sessions } = await sessionsQuery
+
+    // 4. Fetch screenshots strictly for those userIds with Tenant Isolation
+    let screenshotsQuery = supabase
       .from('screenshots')
       .select('id, user_id, taken_at')
       .in('user_id', userIds)
-      .gte('taken_at', startOfDay)
-      .lte('taken_at', endOfDay)
+      .gte('taken_at', targetDayStartIso)
+      .lte('taken_at', targetDayEndIso)
       .order('taken_at', { ascending: true })
       .limit(10000)
+
+    if (session.tenantId) {
+      screenshotsQuery = screenshotsQuery.eq('tenant_id', session.tenantId)
+    }
+
+    const { data: screenshots } = await screenshotsQuery
 
     // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {
