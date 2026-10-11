@@ -190,6 +190,11 @@ function extractBrowserDomain(appName: string, windowTitle?: string): string | n
   return null;
 }
 
+function getTodayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [tenantId, setTenantId] = useState<string>('7d91b2a1-c727-4f50-83ec-4fdb9debebd3');
@@ -550,11 +555,6 @@ export default function App() {
       supabase.removeChannel(userSessionChannel);
     };
   }, [session?.user?.id]);
-
-  const getTodayKey = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
 
   const syncTodayTrackedTime = async (userId: string) => {
     const todayStr = getTodayKey();

@@ -196,22 +196,25 @@ function DownloadAppsView() {
             </div>
             <div className="mt-5 space-y-2">
               <a
-                href="/downloads/Smart-Employee-Tracker-macOS.dmg"
+                href="/downloads/Smart-Employee-Tracker-AppleSilicon.dmg"
                 download
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs"
               >
                 <Download className="h-4 w-4" />
-                Download Universal (.dmg - 10 MB)
+                Download Apple Silicon (M1/M2/M3/M4) (.dmg - 7.4 MB) ⭐ Recommended
               </a>
               <a
-                href="/downloads/Smart-Employee-Tracker-AppleSilicon.dmg"
+                href="/downloads/Smart-Employee-Tracker-macOS.dmg"
                 download
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 px-4 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-gray-750 transition-colors"
               >
                 <Download className="h-3.5 w-3.5" />
-                Download Apple Silicon Only (.dmg - 7.4 MB)
+                Download macOS Universal / Intel (.dmg - 7.4 MB)
               </a>
             </div>
+            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+              💡 <strong>macOS App Tracking:</strong> Make sure to enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> in <em>System Settings &gt; Privacy &amp; Security</em> so active apps and windows can be recorded.
+            </p>
           </div>
 
           {/* Windows Card */}

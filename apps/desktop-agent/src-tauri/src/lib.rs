@@ -111,6 +111,40 @@ fn get_focused_window() -> Result<ActiveWindowData, String> {
             })
         },
         Err(e) => {
+            #[cfg(target_os = "macos")]
+            {
+                // Robust macOS fallback: If active_win_pos_rs fails or lacks permission,
+                // query the frontmost process and window title directly via System Events.
+                // This ensures apps like Chrome, VS Code, Slack, etc. are ALWAYS captured!
+                use std::process::Command;
+                let script = r#"
+                    tell application "System Events"
+                        set frontApp to first application process whose frontmost is true
+                        set appName to name of frontApp
+                        try
+                            set winTitle to name of window 1 of frontApp
+                        on error
+                            set winTitle to appName & " Window"
+                        end try
+                        return appName & "|||" & winTitle
+                    end tell
+                "#;
+                if let Ok(output) = Command::new("osascript").args(&["-e", script]).output() {
+                    let result_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !result_str.is_empty() {
+                        let parts: Vec<&str> = result_str.split("|||").collect();
+                        let app_name = parts.get(0).unwrap_or(&"Active Session").trim().to_string();
+                        let title = parts.get(1).unwrap_or(&"Active Window").trim().to_string();
+                        if !app_name.is_empty() {
+                            return Ok(ActiveWindowData {
+                                title: if title.is_empty() { format!("{} Active", app_name) } else { title },
+                                app_name,
+                            });
+                        }
+                    }
+                }
+            }
+
             // When there's no active window or permissions are denied
             Err(format!("Could not get active window: {:?}", e))
         }

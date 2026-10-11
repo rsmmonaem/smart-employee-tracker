@@ -27,7 +27,7 @@ const LATEST_RELEASE: UpdateInfo = {
   pub_date: new Date().toISOString(),
   platforms: {
     'darwin-aarch64': {
-      url: 'https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-macOS.dmg',
+      url: 'https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-AppleSilicon.dmg',
       signature: '',
     },
     'darwin-x86_64': {
