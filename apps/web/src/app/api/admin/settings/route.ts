@@ -90,6 +90,16 @@ export async function GET() {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Employees are restricted from reading organization configuration or member lists
+    if (session.role === 'EMPLOYEE') {
+      return NextResponse.json({
+        success: true,
+        role: 'EMPLOYEE',
+        settings: null,
+        members: [],
+      })
+    }
+
     const supabase = createAdminClient()
 
     // 1. Fetch saved settings with strict Tenant Isolation
@@ -157,8 +167,11 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await getSessionContext()
-    if (!session) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Admin access required to modify settings' },
+        { status: 403 }
+      )
     }
 
     const body = await req.json()

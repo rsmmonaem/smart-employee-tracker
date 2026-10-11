@@ -138,7 +138,18 @@ export default function AdminSidebar({
             </p>
             {group.items.map((item) => {
               const Icon = item.icon
-              const isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(item.href))
+              const isSettings = pathname === '/admin/settings'
+              let isActive = false
+
+              if (item.href.includes('tab=download-apps')) {
+                isActive = isEmployee
+                  ? isSettings
+                  : isSettings && (typeof window !== 'undefined' ? window.location.search.includes('tab=download-apps') : false)
+              } else if (item.href === '/admin/settings') {
+                isActive = isSettings && (typeof window !== 'undefined' ? !window.location.search.includes('tab=download-apps') : true)
+              } else {
+                isActive = pathname === item.href || (item.href !== '/admin' && pathname?.startsWith(item.href))
+              }
 
               return (
                 <Link
