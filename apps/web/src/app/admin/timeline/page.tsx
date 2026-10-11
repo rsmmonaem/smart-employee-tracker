@@ -156,29 +156,61 @@ export default function TimelinePage() {
 
       // 1. Process real rawEvents from activity_events if present
       if (emp.rawEvents && emp.rawEvents.length > 0) {
-        // Filter events that fall on the targetDate in user's browser local timezone
-        const matchingEvents = emp.rawEvents.filter((ev) => {
-          const d = new Date(ev.startedAt)
-          // Match local date (YYYY-MM-DD)
-          const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-          return localDateStr === targetDateStr
-        })
+        // Filter events that fall on the targetDate in user's browser local timezone and sort ascending
+        const matchingEvents = emp.rawEvents
+          .filter((ev) => {
+            const d = new Date(ev.startedAt)
+            // Match local date (YYYY-MM-DD)
+            const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            return localDateStr === targetDateStr
+          })
+          .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
 
-        // Strictly use only events that match targetDate in client's local timezone
+        let currentSeg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        } | null = null
+
+        const commitSegment = (seg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        }) => {
+          const startD = new Date(seg.startMs)
+          const endD = new Date(seg.endMs)
+          const startMin = startD.getHours() * 60 + startD.getMinutes() + startD.getSeconds() / 60
+          const diffSec = Math.max(5, Math.round((seg.endMs - seg.startMs) / 1000))
+          const durationMin = Math.max(0.08, diffSec / 60)
+
+          clientSegments.push({
+            id: seg.id,
+            startMin,
+            durationMin,
+            type: seg.type,
+            appName: seg.appName,
+            windowTitle: seg.windowTitle,
+            startTimeStr: formatClockTime(startD),
+            endTimeStr: formatClockTime(endD),
+            durationStr: formatDurationSec(diffSec),
+          })
+        }
+
         matchingEvents.forEach((ev, idx) => {
-          const startD = new Date(ev.startedAt)
-          let endD = new Date(ev.endedAt)
+          const startMs = new Date(ev.startedAt).getTime()
+          let endMs = new Date(ev.endedAt).getTime()
+          if (endMs <= startMs) endMs = startMs + 5000
 
-          // On Today, strictly discard future events and clamp ongoing ones to now
           if (isTargetToday) {
-            if (startD.getTime() >= nowMs) return
-            if (endD.getTime() > nowMs) endD = localNow
+            if (startMs >= nowMs) return
+            if (endMs > nowMs) endMs = nowMs
           }
-
-          // Exact minutes in client's local timezone from 00:00 (0 to 1440)
-          const startMin = startD.getHours() * 60 + startD.getMinutes()
-          const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
-          const durationMin = Math.max(1, Math.round(diffSec / 60))
 
           let type: ActivityType = 'NEUTRAL'
           const appLower = (ev.appName || '').toLowerCase()
@@ -199,30 +231,35 @@ export default function TimelinePage() {
           const segAppName = ev.appName || 'Active Application'
           const segWindowTitle = ev.windowTitle || 'Application Window'
 
-          const prev = clientSegments[clientSegments.length - 1]
+          // Merge if same app, same classification, and gap between events <= 60 seconds
           if (
-            prev &&
-            prev.type === type &&
-            prev.appName === segAppName &&
-            startMin <= prev.startMin + prev.durationMin + 2
+            currentSeg &&
+            currentSeg.type === type &&
+            currentSeg.appName === segAppName &&
+            startMs <= currentSeg.endMs + 60000
           ) {
-            prev.durationMin += durationMin
-            prev.endTimeStr = formatClockTime(endD)
-            prev.durationStr = formatDurationSec(prev.durationMin * 60)
+            currentSeg.endMs = Math.max(currentSeg.endMs, endMs)
           } else {
-            clientSegments.push({
+            if (currentSeg) {
+              commitSegment(currentSeg)
+            }
+
+            // Ensure startMs does not precede currentSeg.endMs to guarantee zero overlapping segments
+            const adjustedStartMs = currentSeg ? Math.max(startMs, currentSeg.endMs) : startMs
+            currentSeg = {
               id: ev.id || `seg-${idx}`,
-              startMin,
-              durationMin,
+              startMs: adjustedStartMs,
+              endMs: Math.max(adjustedStartMs + 5000, endMs),
               type,
               appName: segAppName,
               windowTitle: segWindowTitle,
-              startTimeStr: formatClockTime(startD),
-              endTimeStr: formatClockTime(endD),
-              durationStr: formatDurationSec(diffSec),
-            })
+            }
           }
         })
+
+        if (currentSeg) {
+          commitSegment(currentSeg)
+        }
       }
 
       // 2. Fallback: If clientSegments is empty but user clocked in on targetDate, render attendance sessions matching targetDateStr
@@ -503,7 +540,7 @@ export default function TimelinePage() {
                                   isVisible = false
                                 } else {
                                   leftPct = (segStart / 1440) * 100
-                                  widthPct = Math.max(0.6, ((segEnd - segStart) / 1440) * 100)
+                                  widthPct = ((segEnd - segStart) / 1440) * 100
                                 }
                               } else {
                                 const officeStartMin = 600 // 10:00 AM
@@ -528,7 +565,7 @@ export default function TimelinePage() {
                                   } else {
                                     const visibleDuration = visibleEnd - visibleStart
                                     leftPct = ((visibleStart - officeStartMin) / officeTotalMin) * 100
-                                    widthPct = Math.max(0.6, (visibleDuration / officeTotalMin) * 100)
+                                    widthPct = (visibleDuration / officeTotalMin) * 100
                                   }
                                 }
                               }
@@ -550,10 +587,11 @@ export default function TimelinePage() {
                                     })
                                   }}
                                   onMouseLeave={() => setHoveredSegment(null)}
-                                  className="absolute top-0 bottom-0 cursor-pointer hover:brightness-105 hover:z-10 transition-all border-r border-black/5"
+                                  className="absolute top-0 bottom-0 cursor-pointer hover:brightness-110 transition-all border-r border-black/5"
                                   style={{
                                     left: `${leftPct}%`,
                                     width: `${widthPct}%`,
+                                    minWidth: '2px',
                                     backgroundColor: color,
                                   }}
                                 />

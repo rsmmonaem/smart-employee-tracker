@@ -50,11 +50,13 @@ function getTimezoneMinutes(date: Date, timeZone: string = 'Asia/Dhaka'): number
       timeZone,
       hour: 'numeric',
       minute: 'numeric',
+      second: 'numeric',
       hour12: false,
     })
     const parts = formatter.formatToParts(date)
     let h = 0
     let m = 0
+    let s = 0
     for (const part of parts) {
       if (part.type === 'hour') {
         const val = parseInt(part.value, 10)
@@ -63,10 +65,13 @@ function getTimezoneMinutes(date: Date, timeZone: string = 'Asia/Dhaka'): number
       if (part.type === 'minute') {
         m = parseInt(part.value, 10)
       }
+      if (part.type === 'second') {
+        s = parseInt(part.value, 10)
+      }
     }
-    return h * 60 + m
+    return h * 60 + m + s / 60
   } catch {
-    return date.getHours() * 60 + date.getMinutes()
+    return date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60
   }
 }
 
@@ -350,21 +355,53 @@ export async function GET(req: Request) {
       const segments: Segment[] = []
 
       if (userEvents.length > 0) {
-        userEvents.forEach((ev, idx) => {
-          const startD = new Date(ev.started_at)
-          let endD = new Date(ev.ended_at)
+        userEvents.sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime())
 
-          // On Today, strictly discard future events and clamp ongoing ones to now
-          if (isTargetToday) {
-            if (startD.getTime() >= nowMs) return
-            if (endD.getTime() > nowMs) endD = new Date(nowMs)
-          }
+        let currentSeg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        } | null = null
 
-          // Minutes from midnight (0 to 1440) matching standard 24h timeline in organization timezone
+        const commitSegment = (seg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        }) => {
+          const startD = new Date(seg.startMs)
+          const endD = new Date(seg.endMs)
           const startMin = getTimezoneMinutes(startD, orgTimezone)
+          const diffSec = Math.max(5, Math.round((seg.endMs - seg.startMs) / 1000))
+          const durationMin = Math.max(0.08, diffSec / 60)
 
-          const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
-          const durationMin = Math.max(1, Math.round(diffSec / 60))
+          segments.push({
+            id: seg.id,
+            startMin,
+            durationMin,
+            type: seg.type,
+            appName: seg.appName,
+            windowTitle: seg.windowTitle,
+            startTimeStr: formatClockTime(startD, orgTimezone),
+            endTimeStr: formatClockTime(endD, orgTimezone),
+            durationStr: formatDuration(diffSec),
+          })
+        }
+
+        userEvents.forEach((ev, idx) => {
+          const startMs = new Date(ev.started_at).getTime()
+          let endMs = new Date(ev.ended_at).getTime()
+          if (endMs <= startMs) endMs = startMs + 5000
+
+          if (isTargetToday) {
+            if (startMs >= nowMs) return
+            if (endMs > nowMs) endMs = nowMs
+          }
 
           let type: ActivityType = 'NEUTRAL'
           const appLower = (ev.app_name || '').toLowerCase()
@@ -385,25 +422,34 @@ export async function GET(req: Request) {
           const segAppName = ev.app_name || 'Active Application'
           const segWindowTitle = ev.window_title || 'Application Window'
 
-          const prev = segments[segments.length - 1]
-          if (prev && prev.type === type && prev.appName === segAppName && startMin <= prev.startMin + prev.durationMin + 1) {
-            prev.durationMin += durationMin
-            prev.endTimeStr = formatClockTime(endD, orgTimezone)
-            prev.durationStr = formatDuration(prev.durationMin * 60)
+          // Merge consecutive events if same app, same classification, and gap <= 60 seconds
+          if (
+            currentSeg &&
+            currentSeg.type === type &&
+            currentSeg.appName === segAppName &&
+            startMs <= currentSeg.endMs + 60000
+          ) {
+            currentSeg.endMs = Math.max(currentSeg.endMs, endMs)
           } else {
-            segments.push({
+            if (currentSeg) {
+              commitSegment(currentSeg)
+            }
+
+            const adjustedStartMs = currentSeg ? Math.max(startMs, currentSeg.endMs) : startMs
+            currentSeg = {
               id: ev.id || `seg-${idx}`,
-              startMin,
-              durationMin,
+              startMs: adjustedStartMs,
+              endMs: Math.max(adjustedStartMs + 5000, endMs),
               type,
               appName: segAppName,
               windowTitle: segWindowTitle,
-              startTimeStr: formatClockTime(startD, orgTimezone),
-              endTimeStr: formatClockTime(endD, orgTimezone),
-              durationStr: formatDuration(diffSec),
-            })
+            }
           }
         })
+
+        if (currentSeg) {
+          commitSegment(currentSeg)
+        }
       } else if (userSessions.length > 0) {
         // Fallback: If no activity_events recorded, synthesize segments from attendance session(s)
         userSessions.forEach((sess, sIdx) => {
