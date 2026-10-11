@@ -148,6 +148,11 @@ export default function TimelinePage() {
   // Compute Client-Local Timezone Segments for full 24h day accurately
   const processEmployeeSegments = useCallback(
     (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
+      // Prioritize full-day server computed segments if present
+      if (emp.segments && emp.segments.length > 0) {
+        return emp.segments
+      }
+
       const clientSegments: TimelineSegment[] = []
       const localTodayStr = getLocalTodayString()
       const isTargetToday = targetDateStr === localTodayStr

@@ -218,36 +218,49 @@ export async function GET(req: Request) {
     const targetDayStartIso = new Date(targetDayStartMs).toISOString()
     const targetDayEndIso = new Date(targetDayEndMs).toISOString()
 
-    // 2. Fetch real activity events per user in parallel to strictly leverage idx_activity_events_tenant_user_time
-    const userEventBatches = await Promise.all(
+    // 2. Fetch real activity events per user in parallel with range pagination to bypass PostgREST max-rows cap
+    const userEventsMap = new Map<string, any[]>()
+
+    await Promise.all(
       userIds.map(async (uid) => {
         try {
-          let q = supabase
-            .from('activity_events')
-            .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
-            .eq('user_id', uid)
-            .gte('started_at', targetDayStartIso)
-            .lte('started_at', targetDayEndIso)
-            .order('started_at', { ascending: true })
-            .limit(3000)
+          const allUserEvents: any[] = []
+          const pageSize = 1000
+          let from = 0
+          const maxRowsPerUser = 20000 // allows up to 28+ hours of continuous tracking
 
-          if (session.tenantId) {
-            q = q.eq('tenant_id', session.tenantId)
+          while (from < maxRowsPerUser) {
+            let q = supabase
+              .from('activity_events')
+              .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
+              .eq('user_id', uid)
+              .gte('started_at', targetDayStartIso)
+              .lte('started_at', targetDayEndIso)
+              .order('started_at', { ascending: true })
+              .range(from, from + pageSize - 1)
+
+            if (session.tenantId) {
+              q = q.eq('tenant_id', session.tenantId)
+            }
+
+            const { data, error } = await q
+            if (error) {
+              console.warn(`Activity events query error for user ${uid} (range ${from}):`, error.message)
+              break
+            }
+            if (!data || data.length === 0) break
+            allUserEvents.push(...data)
+            if (data.length < pageSize) break
+            from += pageSize
           }
 
-          const { data, error } = await q
-          if (error) {
-            console.warn(`Activity events query error for user ${uid}:`, error.message)
-            return []
-          }
-          return data || []
+          userEventsMap.set(uid, allUserEvents)
         } catch (e: any) {
           console.warn(`Activity events query exception for user ${uid}:`, e?.message)
-          return []
+          userEventsMap.set(uid, [])
         }
       })
     )
-    const events = userEventBatches.flat()
 
     const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
     const startOfTodayIso = new Date(startOfTodayMs).toISOString()
@@ -333,8 +346,9 @@ export async function GET(req: Request) {
       const primaryTeam = userTeams[0] || (meta.team || 'General')
 
       // Strictly filter to events on targetDate in organization timezone
-      const userEvents = (events || []).filter(
-        (e) => e.user_id === user.id && getLocalDateString(e.started_at, orgTimezone) === targetDate
+      const rawUserEvents = userEventsMap.get(user.id) || []
+      const userEvents = rawUserEvents.filter(
+        (e) => getLocalDateString(e.started_at, orgTimezone) === targetDate
       )
 
       // Strictly filter to sessions on targetDate in organization timezone
