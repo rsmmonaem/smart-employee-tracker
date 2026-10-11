@@ -57,3 +57,60 @@ export function formatLocalDateString(isoStr?: string | null | Date, timeZone: s
     return typeof isoStr === 'string' ? isoStr.slice(0, 10) : ''
   }
 }
+
+/**
+ * Computes exact UTC timestamp (in milliseconds) for a given date (YYYY-MM-DD)
+ * and minutes from midnight (0 = 00:00 midnight, 600 = 10:00 AM) in a specified timezone.
+ */
+export function getTargetTimeMs(dateStr: string, minutesFromMidnight: number, timeZone: string = DEFAULT_TIMEZONE): number {
+  try {
+    const testDate = new Date(`${dateStr}T12:00:00Z`)
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    })
+    const parts = dtf.formatToParts(testDate)
+    const tzPart = parts.find((p) => p.type === 'timeZoneName')?.value
+    let offsetMinutes = 0
+    if (tzPart) {
+      const match = tzPart.match(/GMT([+-])(\d{1,2}):(\d{2})/)
+      if (match) {
+        const sign = match[1] === '+' ? 1 : -1
+        offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
+      }
+    }
+    const [y, m, d] = dateStr.split('-').map(Number)
+    const totalUtcMinutes = minutesFromMidnight - offsetMinutes
+    return new Date(Date.UTC(y, m - 1, d, 0, totalUtcMinutes, 0)).getTime()
+  } catch {
+    return new Date(`${dateStr}T10:00:00Z`).getTime()
+  }
+}
+
+/**
+ * Parses a clock time string like "10:00 AM" or "10:00" into minutes from midnight.
+ */
+export function parseClockInMinutes(str: string, defaultMinutes: number = 600): number {
+  try {
+    const cleaned = str.trim().toUpperCase()
+    const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/)
+    const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/)
+    let hours = 0
+    let minutes = 0
+    if (ampmMatch) {
+      hours = parseInt(ampmMatch[1], 10)
+      minutes = parseInt(ampmMatch[2], 10)
+      if (ampmMatch[3] === 'PM' && hours !== 12) hours += 12
+      if (ampmMatch[3] === 'AM' && hours === 12) hours = 0
+      return hours * 60 + minutes
+    } else if (h24Match) {
+      hours = parseInt(h24Match[1], 10)
+      minutes = parseInt(h24Match[2], 10)
+      return hours * 60 + minutes
+    }
+    return defaultMinutes
+  } catch {
+    return defaultMinutes
+  }
+}
+

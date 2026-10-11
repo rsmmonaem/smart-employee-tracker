@@ -228,7 +228,12 @@ export default function DashboardPage() {
         }
         if (Array.isArray(riskJson.riskUsers)) {
           const activeWorkers = riskJson.riskUsers.filter(
-            (u: any) => u.workedHours && u.workedHours !== '00h 00m'
+            (u: any) =>
+              u.workedHours &&
+              u.workedHours !== '00h 00m' &&
+              u.performanceScore > 0 &&
+              u.productiveHours &&
+              u.productiveHours !== '00h 00m'
           )
           const sorted = [...activeWorkers].sort((a: any, b: any) => b.performanceScore - a.performanceScore)
           setLeaderboard(sorted.slice(0, 5))

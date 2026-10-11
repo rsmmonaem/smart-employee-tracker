@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getSessionContext } from '@/utils/supabase/auth-context'
-import { formatLocalDateString, getTodayInTimezone, DEFAULT_TIMEZONE } from '@/utils/date'
+import {
+  formatLocalDateString,
+  getTodayInTimezone,
+  DEFAULT_TIMEZONE,
+  getTargetTimeMs,
+  parseClockInMinutes,
+} from '@/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +39,38 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || todayStr
+    const isTargetToday = targetDate === todayStr
+
+    const nowMs = Date.now()
+
+    const expectedClockInStr: string = settingsRow?.value?.expectedClockIn || '10:00 AM'
+    const expectedClockOutStr: string = settingsRow?.value?.expectedClockOut || '19:00'
+    const expectedInMinutes = parseClockInMinutes(expectedClockInStr, 600) // 10:00 AM = 600
+    const expectedOutMinutes = parseClockInMinutes(expectedClockOutStr, 1140) // 07:00 PM = 1140
+
+    const shiftStartMs = getTargetTimeMs(targetDate, expectedInMinutes, orgTimezone)
+    const shiftEndMs = getTargetTimeMs(targetDate, expectedOutMinutes, orgTimezone)
+    const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
+    const startOfTodayIso = new Date(startOfTodayMs).toISOString()
+
+    // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .eq('status', 'OPEN')
+      .lt('clocked_in_at', startOfTodayIso)
+
+    // Clamp any future clocked_out_at timestamps on Today to now
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        clocked_out_at: new Date(nowMs).toISOString(),
+      })
+      .gt('clocked_out_at', new Date(nowMs).toISOString())
+      .gte('clocked_in_at', startOfTodayIso)
 
     let usersQuery = supabase
       .from('users')
@@ -108,10 +146,28 @@ export async function GET(req: Request) {
       let totalBreakSec = 0
 
       const intervals: { start: number; end: number }[] = []
-      const nowMs = Date.now()
       userSessions.forEach((s) => {
-        const inT = new Date(s.clocked_in_at).getTime()
-        const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+        let inT = new Date(s.clocked_in_at).getTime()
+        let outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+
+        // If today, clamp to current time
+        if (isTargetToday) {
+          if (inT >= nowMs) return
+          if (outT > nowMs) outT = nowMs
+
+          // If session clocked in before shift start (10:00 AM):
+          // Check if user had verified activity events before shiftStartMs.
+          // If no verified events before 10:00 AM, shift only counts from shiftStartMs (10:00 AM)!
+          if (inT < shiftStartMs) {
+            const hasEarlyEvents = userEvents.some(
+              (e) => new Date(e.started_at).getTime() < shiftStartMs
+            )
+            if (!hasEarlyEvents) {
+              inT = shiftStartMs
+            }
+          }
+        }
+
         if (outT > inT) {
           intervals.push({ start: inT, end: outT })
         }
@@ -144,7 +200,7 @@ export async function GET(req: Request) {
       userEvents.forEach((ev) => {
         const dur = Math.max(1, Math.round((new Date(ev.ended_at).getTime() - new Date(ev.started_at).getTime()) / 1000))
         const appL = (ev.app_name || '').toLowerCase()
-        if (appL.includes('idle') || ev.classification === 'NEUTRAL' && appL.includes('away')) {
+        if (appL.includes('idle') || (ev.classification === 'NEUTRAL' && appL.includes('away'))) {
           idleSec += dur
         } else if (ev.classification === 'UNPRODUCTIVE') {
           unprodSec += dur
@@ -159,9 +215,22 @@ export async function GET(req: Request) {
         return
       }
 
-      const idlePercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((idleSec / activeEffectiveSec) * 100)) : 0
-      const unprodPercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((unprodSec / activeEffectiveSec) * 100)) : 0
-      const prodPercent = activeEffectiveSec > 0 ? Math.min(100, Math.round((prodSec / activeEffectiveSec) * 100)) : 0
+      // If user has sessions but ZERO activity events (unattended ghost session / laptop left on):
+      // They did not do active work, so prodPercent = 0, idlePercent = 100%!
+      let idlePercent = 0
+      let unprodPercent = 0
+      let prodPercent = 0
+
+      if (userEvents.length === 0) {
+        idlePercent = 100
+        prodPercent = 0
+        unprodPercent = 0
+      } else {
+        const totalEventSec = idleSec + unprodSec + prodSec || 1
+        idlePercent = Math.min(100, Math.round((idleSec / totalEventSec) * 100))
+        unprodPercent = Math.min(100, Math.round((unprodSec / totalEventSec) * 100))
+        prodPercent = Math.min(100, Math.round((prodSec / totalEventSec) * 100))
+      }
 
       // Check Late
       const firstSession = userSessions[0]
@@ -176,21 +245,29 @@ export async function GET(req: Request) {
       // Check Burnout: working > 5 hours with zero break
       const isBurnout = totalWorkSec > 18000 && totalBreakSec < 300
 
-      // Performance Score (0-100%) - Minimum 10%
-      // Base score is weighted on productive time (up to 50 pts), low idle (up to 30 pts), punctuality (20 pts)
-      const performanceScore = Math.max(
-        10,
-        Math.min(
-          100,
-          Math.round((prodPercent * 0.5) + ((100 - idlePercent) * 0.3) + (isLate ? 10 : 20))
+      // Performance Score (0-100%)
+      // If user has no activity events or 0 productive work, score is 0% (unverified)
+      let performanceScore = 0
+      if (userEvents.length === 0 || prodSec === 0) {
+        performanceScore = 0
+      } else {
+        performanceScore = Math.max(
+          10,
+          Math.min(
+            100,
+            Math.round((prodPercent * 0.5) + ((100 - idlePercent) * 0.3) + (isLate ? 10 : 20))
+          )
         )
-      )
+      }
 
       // Risk Evaluation
       let riskLevel: 'CRITICAL' | 'WARNING' | 'ADVISORY' | 'HEALTHY' = 'HEALTHY'
       const triggers: string[] = []
 
-      if (idlePercent >= 35) {
+      if (userEvents.length === 0 && totalWorkSec > 0) {
+        riskLevel = 'CRITICAL'
+        triggers.push('Unattended Session (No app or user input detected)')
+      } else if (idlePercent >= 35) {
         riskLevel = 'CRITICAL'
         triggers.push(`Excessive Inactivity (${idlePercent}% Idle Time)`)
       }

@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { getSessionContext } from '@/utils/supabase/auth-context'
-import { formatLocalDateString, getTodayInTimezone, DEFAULT_TIMEZONE } from '@/utils/date'
+import {
+  formatLocalDateString,
+  getTodayInTimezone,
+  DEFAULT_TIMEZONE,
+  getTargetTimeMs,
+  parseClockInMinutes,
+} from '@/utils/date'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,6 +58,38 @@ export async function GET(req: Request) {
     const employeeIdFilter = searchParams.get('employeeId')
     const teamFilter = searchParams.get('team')
     const targetTenant = searchParams.get('tenantId') || session.tenantId
+
+    const isTargetToday = targetDate === todayStr
+    const nowMs = Date.now()
+
+    const expectedClockInStr: string = settingsRow?.value?.expectedClockIn || '10:00 AM'
+    const expectedClockOutStr: string = settingsRow?.value?.expectedClockOut || '19:00'
+    const expectedInMinutes = parseClockInMinutes(expectedClockInStr, 600)
+    const expectedOutMinutes = parseClockInMinutes(expectedClockOutStr, 1140)
+
+    const shiftStartMs = getTargetTimeMs(targetDate, expectedInMinutes, orgTimezone)
+    const shiftEndMs = getTargetTimeMs(targetDate, expectedOutMinutes, orgTimezone)
+    const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
+    const startOfTodayIso = new Date(startOfTodayMs).toISOString()
+
+    // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .eq('status', 'OPEN')
+      .lt('clocked_in_at', startOfTodayIso)
+
+    // Clamp any future clocked_out_at timestamps on Today to now
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        clocked_out_at: new Date(nowMs).toISOString(),
+      })
+      .gt('clocked_out_at', new Date(nowMs).toISOString())
+      .gte('clocked_in_at', startOfTodayIso)
 
     // 1. Fetch Users strictly within this tenant
     let usersQuery = supabase
@@ -316,16 +354,33 @@ export async function GET(req: Request) {
         const clockOutStr = isCurrentlyActive
           ? 'Active'
           : lastSession.clocked_out_at
-            ? formatClockTime(lastSession.clocked_out_at)
+            ? formatClockTime(lastSession.clocked_out_at, orgTimezone)
             : '-'
 
         let breakSec = 0
         const intervals: { start: number; end: number }[] = []
-        const nowMs = Date.now()
 
         userSessions.forEach((s) => {
-          const inT = new Date(s.clocked_in_at).getTime()
-          const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+          let inT = new Date(s.clocked_in_at).getTime()
+          let outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : nowMs
+
+          if (isTargetToday) {
+            if (inT >= nowMs) return
+            if (outT > nowMs) outT = nowMs
+
+            // If session clocked in before shift start (10:00 AM):
+            // Check if user had verified activity events before shiftStartMs.
+            // If no verified events before shift start, session starts from shiftStartMs!
+            if (inT < shiftStartMs) {
+              const hasEarlyEvents = userEvents.some(
+                (e) => new Date(e.started_at).getTime() < shiftStartMs
+              )
+              if (!hasEarlyEvents) {
+                inT = shiftStartMs
+              }
+            }
+          }
+
           if (outT > inT) {
             intervals.push({ start: inT, end: outT })
           }
@@ -354,11 +409,11 @@ export async function GET(req: Request) {
 
         const effectiveSec = Math.max(0, totalSec - breakSec)
 
-        // Late threshold: 10:15 AM in local/BD time (UTC+6)
-        const bdHours = (inDate.getUTCHours() + 6) % 24
-        const bdMinutes = inDate.getUTCMinutes()
-        const isLate = bdHours > 10 || (bdHours === 10 && bdMinutes > 15)
-        const minutesLate = isLate ? Math.max(1, (bdHours - 10) * 60 + (bdMinutes - 15)) : 0
+        // Late threshold: shiftStart + 15 min grace period
+        const graceMs = shiftStartMs + 15 * 60 * 1000
+        const firstInMs = new Date(firstSession.clocked_in_at).getTime()
+        const isLate = firstInMs > graceMs
+        const minutesLate = isLate ? Math.max(1, Math.round((firstInMs - shiftStartMs) / 60000)) : 0
 
         const status = isLate ? ('LATE' as const) : ('PRESENT' as const)
 
@@ -369,8 +424,8 @@ export async function GET(req: Request) {
             name,
             email: u.email,
             avatar,
-            clockIn: formatClockTime(firstSession.clocked_in_at),
-            expectedTime: '10:00 AM',
+            clockIn: formatClockTime(firstSession.clocked_in_at, orgTimezone),
+            expectedTime: formatClockTime(new Date(shiftStartMs).toISOString(), orgTimezone),
             minutesLate,
             status: 'Late Clock-in',
           })
@@ -385,7 +440,7 @@ export async function GET(req: Request) {
             name,
             email: u.email,
             avatar,
-            clockIn: formatClockTime(firstSession.clocked_in_at),
+            clockIn: formatClockTime(firstSession.clocked_in_at, orgTimezone),
             clockOut: clockOutStr,
             totalWorked: formatDuration(effectiveSec),
             standardHours: '09h 00m',
@@ -398,7 +453,7 @@ export async function GET(req: Request) {
           employeeId: u.id,
           name,
           avatar,
-          clockIn: formatClockTime(firstSession.clocked_in_at),
+          clockIn: formatClockTime(firstSession.clocked_in_at, orgTimezone),
           clockOut: clockOutStr,
           workedHours: formatDuration(totalSec),
           breakTime: formatDuration(breakSec),
@@ -467,15 +522,6 @@ export async function GET(req: Request) {
         }
       })
 
-      // Fallback: If sessions exist but no raw activity events, estimate telemetry from session
-      if (totalSec === 0 && userSessions.length > 0) {
-        userSessions.forEach((s) => {
-          const inT = new Date(s.clocked_in_at).getTime()
-          const outT = s.clocked_out_at ? new Date(s.clocked_out_at).getTime() : Date.now()
-          totalSec += Math.max(0, Math.round((outT - inT) / 1000))
-        })
-      }
-
       const activeMins = Math.round(totalSec / 60)
       const totalKeystrokes = activeMins > 0 ? activeMins * 52 : 0
       const kpm = activeMins > 0 ? 58 : 0
@@ -536,34 +582,17 @@ export async function GET(req: Request) {
       else neutralSec += dur
     })
 
-    // Fallback: If sessions exist but no events, assume 85% productive office work
-    if (prodSec === 0 && neutralSec === 0 && unprodSec === 0) {
-      const totalSessionSec = attendance.reduce((acc, a) => {
-        const parts = a.effectiveHours.split(' ')
-        const h = parseInt(parts[0]) || 0
-        const m = parseInt(parts[1]) || 0
-        return acc + h * 3600 + m * 60
-      }, 0)
-      if (totalSessionSec > 0) {
-        prodSec = Math.round(totalSessionSec * 0.85)
-        neutralSec = Math.round(totalSessionSec * 0.12)
-        unprodSec = Math.round(totalSessionSec * 0.03)
-      }
-    }
-
-    const totalAppsSec = prodSec + neutralSec + unprodSec || 1
+    const totalAppsSec = prodSec + neutralSec + unprodSec
     const appsUsage = {
       productiveHours: formatDuration(prodSec),
       neutralHours: formatDuration(neutralSec),
       unproductiveHours: formatDuration(unprodSec),
-      productivePct: Math.round((prodSec / totalAppsSec) * 100),
-      neutralPct: Math.round((neutralSec / totalAppsSec) * 100),
-      unproductivePct: Math.max(0, 100 - Math.round((prodSec / totalAppsSec) * 100) - Math.round((neutralSec / totalAppsSec) * 100)),
+      productivePct: totalAppsSec > 0 ? Math.round((prodSec / totalAppsSec) * 100) : 0,
+      neutralPct: totalAppsSec > 0 ? Math.round((neutralSec / totalAppsSec) * 100) : 0,
+      unproductivePct: totalAppsSec > 0 ? Math.max(0, 100 - Math.round((prodSec / totalAppsSec) * 100) - Math.round((neutralSec / totalAppsSec) * 100)) : 0,
     }
 
     // 10. Build Login IP Report
-    const isTargetToday = targetDate === todayStr
-
     const loginIpRecords = targetUsers.map((u) => {
       const userSessions = sessions.filter((s) => s.user_id === u.id)
       const userAllRawSessions = (rawSessions || []).filter((s) => s.user_id === u.id)
