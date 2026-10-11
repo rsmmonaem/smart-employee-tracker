@@ -1258,6 +1258,41 @@ export default function App() {
 
       const app = (activeWin && activeWin.app_name) ? activeWin.app_name : 'Active Session';
       const title = (activeWin && activeWin.title) ? activeWin.title : 'Desktop / Working';
+
+      const appLower = app.toLowerCase();
+      const titleLower = title.toLowerCase();
+      const isLockScreen =
+        appLower.includes('lockapp') ||
+        appLower.includes('logonui') ||
+        appLower.includes('screensaver') ||
+        titleLower.includes('lock screen') ||
+        titleLower.includes('screen locked');
+
+      if (isLockScreen) {
+        setActiveApp('Lock Screen (Idle)');
+        setWindowTitle('Screen Locked / Away');
+        setAppProductivity({ classification: 'NEUTRAL', isReviewed: true });
+
+        if (currentSession?.user?.id && currentTenantId) {
+          const { error } = await supabase.from('activity_events').insert({
+            tenant_id: currentTenantId,
+            user_id: currentSession.user.id,
+            app_name: 'Idle Time (Lock Screen)',
+            window_title: 'Screen Locked / Away',
+            domain: null,
+            started_at: new Date(Date.now() - 5000).toISOString(),
+            ended_at: new Date().toISOString(),
+            classification: 'NEUTRAL',
+          });
+
+          if (!error) {
+            setEventsCount((prev) => prev + 1);
+            setLastSyncStatus('🔒 Screen Locked (Idle)');
+          }
+        }
+        return;
+      }
+
       setActiveApp(app);
       setWindowTitle(title);
 

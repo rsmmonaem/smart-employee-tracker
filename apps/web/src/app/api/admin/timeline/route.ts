@@ -421,7 +421,20 @@ export async function GET(req: Request) {
           const appLower = (ev.app_name || '').toLowerCase()
           const winLower = (ev.window_title || '').toLowerCase()
 
-          if (appLower.includes('idle') || winLower.includes('idle')) {
+          const isLockScreen =
+            appLower.includes('lockapp') ||
+            appLower.includes('logonui') ||
+            appLower.includes('screensaver') ||
+            winLower.includes('lock screen') ||
+            winLower.includes('screen lock') ||
+            winLower.includes('locked')
+
+          const isLockOrIdle =
+            isLockScreen ||
+            appLower.includes('idle') ||
+            winLower.includes('idle')
+
+          if (isLockOrIdle) {
             type = 'IDLE'
           } else if (ev.classification === 'PRODUCTIVE') {
             type = 'PRODUCTIVE'
@@ -433,8 +446,15 @@ export async function GET(req: Request) {
             type = 'NOT_IN_WORK'
           }
 
-          const segAppName = ev.app_name || 'Active Application'
-          const segWindowTitle = ev.window_title || 'Application Window'
+          const segAppName = isLockScreen
+            ? 'Lock Screen (Idle)'
+            : isLockOrIdle
+            ? 'Idle Time'
+            : ev.app_name || 'Active Application'
+
+          const segWindowTitle = isLockScreen
+            ? 'Screen Locked / Away'
+            : ev.window_title || 'Application Window'
 
           // Merge consecutive events if same app, same classification, and gap <= 60 seconds
           if (

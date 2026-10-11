@@ -221,7 +221,20 @@ export default function TimelinePage() {
           const appLower = (ev.appName || '').toLowerCase()
           const winLower = (ev.windowTitle || '').toLowerCase()
 
-          if (appLower.includes('idle') || winLower.includes('idle')) {
+          const isLockScreen =
+            appLower.includes('lockapp') ||
+            appLower.includes('logonui') ||
+            appLower.includes('screensaver') ||
+            winLower.includes('lock screen') ||
+            winLower.includes('screen lock') ||
+            winLower.includes('locked')
+
+          const isLockOrIdle =
+            isLockScreen ||
+            appLower.includes('idle') ||
+            winLower.includes('idle')
+
+          if (isLockOrIdle) {
             type = 'IDLE'
           } else if (ev.classification === 'PRODUCTIVE') {
             type = 'PRODUCTIVE'
@@ -233,8 +246,15 @@ export default function TimelinePage() {
             type = 'NOT_IN_WORK'
           }
 
-          const segAppName = ev.appName || 'Active Application'
-          const segWindowTitle = ev.windowTitle || 'Application Window'
+          const segAppName = isLockScreen
+            ? 'Lock Screen (Idle)'
+            : isLockOrIdle
+            ? 'Idle Time'
+            : ev.appName || 'Active Application'
+
+          const segWindowTitle = isLockScreen
+            ? 'Screen Locked / Away'
+            : ev.windowTitle || 'Application Window'
 
           // Merge if same app, same classification, and gap between events <= 60 seconds
           if (
@@ -703,7 +723,7 @@ export default function TimelinePage() {
               : hoveredSegment.segment.type === 'NEUTRAL'
               ? `Neutral App (${hoveredSegment.segment.appName})`
               : hoveredSegment.segment.type === 'IDLE'
-              ? `Idle Time (${hoveredSegment.segment.windowTitle || 'No input'})`
+              ? `Idle Time (${hoveredSegment.segment.appName.includes('Lock') ? hoveredSegment.segment.appName : hoveredSegment.segment.windowTitle || 'Away'})`
               : hoveredSegment.segment.type === 'NOT_IN_WORK'
               ? hoveredSegment.segment.appName
               : 'Untracked'}
