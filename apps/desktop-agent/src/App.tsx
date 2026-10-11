@@ -264,6 +264,7 @@ export default function App() {
   tenantIdRef.current = tenantId;
 
   const currentAttendanceSessionIdRef = useRef<string | null>(null);
+  const activeDateKeyRef = useRef<string>(getTodayKey());
 
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [isUserIdle, setIsUserIdle] = useState(false);
@@ -1024,8 +1025,52 @@ export default function App() {
         setTimer((prev) => {
           const next = prev + 1;
           const currentUserId = sessionRef.current?.user?.id;
+          const currentTId = tenantIdRef.current;
+          const todayStr = getTodayKey();
+
+          // Midnight Rollover: automatically separate sessions when a new day arrives
+          if (activeDateKeyRef.current !== todayStr) {
+            console.log('Midnight rollover detected. Separating tracking session for new day:', todayStr);
+            activeDateKeyRef.current = todayStr;
+
+            // Close yesterday's open session in background
+            if (currentAttendanceSessionIdRef.current) {
+              const prevSessionId = currentAttendanceSessionIdRef.current;
+              supabase
+                .from('attendance_sessions')
+                .update({
+                  status: 'CLOSED',
+                  clocked_out_at: new Date(new Date().setHours(0, 0, 0, 0) - 1000).toISOString(),
+                })
+                .eq('id', prevSessionId)
+                .then(() => {});
+            }
+
+            // Open clean attendance session for today
+            if (currentUserId && currentTId) {
+              supabase
+                .from('attendance_sessions')
+                .insert({
+                  tenant_id: currentTId,
+                  user_id: currentUserId,
+                  clocked_in_at: new Date().toISOString(),
+                  status: 'OPEN',
+                })
+                .select('id')
+                .single()
+                .then(({ data }) => {
+                  if (data) {
+                    currentAttendanceSessionIdRef.current = data.id;
+                    localStorage.setItem('smart_tracker_current_session_id', data.id);
+                  }
+                });
+            }
+
+            // Reset timer to 0 for the new day
+            return 0;
+          }
+
           if (currentUserId && next % 5 === 0) {
-            const todayStr = getTodayKey();
             try {
               localStorage.setItem(`smart_tracker_today_seconds_${currentUserId}_${todayStr}`, String(next));
             } catch {

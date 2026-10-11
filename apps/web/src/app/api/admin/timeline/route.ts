@@ -127,6 +127,16 @@ export async function GET(req: Request) {
       .order('started_at', { ascending: true })
       .limit(25000)
 
+    // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 1000).toISOString(),
+      })
+      .eq('status', 'OPEN')
+      .lt('clocked_in_at', new Date(todayStr + 'T00:00:00Z').toISOString())
+
     // 3. Fetch attendance sessions strictly for those userIds
     const { data: sessions } = await supabase
       .from('attendance_sessions')
@@ -166,14 +176,12 @@ export async function GET(req: Request) {
         (e) => e.user_id === user.id && getLocalDateString(e.started_at, orgTimezone) === targetDate
       )
 
-      // Strictly filter to sessions on targetDate (or currently OPEN if target is today)
+      // Strictly filter to sessions on targetDate in organization timezone
       const userSessions = (sessions || [])
         .filter((s) => {
           if (s.user_id !== user.id) return false
           const sDate = getLocalDateString(s.clocked_in_at, orgTimezone)
-          if (sDate === targetDate) return true
-          if (isTargetToday && s.status === 'OPEN' && !s.clocked_out_at) return true
-          return false
+          return sDate === targetDate
         })
         .sort((a, b) => new Date(a.clocked_in_at).getTime() - new Date(b.clocked_in_at).getTime())
 
@@ -200,10 +208,10 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
           const startD = new Date(ev.started_at)
           const endD = new Date(ev.ended_at)
 
-          // Use local hours to accurately match the employee's work day
+          // Minutes from midnight (0 to 1440) matching standard 24h timeline
           const startH = startD.getHours()
           const startM = startD.getMinutes()
-          const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
+          const startMin = startH * 60 + startM
 
           const diffSec = Math.max(5, Math.round((endD.getTime() - startD.getTime()) / 1000))
           const durationMin = Math.max(1, Math.round(diffSec / 60))
@@ -232,14 +240,14 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
             : ev.window_title || 'Application Window'
 
           const prev = segments[segments.length - 1]
-          if (prev && prev.type === type && prev.appName === segAppName && startMinFromTen <= prev.startMin + prev.durationMin + 1) {
+          if (prev && prev.type === type && prev.appName === segAppName && startMin <= prev.startMin + prev.durationMin + 1) {
             prev.durationMin += durationMin
             prev.endTimeStr = formatClockTime(endD)
             prev.durationStr = formatDuration(prev.durationMin * 60)
           } else {
             segments.push({
               id: ev.id || `seg-${idx}`,
-              startMin: startMinFromTen,
+              startMin,
               durationMin,
               type,
               appName: segAppName,
@@ -258,14 +266,14 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
 
           const startH = startD.getHours()
           const startM = startD.getMinutes()
-          const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
+          const startMin = startH * 60 + startM
 
           const diffSec = Math.max(60, Math.round((endD.getTime() - startD.getTime()) / 1000))
           const durationMin = Math.max(1, Math.round(diffSec / 60))
 
           segments.push({
             id: sess.id || `sess-seg-${sIdx}`,
-            startMin: startMinFromTen,
+            startMin,
             durationMin,
             type: 'IDLE',
             appName: 'Idle Time',
@@ -283,13 +291,13 @@ function isTargetIdleUser(nameOrEmail?: string | null): boolean {
         const lastShot = new Date(userScreenshots[userScreenshots.length - 1].taken_at)
         const startH = firstShot.getHours()
         const startM = firstShot.getMinutes()
-        const startMinFromTen = Math.max(0, Math.min(TOTAL_MINUTES, (startH - START_HOUR) * 60 + startM))
+        const startMin = startH * 60 + startM
         const diffSec = Math.max(60, Math.round((lastShot.getTime() - firstShot.getTime()) / 1000))
         const durationMin = Math.max(1, Math.round(diffSec / 60))
 
         segments.push({
           id: `shot-seg-${user.id}`,
-          startMin: startMinFromTen,
+          startMin,
           durationMin,
           type: 'IDLE',
           appName: 'Idle Time',

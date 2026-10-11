@@ -9,7 +9,11 @@ import {
   Mail,
   Zap,
   ChevronRight,
-  Download
+  Download,
+  Copy,
+  Check,
+  Terminal,
+  AlertTriangle
 } from 'lucide-react'
 import TrackSettingsForm from './track-settings-form'
 import {
@@ -176,28 +180,38 @@ function DownloadAppsView() {
             </a>
           </div>
 
-          {/* macOS Universal Card */}
+          {/* macOS Universal & Apple Silicon Card */}
           <div className="flex flex-col justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-850">
             <div>
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
-                  🍎 Universal Binary
+                  🍎 macOS Universal
                 </span>
-                <span className="text-xs font-mono text-gray-500">10.9 MB</span>
+                <span className="text-xs font-mono text-gray-500">Universal & M1/M2/M3</span>
               </div>
               <h3 className="mt-3 text-lg font-bold text-gray-900 dark:text-white">macOS (Apple Silicon & Intel)</h3>
               <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                Native Universal macOS build supporting M1/M2/M3/M4 chips and Intel x86_64 processors with automated screen capture and window tracking.
+                Native macOS build supporting Apple Silicon (M1/M2/M3/M4) chips and Intel x86_64 processors with automated screen capture and window tracking.
               </p>
             </div>
-            <a
-              href="/downloads/Smart-Employee-Tracker-macOS.dmg"
-              download
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs"
-            >
-              <Download className="h-4 w-4" />
-              Download macOS (.dmg)
-            </a>
+            <div className="mt-5 space-y-2">
+              <a
+                href="/downloads/Smart-Employee-Tracker-macOS.dmg"
+                download
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs"
+              >
+                <Download className="h-4 w-4" />
+                Download Universal (.dmg - 10 MB)
+              </a>
+              <a
+                href="/downloads/Smart-Employee-Tracker-AppleSilicon.dmg"
+                download
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 px-4 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-gray-750 transition-colors"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download Apple Silicon Only (.dmg - 7.4 MB)
+              </a>
+            </div>
           </div>
 
           {/* Windows Card */}
@@ -231,6 +245,47 @@ function DownloadAppsView() {
                 <Download className="h-3.5 w-3.5" />
                 Download Windows Bundle (.zip - 10 MB)
               </a>
+            </div>
+          </div>
+        </div>
+
+        {/* macOS Gatekeeper Troubleshooting Banner */}
+        <div className="mt-6 rounded-xl border border-amber-300/80 bg-amber-50/70 p-5 dark:border-amber-800/60 dark:bg-amber-950/20">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="space-y-2 flex-1">
+              <h4 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                macOS Security Notice: &quot;Smart Employee Tracker is damaged and can&apos;t be opened&quot;
+              </h4>
+              <p className="text-xs text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
+                Because this application is distributed directly outside the Mac App Store, Apple Gatekeeper attaches a security quarantine flag on downloaded files and displays a warning saying the file is damaged. <strong>The application is completely safe and undamaged.</strong>
+              </p>
+
+              <div className="pt-2">
+                <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 block mb-1.5">
+                  Fix: Open Terminal (Command + Space &gt; Terminal) and paste this one command:
+                </span>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1 flex items-center gap-2 bg-gray-900 text-gray-100 px-3.5 py-2 rounded-lg font-mono text-xs overflow-x-auto border border-gray-800">
+                    <Terminal className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <span className="select-all">xattr -cr &quot;/Applications/Smart Employee Tracker.app&quot;</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('xattr -cr "/Applications/Smart Employee Tracker.app"')
+                      alert('Command copied to clipboard! Paste it into Terminal and press Enter.')
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 shadow-xs"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy Command
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2">
+                  Alternatively, open <strong>System Settings &gt; Privacy &amp; Security</strong>, scroll down to the Security section and click <strong>&quot;Open Anyway&quot;</strong>, or Control-Click (Right-Click) the App and select <strong>Open</strong>.
+                </p>
+              </div>
             </div>
           </div>
         </div>
