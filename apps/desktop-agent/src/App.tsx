@@ -9,8 +9,21 @@ import { open as openUrl } from '@tauri-apps/plugin-shell';
 const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   try {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-    const method = init?.method || (typeof input !== 'string' && !(input instanceof URL) ? input.method : 'GET');
+    const method = init?.method || (typeof input !== 'string' && !(input instanceof URL) ? (input as any).method || 'GET' : 'GET');
     const headers: Record<string, string> = {};
+
+    // 1. Copy headers from input if input is a Request
+    if (typeof input !== 'string' && !(input instanceof URL) && (input as any).headers) {
+      try {
+        (input as any).headers.forEach((v: string, k: string) => {
+          headers[k] = v;
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    // 2. Overlay headers from init
     if (init?.headers) {
       if (init.headers instanceof Headers) {
         init.headers.forEach((v, k) => {
@@ -26,18 +39,23 @@ const nativeFetch = async (input: RequestInfo | URL, init?: RequestInit): Promis
     }
 
     let bodyBytes: number[] | undefined = undefined;
-    if (init?.body) {
-      if (typeof init.body === 'string') {
+    const rawBody = init?.body || (typeof input !== 'string' && !(input instanceof URL) ? (input as any).body : undefined);
+    if (rawBody) {
+      if (typeof rawBody === 'string') {
         const encoder = new TextEncoder();
-        bodyBytes = Array.from(encoder.encode(init.body));
-      } else if (init.body instanceof ArrayBuffer) {
-        bodyBytes = Array.from(new Uint8Array(init.body));
-      } else if (ArrayBuffer.isView(init.body)) {
-        bodyBytes = Array.from(new Uint8Array(init.body.buffer, init.body.byteOffset, init.body.byteLength));
+        bodyBytes = Array.from(encoder.encode(rawBody));
+      } else if (rawBody instanceof ArrayBuffer) {
+        bodyBytes = Array.from(new Uint8Array(rawBody));
+      } else if (ArrayBuffer.isView(rawBody)) {
+        bodyBytes = Array.from(new Uint8Array(rawBody.buffer, rawBody.byteOffset, rawBody.byteLength));
       } else {
-        const text = await new Response(init.body).text();
-        const encoder = new TextEncoder();
-        bodyBytes = Array.from(encoder.encode(text));
+        try {
+          const text = await new Response(rawBody).text();
+          const encoder = new TextEncoder();
+          bodyBytes = Array.from(encoder.encode(text));
+        } catch {
+          // ignore
+        }
       }
     }
 
