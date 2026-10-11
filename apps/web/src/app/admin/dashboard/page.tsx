@@ -194,8 +194,21 @@ export default function DashboardPage() {
 
       // 2. Process Top Apps
       if (appsJson.success && Array.isArray(appsJson.topUsed)) {
+        const isExcludedApp = (name: string) => {
+          const n = (name || '').toLowerCase()
+          return (
+            n.includes('lockapp') ||
+            n.includes('logonui') ||
+            n.includes('screensaver') ||
+            n.includes('loginwindow') ||
+            n.startsWith('idle') ||
+            n.includes('lock screen') ||
+            n.includes('screen locked')
+          )
+        }
+
         const rawApps: any[] = appsJson.topUsed.filter(
-          (a: any) => a.totalSeconds > 0 || a.count > 0
+          (a: any) => (a.totalSeconds > 0 || a.count > 0) && !isExcludedApp(a.name)
         )
 
         newTopApps = rawApps.slice(0, 6).map((app: any, idx: number) => {
@@ -230,12 +243,9 @@ export default function DashboardPage() {
           const activeWorkers = riskJson.riskUsers.filter(
             (u: any) =>
               u.workedHours &&
-              u.workedHours !== '00h 00m' &&
-              u.performanceScore > 0 &&
-              u.productiveHours &&
-              u.productiveHours !== '00h 00m'
+              u.workedHours !== '00h 00m'
           )
-          const sorted = [...activeWorkers].sort((a: any, b: any) => b.performanceScore - a.performanceScore)
+          const sorted = [...activeWorkers].sort((a: any, b: any) => (b.performanceScore || 0) - (a.performanceScore || 0))
           setLeaderboard(sorted.slice(0, 5))
         }
       }

@@ -261,16 +261,20 @@ export async function GET(req: Request) {
       const isBurnout = totalWorkSec > 18000 && totalBreakSec < 300
 
       // Performance Score (0-100%)
-      // If user has no activity events or 0 productive work, score is 0% (unverified)
       let performanceScore = 0
-      if (userEvents.length === 0 || prodSec === 0) {
+      if (userEvents.length === 0) {
         performanceScore = 0
       } else {
+        // If apps are still unreviewed/neutral, use active computer engagement (100 - idlePercent) as productive baseline
+        const effectiveProdPct = (prodSec > 0 || unprodSec > 0)
+          ? prodPercent
+          : Math.max(0, 100 - idlePercent)
+
         performanceScore = Math.max(
-          10,
+          15,
           Math.min(
             100,
-            Math.round((prodPercent * 0.5) + ((100 - idlePercent) * 0.3) + (isLate ? 10 : 20))
+            Math.round((effectiveProdPct * 0.5) + ((100 - idlePercent) * 0.3) + (isLate ? 10 : 20))
           )
         )
       }

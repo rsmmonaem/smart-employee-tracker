@@ -4,6 +4,79 @@ import { getSessionContext } from '@/utils/supabase/auth-context'
 
 export const dynamic = 'force-dynamic'
 
+const DEFAULT_PRODUCTIVITY_SEEDS = [
+  // Coding & Development
+  { pattern: 'Visual Studio Code', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Code', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Cursor', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Sublime Text', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'IntelliJ IDEA', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'PyCharm', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'WebStorm', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'github.com', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'gitlab.com', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'bitbucket.org', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'Postman', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Docker', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Terminal', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Windows Explorer', classification: 'NEUTRAL', match_type: 'APP', priority: 2 },
+
+  // Collaboration, Office & Design
+  { pattern: 'Figma', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'figma.com', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'Slack', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Notion', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'notion.so', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'Jira', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'atlassian.net', classification: 'PRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'Trello', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Workfolio', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'TracMatrix', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+  { pattern: 'Smart Employee Tracker', classification: 'PRODUCTIVE', match_type: 'APP', priority: 1 },
+
+  // Social & Distractions
+  { pattern: 'facebook.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'youtube.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'instagram.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'tiktok.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'netflix.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'twitter.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'x.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+  { pattern: 'reddit.com', classification: 'UNPRODUCTIVE', match_type: 'DOMAIN', priority: 1 },
+]
+
+function isSystemLockOrIdle(name: string): boolean {
+  const n = (name || '').toLowerCase().trim()
+  return (
+    !n ||
+    n === 'untracked activity' ||
+    n.includes('lockapp') ||
+    n.includes('logonui') ||
+    n.includes('screensaver') ||
+    n.includes('loginwindow') ||
+    n.startsWith('idle time') ||
+    n.includes('screen locked') ||
+    n.includes('lock screen')
+  )
+}
+
+function findMatchingRule(
+  name: string,
+  ruleMap: Map<string, { classification: string; isUserSpecific: boolean; ruleId?: string }>
+) {
+  const lower = name.toLowerCase().trim()
+  if (ruleMap.has(lower)) return ruleMap.get(lower)
+
+  const entries = Array.from(ruleMap.entries())
+  for (let i = 0; i < entries.length; i++) {
+    const [pat, rule] = entries[i]
+    if (lower === pat || lower.includes(pat) || pat.includes(lower)) {
+      return rule
+    }
+  }
+  return undefined
+}
+
 
 export async function GET(req: Request) {
   try {
@@ -41,7 +114,7 @@ export async function GET(req: Request) {
       console.error('Error fetching productivity_rules:', rulesErr)
     }
 
-    const rules = initialRules || []
+    let rules = initialRules || []
 
     // 2. Fetch Employee-specific overrides from platform_settings
     const { data: userRulesData } = await supabase
@@ -55,6 +128,30 @@ export async function GET(req: Request) {
 
     // Build Rule Map
     const ruleMap = new Map<string, { classification: string; isUserSpecific: boolean; ruleId?: string }>()
+
+    // Always seed baseline default rules first
+    DEFAULT_PRODUCTIVITY_SEEDS.forEach((s) => {
+      ruleMap.set(s.pattern.toLowerCase(), {
+        classification: s.classification,
+        isUserSpecific: false,
+        ruleId: `default-${s.pattern.toLowerCase()}`,
+      })
+    })
+
+    // If tenant has no custom rules in database, asynchronously persist default seeds
+    if (rules.length === 0 && tenantId) {
+      void (async () => {
+        try {
+          await supabase
+            .from('productivity_rules')
+            .insert(DEFAULT_PRODUCTIVITY_SEEDS.map((s) => ({ ...s, tenant_id: tenantId })))
+        } catch {
+          // ignore seed errors
+        }
+      })()
+    }
+
+    // Company/Tenant DB rules take priority over defaults
     rules.forEach((r) => {
       ruleMap.set(r.pattern.toLowerCase(), {
         classification: r.classification,
@@ -104,7 +201,7 @@ export async function GET(req: Request) {
 
     ;(events || []).forEach((ev) => {
       const name = ev.domain || ev.app_name
-      if (!name || name === 'Untracked Activity') return
+      if (!name || isSystemLockOrIdle(name)) return
       const isDomain = !!ev.domain || name.includes('.')
       const key = name.toLowerCase()
 
@@ -134,7 +231,7 @@ export async function GET(req: Request) {
     // 1. Add from real activity events
     ;(events || []).forEach((ev) => {
       const rawName = ev.domain || ev.app_name
-      if (!rawName || rawName === 'Untracked Activity') return
+      if (!rawName || isSystemLockOrIdle(rawName)) return
       const key = rawName.toLowerCase()
       if (!allKnownApps.has(key)) {
         const stats = appStatsMap.get(key) || { count: 1, totalSeconds: 60, type: rawName.includes('.') ? 'DOMAIN' : 'APP', users: new Set<string>() }
@@ -201,7 +298,7 @@ export async function GET(req: Request) {
     allKnownApps.forEach((item, key) => {
       if (query && !item.name.toLowerCase().includes(query)) return
 
-      const rule = ruleMap.get(key)
+      const rule = findMatchingRule(item.name, ruleMap)
       if (rule) {
         reviewed.push({
           id: `rev-${key}`,
@@ -231,7 +328,7 @@ export async function GET(req: Request) {
       .sort((a, b) => b.totalSeconds - a.totalSeconds || b.count - a.count)
       .slice(0, 20)
       .map((item) => {
-        const rule = ruleMap.get(item.name.toLowerCase())
+        const rule = findMatchingRule(item.name, ruleMap)
         return {
           name: item.name,
           type: item.type,
