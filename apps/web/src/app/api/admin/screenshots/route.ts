@@ -34,11 +34,16 @@ export async function GET(req: Request) {
     let autoDeleteEnabled = false
     let retentionDays = 30
     try {
-      const { data: settingsRow } = await supabase
+      const tenantKey = session.tenantId ? `organization_track_settings_${session.tenantId}` : null
+      const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+      const { data: settingsRows } = await supabase
         .from('platform_settings')
-        .select('value')
-        .eq('key', 'organization_track_settings')
-        .maybeSingle()
+        .select('key, value')
+        .in('key', keysToFetch)
+
+      const tenantRow = settingsRows?.find((r) => r.key === tenantKey)
+      const defaultRow = settingsRows?.find((r) => r.key === 'organization_track_settings')
+      const settingsRow = tenantRow || defaultRow
       if (settingsRow?.value && typeof settingsRow.value === 'object') {
         const val = settingsRow.value as Record<string, unknown>
         if (typeof val.autoDeleteScreenshots === 'boolean') {

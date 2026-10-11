@@ -94,17 +94,24 @@ export async function GET(req: Request) {
 
     const supabase = createAdminClient()
 
-    // 0. Fetch platform settings for timezone
-    const { data: settingsRow } = await supabase
+    const { searchParams } = new URL(req.url)
+    const targetTenant = searchParams.get('tenantId') || session.tenantId
+
+    // 0. Fetch platform settings for timezone with strict Tenant Isolation
+    const tenantKey = targetTenant ? `organization_track_settings_${targetTenant}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+    const { data: settingsRows } = await supabase
       .from('platform_settings')
-      .select('value')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
+      .select('key, value')
+      .in('key', keysToFetch)
+
+    const tenantRow = settingsRows?.find((r) => r.key === tenantKey)
+    const defaultRow = settingsRows?.find((r) => r.key === 'organization_track_settings')
+    const settingsRow = tenantRow || defaultRow
 
     const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
     const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
 
-    const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || todayStr
 
     // 1. Fetch real users filtered by current tenant
@@ -112,8 +119,6 @@ export async function GET(req: Request) {
       .from('users')
       .select('id, full_name, email, role, tenant_id, avatar_url, is_active')
       .order('full_name', { ascending: true })
-
-    const targetTenant = searchParams.get('tenantId') || session.tenantId
 
     if (!session.isSuperAdmin) {
       if (!session.tenantId) {

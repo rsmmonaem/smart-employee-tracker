@@ -92,16 +92,22 @@ export async function GET() {
 
     const supabase = createAdminClient()
 
-    // 1. Fetch saved settings
-    const { data: row, error } = await supabase
+    // 1. Fetch saved settings with strict Tenant Isolation
+    const tenantKey = session.tenantId ? `organization_track_settings_${session.tenantId}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+
+    const { data: rows, error } = await supabase
       .from('platform_settings')
-      .select('value, updated_at')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
+      .select('key, value, updated_at')
+      .in('key', keysToFetch)
 
     if (error) {
       console.warn('Could not read settings from platform_settings:', error.message)
     }
+
+    const tenantRow = rows?.find((r) => r.key === tenantKey)
+    const defaultRow = rows?.find((r) => r.key === 'organization_track_settings')
+    const row = tenantRow || defaultRow
 
     const savedSettings = (row?.value as Record<string, unknown>) || {}
     const mergedSettings = {
@@ -158,16 +164,33 @@ export async function POST(req: Request) {
     const body = await req.json()
     const supabase = createAdminClient()
 
+    const tenantId = session.tenantId
+    const targetKey = tenantId ? `organization_track_settings_${tenantId}` : 'organization_track_settings'
+
     const { error } = await supabase
       .from('platform_settings')
       .upsert(
         {
-          key: 'organization_track_settings',
+          key: targetKey,
           value: body,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'key' }
       )
+
+    // Also keep the global fallback in sync if superadmin or root tenant
+    if (session.isSuperAdmin || !tenantId) {
+      await supabase
+        .from('platform_settings')
+        .upsert(
+          {
+            key: 'organization_track_settings',
+            value: body,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        )
+    }
 
     if (error) {
       console.error('Error saving track settings:', error)

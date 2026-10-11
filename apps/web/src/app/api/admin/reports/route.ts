@@ -43,21 +43,27 @@ export async function GET(req: Request) {
 
     const supabase = createAdminClient()
 
-    // Fetch platform settings for organization timezone
-    const { data: settingsRow } = await supabase
+    const { searchParams } = new URL(req.url)
+    const targetTenant = searchParams.get('tenantId') || session.tenantId
+
+    // Fetch platform settings for organization timezone with strict Tenant Isolation
+    const tenantKey = targetTenant ? `organization_track_settings_${targetTenant}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+    const { data: settingsRows } = await supabase
       .from('platform_settings')
-      .select('value')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
+      .select('key, value')
+      .in('key', keysToFetch)
+
+    const tenantRow = settingsRows?.find((r) => r.key === tenantKey)
+    const defaultRow = settingsRows?.find((r) => r.key === 'organization_track_settings')
+    const settingsRow = tenantRow || defaultRow
 
     const orgTimezone: string = settingsRow?.value?.timezone || DEFAULT_TIMEZONE
     const todayStr = getTodayInTimezone(orgTimezone)
 
-    const { searchParams } = new URL(req.url)
     const targetDate = searchParams.get('date') || todayStr
     const employeeIdFilter = searchParams.get('employeeId')
     const teamFilter = searchParams.get('team')
-    const targetTenant = searchParams.get('tenantId') || session.tenantId
 
     const isTargetToday = targetDate === todayStr
     const nowMs = Date.now()

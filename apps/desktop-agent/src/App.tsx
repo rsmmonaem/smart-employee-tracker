@@ -456,14 +456,21 @@ export default function App() {
     setLastSyncStatus(`⚡ Realtime: ${intervalStr} ${blurCapture ? '(Blur ON)' : ''}`);
   };
 
-  const fetchTrackSettings = async (userId?: string) => {
+  const fetchTrackSettings = async (userId?: string, customTenantId?: string) => {
     try {
       setIsSyncingPolicy(true);
-      const { data: row } = await supabase
+      const currentTId = customTenantId || tenantIdRef.current;
+      const tenantKey = currentTId ? `organization_track_settings_${currentTId}` : null;
+      const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings'];
+
+      const { data: rows } = await supabase
         .from('platform_settings')
-        .select('value')
-        .eq('key', 'organization_track_settings')
-        .maybeSingle();
+        .select('key, value')
+        .in('key', keysToFetch);
+
+      const tenantRow = rows?.find((r: any) => r.key === tenantKey);
+      const defaultRow = rows?.find((r: any) => r.key === 'organization_track_settings');
+      const row = tenantRow || defaultRow;
 
       if (row?.value) {
         applyPolicyFromValue(row.value, userId);
@@ -475,7 +482,7 @@ export default function App() {
     }
   };
 
-  // ⚡ Supabase Realtime WebSocket Event Listener (Sub-second Instant Sync)
+  // ⚡ Supabase Realtime WebSocket Event Listener (Sub-second Instant Sync with Tenant-Isolation)
   useEffect(() => {
     const channel = supabase
       .channel('realtime_platform_settings_listener')
@@ -485,11 +492,14 @@ export default function App() {
           event: '*',
           schema: 'public',
           table: 'platform_settings',
-          filter: 'key=eq.organization_track_settings',
         },
         (payload) => {
           const newRecord = payload.new as any;
-          if (newRecord?.value) {
+          const currentTId = tenantIdRef.current;
+          const isTenantMatch = currentTId && newRecord?.key === `organization_track_settings_${currentTId}`;
+          const isGlobalFallback = newRecord?.key === 'organization_track_settings';
+
+          if ((isTenantMatch || isGlobalFallback) && newRecord?.value) {
             applyPolicyFromValue(newRecord.value, sessionRef.current?.user?.id);
           }
         }
@@ -949,6 +959,9 @@ export default function App() {
         .single();
       if (!error && data?.tenant_id) {
         setTenantId(data.tenant_id);
+        tenantIdRef.current = data.tenant_id;
+        fetchTrackSettings(userId, data.tenant_id);
+        fetchProductivityRules();
       }
     } catch (e) {
       console.error('Failed to fetch user profile:', e);

@@ -137,12 +137,17 @@ export async function GET(req: Request) {
 
     const supabase = createAdminClient()
 
-    // Fetch platform settings for organization timezone
-    const { data: settingsRow } = await supabase
+    // Fetch platform settings for organization timezone with Tenant Isolation
+    const tenantKey = session.tenantId ? `organization_track_settings_${session.tenantId}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+    const { data: settingsRows } = await supabase
       .from('platform_settings')
-      .select('value')
-      .eq('key', 'organization_track_settings')
-      .maybeSingle()
+      .select('key, value')
+      .in('key', keysToFetch)
+
+    const tenantRow = settingsRows?.find((r) => r.key === tenantKey)
+    const defaultRow = settingsRows?.find((r) => r.key === 'organization_track_settings')
+    const settingsRow = tenantRow || defaultRow
 
     const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
     const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
