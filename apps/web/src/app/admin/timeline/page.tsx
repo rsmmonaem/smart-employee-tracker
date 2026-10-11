@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { useAdminFilter } from '../admin-filter-context'
@@ -310,29 +310,48 @@ export default function TimelinePage() {
     fetchTimelineData(selectedDate)
   }, [selectedDate, fetchTimelineData, refreshTrigger])
 
-  // Realtime Supabase Subscription for activity events
+  // Realtime Supabase Subscription with 15s trailing debounce to avoid slamming server
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastFetchTimeRef = useRef<number>(0)
+
   useEffect(() => {
     const supabase = createClient()
+
+    const triggerDebouncedFetch = () => {
+      const now = Date.now()
+      if (now - lastFetchTimeRef.current > 15000) {
+        lastFetchTimeRef.current = now
+        fetchTimelineData(selectedDate)
+        return
+      }
+      if (debounceTimerRef.current) return
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null
+        lastFetchTimeRef.current = Date.now()
+        fetchTimelineData(selectedDate)
+      }, 15000)
+    }
+
     const channel = supabase
       .channel('timeline_realtime_sync')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'activity_events' },
         () => {
-          console.log('⚡ Realtime activity_events insert detected, updating timeline...')
-          fetchTimelineData(selectedDate)
+          triggerDebouncedFetch()
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'users' },
         () => {
-          fetchTimelineData(selectedDate)
+          triggerDebouncedFetch()
         }
       )
       .subscribe()
 
     return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       supabase.removeChannel(channel)
     }
   }, [selectedDate, fetchTimelineData])

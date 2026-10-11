@@ -77,11 +77,27 @@ function getTargetTimeMs(dateStr: string, minutesFromMidnight: number, timeZone:
   }
 }
 
+let cachedAuthMap: Map<string, any> | null = null
+let cachedAuthTime = 0
+let lastHealTimestamp = 0
+const timelineCache = new Map<string, { timestamp: number; payload: any }>()
+
 export async function GET(req: Request) {
   try {
     const session = await getSessionContext()
     if (!session) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(req.url)
+    const targetDateParam = searchParams.get('date') || ''
+    const cacheKey = `${session.tenantId || 'global'}_${targetDateParam || 'today'}_${session.userId || 'all'}`
+    const nowMs = Date.now()
+
+    // 1. Fast cache check (5 second window)
+    const cachedEntry = timelineCache.get(cacheKey)
+    if (cachedEntry && nowMs - cachedEntry.timestamp < 5000) {
+      return NextResponse.json(cachedEntry.payload)
     }
 
     const supabase = createAdminClient()
@@ -95,12 +111,9 @@ export async function GET(req: Request) {
 
     const orgTimezone: string = settingsRow?.value?.timezone || 'Asia/Dhaka'
     const todayStr = getLocalDateString(new Date().toISOString(), orgTimezone)
-
-    const { searchParams } = new URL(req.url)
-    const targetDate = searchParams.get('date') || todayStr
+    const targetDate = targetDateParam || todayStr
     const isTargetToday = targetDate === todayStr
 
-    const nowMs = Date.now()
     const now = new Date(nowMs)
 
     // 1. Fetch real users filtered strictly by tenant
@@ -141,9 +154,18 @@ export async function GET(req: Request) {
       })
     }
 
-    // Auth metadata for teams
-    const { data: authData } = await supabase.auth.admin.listUsers()
-    const authMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
+    // Auth metadata for teams (Cached for 60 seconds)
+    if (!cachedAuthMap || nowMs - cachedAuthTime > 60000) {
+      try {
+        const { data: authData } = await supabase.auth.admin.listUsers()
+        cachedAuthMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
+        cachedAuthTime = nowMs
+      } catch {
+        // Fallback to empty map if auth admin fails
+        if (!cachedAuthMap) cachedAuthMap = new Map()
+      }
+    }
+    const authMap = cachedAuthMap
 
     // 2. Fetch real activity events strictly for those userIds (allow up to 25000 events to prevent 1000 row truncation)
     const { data: events } = await supabase
@@ -158,34 +180,39 @@ export async function GET(req: Request) {
     const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
     const startOfTodayIso = new Date(startOfTodayMs).toISOString()
 
-    // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
-    await supabase
-      .from('attendance_sessions')
-      .update({
-        status: 'CLOSED',
-        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
-      })
-      .eq('status', 'OPEN')
-      .lt('clocked_in_at', startOfTodayIso)
+    // Run session healing updates at most once every 5 minutes to avoid slamming Postgres with UPDATE queries on every GET request
+    if (nowMs - lastHealTimestamp > 300000) {
+      lastHealTimestamp = nowMs
 
-    // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
-    await supabase
-      .from('attendance_sessions')
-      .update({
-        status: 'CLOSED',
-        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
-      })
-      .lt('clocked_in_at', startOfTodayIso)
-      .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
+      // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
+      await supabase
+        .from('attendance_sessions')
+        .update({
+          status: 'CLOSED',
+          clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+        })
+        .eq('status', 'OPEN')
+        .lt('clocked_in_at', startOfTodayIso)
 
-    // Clamp any future clocked_out_at timestamps on Today to now
-    await supabase
-      .from('attendance_sessions')
-      .update({
-        clocked_out_at: new Date(nowMs).toISOString(),
-      })
-      .gt('clocked_out_at', new Date(nowMs).toISOString())
-      .gte('clocked_in_at', startOfTodayIso)
+      // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
+      await supabase
+        .from('attendance_sessions')
+        .update({
+          status: 'CLOSED',
+          clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+        })
+        .lt('clocked_in_at', startOfTodayIso)
+        .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
+
+      // Clamp any future clocked_out_at timestamps on Today to now
+      await supabase
+        .from('attendance_sessions')
+        .update({
+          clocked_out_at: new Date(nowMs).toISOString(),
+        })
+        .gt('clocked_out_at', new Date(nowMs).toISOString())
+        .gte('clocked_in_at', startOfTodayIso)
+    }
 
     // 3. Fetch attendance sessions strictly for those userIds
     const { data: sessions } = await supabase
@@ -418,12 +445,17 @@ export async function GET(req: Request) {
       }
     })
 
-    return NextResponse.json({
+    const payload = {
       success: true,
       date: targetDate,
       totalUsers: timelineRows.length,
       timelines: timelineRows,
-    })
+    }
+
+    // Cache the successful response for 5 seconds
+    timelineCache.set(cacheKey, { timestamp: nowMs, payload })
+
+    return NextResponse.json(payload)
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('Timeline API GET error:', err)
