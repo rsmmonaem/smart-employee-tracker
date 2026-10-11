@@ -148,7 +148,7 @@ export async function GET(req: Request) {
     // 2. Fetch real activity events strictly for those userIds (allow up to 25000 events to prevent 1000 row truncation)
     const { data: events } = await supabase
       .from('activity_events')
-      .select('*')
+      .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
       .in('user_id', userIds)
       .gte('started_at', startOfDay)
       .lte('started_at', endOfDay)
