@@ -251,7 +251,7 @@ export default function DashboardPage() {
     fetchDashboardData(false)
   }, [fetchDashboardData])
 
-  // 2. Supabase Realtime Subscriptions (Screenshots, Attendance, Activity)
+  // 2. Supabase Realtime Subscriptions (Screenshots, Attendance)
   useEffect(() => {
     const channel = supabase
       .channel('realtime-dashboard-overview')
@@ -265,13 +265,6 @@ export default function DashboardPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'attendance_sessions' },
-        () => {
-          fetchDashboardData(true)
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'activity_events' },
         () => {
           fetchDashboardData(true)
         }

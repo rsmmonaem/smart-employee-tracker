@@ -243,11 +243,6 @@ export default function ReportsPage() {
         { event: '*', schema: 'public', table: 'attendance_sessions' },
         () => fetchReportsData()
       )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'activity_events' },
-        () => fetchReportsData()
-      )
       .subscribe()
 
     return () => {
