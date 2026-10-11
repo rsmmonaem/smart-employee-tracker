@@ -245,7 +245,11 @@ export default function DashboardPage() {
               u.workedHours &&
               u.workedHours !== '00h 00m'
           )
-          const sorted = [...activeWorkers].sort((a: any, b: any) => (b.performanceScore || 0) - (a.performanceScore || 0))
+          const sorted = [...activeWorkers].sort((a: any, b: any) => {
+            const scoreDiff = (b.performanceScore || 0) - (a.performanceScore || 0)
+            if (scoreDiff !== 0) return scoreDiff
+            return (b.workedSeconds || 0) - (a.workedSeconds || 0)
+          })
           setLeaderboard(sorted.slice(0, 5))
         }
       }

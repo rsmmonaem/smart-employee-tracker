@@ -320,6 +320,7 @@ export async function GET(req: Request) {
         triggers,
         performanceScore,
         workedHours: formatDuration(totalWorkSec),
+        workedSeconds: totalWorkSec,
         idleTime: formatDuration(idleSec),
         idlePercent,
         unproductiveHours: formatDuration(unprodSec),
