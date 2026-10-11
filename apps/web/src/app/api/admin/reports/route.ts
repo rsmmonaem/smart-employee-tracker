@@ -82,6 +82,16 @@ export async function GET(req: Request) {
       .eq('status', 'OPEN')
       .lt('clocked_in_at', startOfTodayIso)
 
+    // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .lt('clocked_in_at', startOfTodayIso)
+      .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
+
     // Clamp any future clocked_out_at timestamps on Today to now
     await supabase
       .from('attendance_sessions')
@@ -346,11 +356,39 @@ export async function GET(req: Request) {
 
       // CASE A: User has attendance sessions
       if (userSessions.length > 0) {
-        const firstSession = userSessions[0]
-        const lastSession = userSessions[userSessions.length - 1]
-        const inDate = new Date(firstSession.clocked_in_at)
-
         const isCurrentlyActive = userSessions.some((s) => !s.clocked_out_at || s.status === 'OPEN')
+
+        // Shift-relevant sessions: active now, started within 90 min before shift or during shift, or ended during/after shift start
+        const shiftSessions = userSessions.filter((s) => {
+          if (!s.clocked_out_at || s.status === 'OPEN') return true
+          const inT = new Date(s.clocked_in_at).getTime()
+          const outT = new Date(s.clocked_out_at).getTime()
+          return outT > shiftStartMs || inT >= shiftStartMs - 90 * 60 * 1000
+        })
+
+        const hasVerifiedWork = userEvents.length > 0 || userScreenshots.length > 0
+
+        // If user only has pre-shift overnight sessions that closed before shift start with zero daytime work,
+        // and is not currently active, they are ABSENT for today's shift!
+        if (!isCurrentlyActive && shiftSessions.length === 0 && !hasVerifiedWork) {
+          return {
+            id: `att-${u.id}`,
+            employeeId: u.id,
+            name,
+            avatar,
+            clockIn: '-',
+            clockOut: '-',
+            workedHours: '00h 00m',
+            breakTime: '00h 00m',
+            effectiveHours: '00h 00m',
+            status: 'ABSENT' as const,
+          }
+        }
+
+        const activeSessions = shiftSessions.length > 0 ? shiftSessions : userSessions
+        const firstSession = activeSessions[0]
+        const lastSession = activeSessions[activeSessions.length - 1]
+
         const clockOutStr = isCurrentlyActive
           ? 'Active'
           : lastSession.clocked_out_at
@@ -408,6 +446,22 @@ export async function GET(req: Request) {
         })
 
         const effectiveSec = Math.max(0, totalSec - breakSec)
+
+        // If no effective work was done, user is not active, and has no verified events, mark ABSENT
+        if (effectiveSec === 0 && !isCurrentlyActive && !hasVerifiedWork) {
+          return {
+            id: `att-${u.id}`,
+            employeeId: u.id,
+            name,
+            avatar,
+            clockIn: '-',
+            clockOut: '-',
+            workedHours: '00h 00m',
+            breakTime: '00h 00m',
+            effectiveHours: '00h 00m',
+            status: 'ABSENT' as const,
+          }
+        }
 
         // Late threshold: shiftStart + 15 min grace period
         const graceMs = shiftStartMs + 15 * 60 * 1000

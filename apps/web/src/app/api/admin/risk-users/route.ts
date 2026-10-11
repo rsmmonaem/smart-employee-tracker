@@ -63,6 +63,16 @@ export async function GET(req: Request) {
       .eq('status', 'OPEN')
       .lt('clocked_in_at', startOfTodayIso)
 
+    // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .lt('clocked_in_at', startOfTodayIso)
+      .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
+
     // Clamp any future clocked_out_at timestamps on Today to now
     await supabase
       .from('attendance_sessions')

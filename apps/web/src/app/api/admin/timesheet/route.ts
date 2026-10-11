@@ -165,6 +165,29 @@ export async function GET(req: Request) {
 
     const expectedClockInMs = getTargetTimeMs(targetDate, expectedInMinutes, orgTimezone)
     const expectedClockOutMs = getTargetTimeMs(targetDate, expectedOutMinutes, orgTimezone)
+    const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
+    const startOfTodayIso = new Date(startOfTodayMs).toISOString()
+    const nowMs = Date.now()
+
+    // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .eq('status', 'OPEN')
+      .lt('clocked_in_at', startOfTodayIso)
+
+    // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
+    await supabase
+      .from('attendance_sessions')
+      .update({
+        status: 'CLOSED',
+        clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+      })
+      .lt('clocked_in_at', startOfTodayIso)
+      .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
 
     // 3. Fetch attendance sessions strictly for those userIds
     const { data: allSessions } = await supabase
@@ -200,23 +223,42 @@ export async function GET(req: Request) {
         (s) => getLocalDateString(s.clocked_in_at, orgTimezone) === targetDate
       )
 
-      const targetSession = todaySessions.length > 0 ? todaySessions[todaySessions.length - 1] : null
-      const firstSession = todaySessions.length > 0 ? todaySessions[0] : null
-      const hasOpenSession = todaySessions.some((s) => s.status === 'OPEN' && !s.clocked_out_at)
+      const isTargetToday = targetDate === todayStr
 
-      const inTimeStr = firstSession?.clocked_in_at
-        ? formatClockTime(firstSession.clocked_in_at, orgTimezone)
-        : '00:00'
-      const outTimeStr = hasOpenSession
-        ? 'Active'
-        : targetSession?.clocked_out_at
-        ? formatClockTime(targetSession.clocked_out_at, orgTimezone)
-        : '00:00'
+      // Shift-relevant sessions: active now, started within 90 min before shift or during shift, or ended during/after shift start
+      const shiftSessions = todaySessions.filter((s) => {
+        if (!s.clocked_out_at || s.status === 'OPEN') return true
+        const inT = new Date(s.clocked_in_at).getTime()
+        const outT = new Date(s.clocked_out_at).getTime()
+        return outT > expectedClockInMs || inT >= expectedClockInMs - 90 * 60 * 1000
+      })
 
       // Filter activity events for targetDate in local timezone
       const userEvents = (activityEvents || []).filter(
         (e) => e.user_id === user.id && getLocalDateString(e.started_at, orgTimezone) === targetDate
       )
+
+      const hasOpenSession = todaySessions.some((s) => s.status === 'OPEN' && !s.clocked_out_at)
+      const hasVerifiedWork = userEvents.length > 0
+      const isAbsentFromShift = !hasOpenSession && shiftSessions.length === 0 && !hasVerifiedWork
+
+      const activeSessions = shiftSessions.length > 0 ? shiftSessions : todaySessions
+      const targetSession = activeSessions.length > 0 ? activeSessions[activeSessions.length - 1] : null
+      const firstSession = activeSessions.length > 0 ? activeSessions[0] : null
+
+      const inTimeStr = isAbsentFromShift
+        ? '00:00'
+        : firstSession?.clocked_in_at
+        ? formatClockTime(firstSession.clocked_in_at, orgTimezone)
+        : '00:00'
+      const outTimeStr = isAbsentFromShift
+        ? '00:00'
+        : hasOpenSession
+        ? 'Active'
+        : targetSession?.clocked_out_at
+        ? formatClockTime(targetSession.clocked_out_at, orgTimezone)
+        : '00:00'
+
       let activeSeconds = 0
       let idleSeconds = 0
 
@@ -238,18 +280,32 @@ export async function GET(req: Request) {
       // Calculate start and end of targetDate in ms
       const dayStartMs = getTargetTimeMs(targetDate, 0, orgTimezone)
       const dayEndMs = getTargetTimeMs(targetDate, 1440, orgTimezone)
-      const nowMs = Date.now()
       const effectiveCapMs = Math.min(dayEndMs, nowMs)
 
       // Collect valid intervals clamped to the target day
       const intervals: { start: number; end: number }[] = []
       todaySessions.forEach((s) => {
-        const rawStart = new Date(s.clocked_in_at).getTime()
-        const rawEnd = s.clocked_out_at
+        let rawStart = new Date(s.clocked_in_at).getTime()
+        let rawEnd = s.clocked_out_at
           ? new Date(s.clocked_out_at).getTime()
           : s.status === 'OPEN'
           ? effectiveCapMs
           : rawStart
+
+        if (isTargetToday) {
+          if (rawStart >= nowMs) return
+          if (rawEnd > nowMs) rawEnd = nowMs
+
+          // Pre-shift clamp if no verified early events
+          if (rawStart < expectedClockInMs) {
+            const hasEarlyEvents = userEvents.some(
+              (e) => new Date(e.started_at).getTime() < expectedClockInMs
+            )
+            if (!hasEarlyEvents) {
+              rawStart = expectedClockInMs
+            }
+          }
+        }
 
         const clampedStart = Math.max(rawStart, dayStartMs)
         const clampedEnd = Math.min(rawEnd, effectiveCapMs)
