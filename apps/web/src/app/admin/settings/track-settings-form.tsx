@@ -251,6 +251,41 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
     }
   }, [toastMessage])
 
+  const playDefaultChime = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime)
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15)
+      gain.gain.setValueAtTime(0.25, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45)
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.45)
+    } catch (err) {
+      console.warn('AudioContext failed:', err)
+    }
+  }
+
+  const playCustomAudio = () => {
+    if (!settings.idleAlertSound) {
+      playDefaultChime()
+      return
+    }
+    try {
+      const audio = new Audio(settings.idleAlertSound)
+      audio.volume = 0.9
+      audio.play().catch((e) => {
+        alert('Could not play audio: ' + (e?.message || 'Unsupported format'))
+      })
+    } catch (e: any) {
+      alert('Audio playback error: ' + (e?.message || 'Unknown error'))
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setErrorMessage(null)
@@ -1047,55 +1082,24 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
               </h4>
             </div>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-              Choose the sound played when the "Are you still working?" modal pops up on the employee desktop.
+              Choose the sound played when the &quot;Are you still working?&quot; modal pops up on the employee desktop.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Play Current Audio */}
-            <button
-              type="button"
-              onClick={() => {
-                if (settings.idleAlertSound) {
-                  const audio = new Audio(settings.idleAlertSound)
-                  audio.play().catch(() => {})
-                } else {
-                  // Default synthesizer chime
-                  try {
-                    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-                    const osc = ctx.createOscillator()
-                    const gain = ctx.createGain()
-                    osc.connect(gain)
-                    gain.connect(ctx.destination)
-                    osc.type = 'sine'
-                    osc.frequency.setValueAtTime(587.33, ctx.currentTime)
-                    osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15)
-                    gain.gain.setValueAtTime(0.25, ctx.currentTime)
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.45)
-                    osc.start(ctx.currentTime)
-                    osc.stop(ctx.currentTime + 0.45)
-                  } catch {}
-                }
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 transition-colors shadow-2xs"
-            >
-              <Play className="w-3.5 h-3.5 text-blue-600 fill-blue-600" />
-              <span>Test Current Sound</span>
-            </button>
-
+          <div className="flex flex-wrap items-center gap-2.5">
             {/* Upload File Input */}
-            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 cursor-pointer transition-colors shadow-2xs">
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer transition-colors shadow-2xs">
               <Upload className="w-3.5 h-3.5" />
               <span>Upload Custom Audio (MP3 / WAV)</span>
               <input
                 type="file"
-                accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg"
+                accept="audio/mp3,audio/wav,audio/ogg,audio/mpeg,audio/m4a"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) {
-                    if (file.size > 2 * 1024 * 1024) {
-                      alert('Audio file size must be less than 2MB')
+                    if (file.size > 3 * 1024 * 1024) {
+                      alert('Audio file size must be less than 3MB')
                       return
                     }
                     const reader = new FileReader()
@@ -1103,12 +1107,42 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
                       const base64 = event.target?.result as string
                       handleChange('idleAlertSound', base64)
                       handleChange('idleAlertSoundName', file.name)
+                      // Immediate test playback so user hears what was uploaded
+                      try {
+                        const a = new Audio(base64)
+                        a.volume = 0.9
+                        a.play().catch(() => {})
+                      } catch {}
                     }
                     reader.readAsDataURL(file)
                   }
                 }}
               />
             </label>
+
+            {/* Test Custom Audio Button */}
+            {settings.idleAlertSound ? (
+              <button
+                type="button"
+                onClick={playCustomAudio}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors shadow-2xs"
+                title="Listen to your uploaded custom audio"
+              >
+                <Play className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                <span>Play Uploaded Sound</span>
+              </button>
+            ) : null}
+
+            {/* Test Default Synthesizer Chime */}
+            <button
+              type="button"
+              onClick={playDefaultChime}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 transition-colors shadow-2xs"
+              title="Test the default built-in D5-A5 chime"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-gray-500" />
+              <span>Test Default Chime</span>
+            </button>
 
             {/* Reset to Default Button */}
             {settings.idleAlertSound && (
@@ -1119,24 +1153,43 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
                   handleChange('idleAlertSoundName', '')
                 }}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-                title="Reset to default chime"
+                title="Remove custom audio and revert to default chime"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Reset to Default</span>
+                <span>Revert to Default</span>
               </button>
             )}
           </div>
 
-          <div className="text-[11px] text-gray-500 dark:text-gray-400">
-            {settings.idleAlertSoundName ? (
-              <span className="font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Custom alert: {settings.idleAlertSoundName}
-              </span>
-            ) : (
-              <span>Currently using: <strong className="text-gray-700 dark:text-gray-300">Default Built-in Attention Chime (D5 → A5)</strong></span>
-            )}
-          </div>
+          {/* Player & Status Card */}
+          {settings.idleAlertSound ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-900/60 dark:bg-emerald-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
+                    Custom Audio: {settings.idleAlertSoundName || 'Uploaded Sound'}
+                  </p>
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-400">
+                    Active custom chime for idle alerts. Click play to listen.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <audio
+                  controls
+                  src={settings.idleAlertSound}
+                  className="h-8 max-w-full sm:w-64 rounded"
+                  preload="metadata"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/40 p-2.5 rounded-lg border border-gray-200 dark:border-gray-800">
+              <span className="font-semibold text-gray-700 dark:text-gray-300">Active Sound:</span>
+              <span>Default Built-in Attention Chime (D5 → A5 chime). Upload your custom MP3/WAV file above to replace it.</span>
+            </div>
+          )}
         </div>
       </section>
 
