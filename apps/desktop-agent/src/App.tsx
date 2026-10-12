@@ -118,14 +118,29 @@ interface ProductivityRule {
 
 function parseIntervalToMs(intervalStr?: string): number {
   if (!intervalStr) return 60000;
-  if (intervalStr.includes('1 min')) return 1 * 60 * 1000; // 60s
-  if (intervalStr.includes('2 mins')) return 2 * 60 * 1000; // 120s
-  if (intervalStr.includes('3 mins')) return 3 * 60 * 1000;
-  if (intervalStr.includes('5 mins')) return 5 * 60 * 1000;
-  if (intervalStr.includes('10 mins')) return 10 * 60 * 1000;
-  if (intervalStr.includes('15 mins')) return 15 * 60 * 1000;
-  if (intervalStr.includes('30 mins')) return 30 * 60 * 1000;
-  if (intervalStr.includes('60 mins')) return 60 * 60 * 1000;
+  const s = intervalStr.toLowerCase().trim();
+
+  // 1. Seconds (e.g. "Every 30 sec", "30s", "30 seconds")
+  if (s.includes('30s') || s.includes('30 sec') || s.includes('30 second')) return 30 * 1000;
+  const secMatch = s.match(/(\d+)\s*(s|sec|second)/i);
+  if (secMatch) return Math.max(5000, parseInt(secMatch[1], 10) * 1000);
+
+  // 2. Specific minute presets
+  if (s.includes('1 min')) return 1 * 60 * 1000; // 60s
+  if (s.includes('2 min')) return 2 * 60 * 1000; // 120s
+  if (s.includes('3 min')) return 3 * 60 * 1000; // 180s
+  if (s.includes('4 min')) return 4 * 60 * 1000; // 240s
+  if (s.includes('5 min')) return 5 * 60 * 1000; // 300s
+  if (s.includes('10 min')) return 10 * 60 * 1000; // 600s
+  if (s.includes('15 min')) return 15 * 60 * 1000; // 900s
+  if (s.includes('20 min')) return 20 * 60 * 1000; // 1200s
+  if (s.includes('30 min')) return 30 * 60 * 1000; // 1800s
+  if (s.includes('60 min') || s.includes('1 hour')) return 60 * 60 * 1000; // 3600s
+
+  // 3. Dynamic minute regex parser
+  const minMatch = s.match(/(\d+)\s*min/i);
+  if (minMatch) return Math.max(30000, parseInt(minMatch[1], 10) * 60 * 1000);
+
   return 60000;
 }
 
@@ -215,7 +230,7 @@ function getTodayKey(): string {
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
-  const [tenantId, setTenantId] = useState<string>('7d91b2a1-c727-4f50-83ec-4fdb9debebd3');
+  const [tenantId, setTenantId] = useState<string>('549d706f-2ecb-444b-991a-519adf4682e3');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(true);
@@ -468,9 +483,10 @@ export default function App() {
         .select('key, value')
         .in('key', keysToFetch);
 
-      const tenantRow = rows?.find((r: any) => r.key === tenantKey);
+      const tenantRow = tenantKey ? rows?.find((r: any) => r.key === tenantKey) : null;
+      const anyTenantRow = rows?.find((r: any) => r.key?.startsWith('organization_track_settings_'));
       const defaultRow = rows?.find((r: any) => r.key === 'organization_track_settings');
-      const row = tenantRow || defaultRow;
+      const row = tenantRow || anyTenantRow || defaultRow;
 
       if (row?.value) {
         applyPolicyFromValue(row.value, userId);
@@ -498,8 +514,9 @@ export default function App() {
           const currentTId = tenantIdRef.current;
           const isTenantMatch = currentTId && newRecord?.key === `organization_track_settings_${currentTId}`;
           const isGlobalFallback = newRecord?.key === 'organization_track_settings';
+          const isAnyOrgSetting = newRecord?.key?.startsWith('organization_track_settings');
 
-          if ((isTenantMatch || isGlobalFallback) && newRecord?.value) {
+          if ((isTenantMatch || isGlobalFallback || isAnyOrgSetting) && newRecord?.value) {
             applyPolicyFromValue(newRecord.value, sessionRef.current?.user?.id);
           }
         }
@@ -970,7 +987,7 @@ export default function App() {
 
   const fetchProductivityRules = async () => {
     try {
-      const currentTenantId = tenantIdRef.current || '7d91b2a1-c727-4f50-83ec-4fdb9debebd3';
+      const currentTenantId = tenantIdRef.current || '549d706f-2ecb-444b-991a-519adf4682e3';
       const currentUserId = sessionRef.current?.user?.id;
 
       // 1. Fetch organization-wide global rules

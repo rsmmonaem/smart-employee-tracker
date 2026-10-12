@@ -191,19 +191,17 @@ export async function POST(req: Request) {
         { onConflict: 'key' }
       )
 
-    // Also keep the global fallback in sync if superadmin or root tenant
-    if (session.isSuperAdmin || !tenantId) {
-      await supabase
-        .from('platform_settings')
-        .upsert(
-          {
-            key: 'organization_track_settings',
-            value: body,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'key' }
-        )
-    }
+    // Always keep the global fallback in sync so all desktop agents receive the updated policy
+    await supabase
+      .from('platform_settings')
+      .upsert(
+        {
+          key: 'organization_track_settings',
+          value: body,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      )
 
     if (error) {
       console.error('Error saving track settings:', error)

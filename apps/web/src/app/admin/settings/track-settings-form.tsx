@@ -64,12 +64,14 @@ const CURRENCIES = [
 ]
 
 const SCREENSHOT_INTERVALS = [
+  'Every 30 sec',
   'Every 1 min',
   'Every 2 mins',
   'Every 3 mins',
+  'Every 4 mins',
   'Every 5 mins',
   'Every 10 mins',
-  'Every 15 mins',
+  'Every 20 mins',
   'Every 30 mins',
   'Every 60 mins',
 ]
