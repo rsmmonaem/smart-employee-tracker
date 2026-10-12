@@ -240,10 +240,14 @@ export default function DashboardPage() {
           setRiskSummary(riskJson.summary)
         }
         if (Array.isArray(riskJson.riskUsers)) {
+          // Only include verified active workers with performanceScore > 0.
+          // Exclude unattended sessions or users with zero active input.
           const activeWorkers = riskJson.riskUsers.filter(
             (u: any) =>
               u.workedHours &&
-              u.workedHours !== '00h 00m'
+              u.workedHours !== '00h 00m' &&
+              (u.performanceScore || 0) > 0 &&
+              !(u.triggers || []).some((t: string) => (t || '').toLowerCase().includes('unattended'))
           )
           const sorted = [...activeWorkers].sort((a: any, b: any) => {
             const scoreDiff = (b.performanceScore || 0) - (a.performanceScore || 0)
@@ -496,7 +500,7 @@ export default function DashboardPage() {
 
               {leaderboard.length === 0 ? (
                 <div className="py-8 text-center text-xs text-gray-400">
-                  No active tracked sessions recorded yet today.
+                  No verified productive work recorded yet today. Active performers will appear as activity scores are logged.
                 </div>
               ) : (
                 <div className="space-y-2.5">

@@ -339,6 +339,52 @@ export function DownloadAppsView() {
             </div>
           </div>
         </div>
+
+        {/* macOS Screen & Audio Recording Repeating Popup Fix Banner */}
+        <div className="mt-4 rounded-xl border border-blue-300/80 bg-blue-50/70 p-5 dark:border-blue-800/60 dark:bg-blue-950/20">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+            <div className="space-y-2 flex-1">
+              <h4 className="text-sm font-bold text-blue-950 dark:text-blue-200">
+                macOS Screen &amp; Audio Recording: Repeating Permission Popup Fix
+              </h4>
+              <p className="text-xs text-blue-900/90 dark:text-blue-300/80 leading-relaxed">
+                If macOS keeps asking for <em>&quot;Screen and System Audio Recording&quot;</em> repeatedly even after enabling it in System Settings, macOS permission cache is holding stale records. Resetting the TCC cache resolves this immediately.
+              </p>
+
+              <div className="pt-2">
+                <span className="text-xs font-semibold text-gray-800 dark:text-gray-200 block mb-1.5">
+                  Fix: Open Terminal (Command + Space &gt; Terminal) and paste this reset command:
+                </span>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1 flex items-center gap-2 bg-gray-900 text-gray-100 px-3.5 py-2 rounded-lg font-mono text-xs overflow-x-auto border border-gray-800">
+                    <Terminal className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                    <span className="select-all">tccutil reset ScreenCapture com.smartemployeetracker.app</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText('tccutil reset ScreenCapture com.smartemployeetracker.app')
+                      alert('Reset command copied to clipboard! Paste it into Terminal and press Enter.')
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 shadow-xs"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy Command
+                  </button>
+                </div>
+                <div className="mt-2.5 rounded-lg bg-blue-100/70 dark:bg-blue-900/30 p-2.5 text-[11px] text-blue-900 dark:text-blue-200 space-y-1">
+                  <p className="font-semibold">After running the command above in Terminal:</p>
+                  <ol className="list-decimal list-inside space-y-0.5 text-blue-800 dark:text-blue-300">
+                    <li>Open <strong>System Settings &gt; Privacy &amp; Security &gt; Screen &amp; System Audio Recording</strong>.</li>
+                    <li>Toggle <strong>Smart Employee Tracker</strong> to ON.</li>
+                    <li>Click <strong>Quit &amp; Reopen</strong> when prompted by macOS.</li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
