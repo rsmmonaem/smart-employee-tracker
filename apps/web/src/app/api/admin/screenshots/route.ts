@@ -199,57 +199,59 @@ export async function GET(req: Request) {
     let dailyBreakdown: Array<{ date: string; count: number; bytes: number; formattedSize: string }> = []
     let selectedDateCount = 0
 
-    try {
-      // 1. Total Tenant Count scan
-      let overallCountQ = supabase.from('screenshots').select('id', { count: 'exact', head: true })
-      if (!session.isSuperAdmin && session.tenantId) {
-        overallCountQ = overallCountQ.eq('tenant_id', session.tenantId)
-      }
-      const { count: oc } = await overallCountQ
-      if (typeof oc === 'number') {
-        totalTenantCount = oc
-        totalTenantBytes = oc * 75 * 1024
-      }
+    if (limit > 6) {
+      try {
+        // 1. Total Tenant Count scan
+        let overallCountQ = supabase.from('screenshots').select('id', { count: 'exact', head: true })
+        if (!session.isSuperAdmin && session.tenantId) {
+          overallCountQ = overallCountQ.eq('tenant_id', session.tenantId)
+        }
+        const { count: oc } = await overallCountQ
+        if (typeof oc === 'number') {
+          totalTenantCount = oc
+          totalTenantBytes = oc * 75 * 1024
+        }
 
-      // 2. Day-wise grouping from recent screenshots
-      let recentDatesQ = supabase
-        .from('screenshots')
-        .select('taken_at')
-        .order('taken_at', { ascending: false })
-        .limit(2000)
+        // 2. Day-wise grouping from recent screenshots
+        let recentDatesQ = supabase
+          .from('screenshots')
+          .select('taken_at')
+          .order('taken_at', { ascending: false })
+          .limit(2000)
 
-      if (!session.isSuperAdmin && session.tenantId) {
-        recentDatesQ = recentDatesQ.eq('tenant_id', session.tenantId)
-      }
-      const { data: dateRows } = await recentDatesQ
+        if (!session.isSuperAdmin && session.tenantId) {
+          recentDatesQ = recentDatesQ.eq('tenant_id', session.tenantId)
+        }
+        const { data: dateRows } = await recentDatesQ
 
-      if (dateRows && dateRows.length > 0) {
-        const countsByDay: Record<string, number> = {}
-        for (const r of dateRows) {
-          if (r.taken_at) {
-            const d = r.taken_at.split('T')[0]
-            countsByDay[d] = (countsByDay[d] || 0) + 1
+        if (dateRows && dateRows.length > 0) {
+          const countsByDay: Record<string, number> = {}
+          for (const r of dateRows) {
+            if (r.taken_at) {
+              const d = r.taken_at.split('T')[0]
+              countsByDay[d] = (countsByDay[d] || 0) + 1
+            }
+          }
+
+          dailyBreakdown = Object.entries(countsByDay)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([d, cnt]) => {
+              const b = cnt * 75 * 1024
+              return {
+                date: d,
+                count: cnt,
+                bytes: b,
+                formattedSize: formatBytes(b),
+              }
+            })
+
+          if (targetDate && countsByDay[targetDate]) {
+            selectedDateCount = countsByDay[targetDate]
           }
         }
-
-        dailyBreakdown = Object.entries(countsByDay)
-          .sort(([a], [b]) => b.localeCompare(a))
-          .map(([d, cnt]) => {
-            const b = cnt * 75 * 1024
-            return {
-              date: d,
-              count: cnt,
-              bytes: b,
-              formattedSize: formatBytes(b),
-            }
-          })
-
-        if (targetDate && countsByDay[targetDate]) {
-          selectedDateCount = countsByDay[targetDate]
-        }
+      } catch (e) {
+        console.warn('Failed computing storage stats:', e)
       }
-    } catch (e) {
-      console.warn('Failed computing storage stats:', e)
     }
 
     const total = totalCount ?? (data || []).length

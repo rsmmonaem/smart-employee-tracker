@@ -27,6 +27,160 @@ interface Segment {
   durationStr: string
 }
 
+interface ProductivityRuleEntry {
+  pattern: string
+  classification: ActivityType
+  match_type?: string
+}
+
+function resolveClassification({
+  appName,
+  windowTitle,
+  domain,
+  storedClassification,
+  userOverrides,
+  globalRules,
+}: {
+  appName: string
+  windowTitle: string
+  domain: string | null
+  storedClassification: string | null
+  userOverrides?: Record<string, string>
+  globalRules: ProductivityRuleEntry[]
+}): { type: ActivityType; segAppName: string; segWindowTitle: string } {
+  const appLower = (appName || '').toLowerCase().trim()
+  const winLower = (windowTitle || '').toLowerCase().trim()
+  const domainLower = (domain || '').toLowerCase().trim()
+
+  // 1. Lock screen / screensaver / idle checks
+  const isLockScreen =
+    appLower.includes('lockapp') ||
+    appLower.includes('logonui') ||
+    appLower.includes('screensaver') ||
+    winLower.includes('lock screen') ||
+    winLower.includes('screen lock') ||
+    winLower.includes('locked')
+
+  const isLockOrIdle =
+    isLockScreen ||
+    appLower.includes('idle') ||
+    winLower.includes('idle')
+
+  if (isLockScreen) {
+    return {
+      type: 'IDLE',
+      segAppName: 'Lock Screen (Idle)',
+      segWindowTitle: 'Screen Locked / Away',
+    }
+  }
+  if (isLockOrIdle) {
+    return {
+      type: 'IDLE',
+      segAppName: 'Idle Time',
+      segWindowTitle: windowTitle || 'Idle / Inactive',
+    }
+  }
+  if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+    return {
+      type: 'UNTRACKED',
+      segAppName: 'Untracked Activity',
+      segWindowTitle: windowTitle || 'Untracked Time',
+    }
+  }
+  if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+    return {
+      type: 'NOT_IN_WORK',
+      segAppName: 'Break / Lunch',
+      segWindowTitle: windowTitle || 'Break Time',
+    }
+  }
+
+  // 2. Check Employee-specific overrides (highest priority)
+  if (userOverrides) {
+    if (domainLower && userOverrides[domainLower]) {
+      const cls = userOverrides[domainLower].toUpperCase() as ActivityType
+      return {
+        type: cls,
+        segAppName: `${domainLower} (${appName || 'Browser'})`,
+        segWindowTitle: windowTitle || domainLower,
+      }
+    }
+    if (appLower && userOverrides[appLower]) {
+      const cls = userOverrides[appLower].toUpperCase() as ActivityType
+      return {
+        type: cls,
+        segAppName: appName || 'Active Application',
+        segWindowTitle: windowTitle || 'Application Window',
+      }
+    }
+    // Fuzzy user override check
+    for (const [k, v] of Object.entries(userOverrides)) {
+      if (k && (appLower.includes(k) || k.includes(appLower))) {
+        return {
+          type: v.toUpperCase() as ActivityType,
+          segAppName: appName || 'Active Application',
+          segWindowTitle: windowTitle || 'Application Window',
+        }
+      }
+    }
+  }
+
+  // 3. Check Tenant-wide Productivity Rules
+  // 3a. Specific DOMAIN match if domain exists
+  if (domainLower) {
+    for (const r of globalRules) {
+      const pat = (r.pattern || '').toLowerCase().trim()
+      if (!pat) continue
+      if (r.match_type === 'DOMAIN' || pat.includes('.')) {
+        if (domainLower === pat || domainLower.includes(pat) || pat.includes(domainLower)) {
+          return {
+            type: r.classification,
+            segAppName: `${r.pattern} (${appName || 'Browser'})`,
+            segWindowTitle: windowTitle || domainLower,
+          }
+        }
+      }
+    }
+  }
+
+  // 3b. APP match
+  for (const r of globalRules) {
+    const pat = (r.pattern || '').toLowerCase().trim()
+    if (!pat) continue
+    if (r.match_type === 'APP' || !pat.includes('.')) {
+      if (appLower === pat || appLower.includes(pat) || pat.includes(appLower)) {
+        return {
+          type: r.classification,
+          segAppName: appName || r.pattern,
+          segWindowTitle: windowTitle || 'Application Window',
+        }
+      }
+    }
+  }
+
+  // 4. Fallback to stored classification on the event
+  if (storedClassification === 'PRODUCTIVE') {
+    return {
+      type: 'PRODUCTIVE',
+      segAppName: appName || 'Active Application',
+      segWindowTitle: windowTitle || 'Application Window',
+    }
+  }
+  if (storedClassification === 'UNPRODUCTIVE') {
+    return {
+      type: 'UNPRODUCTIVE',
+      segAppName: appName || 'Active Application',
+      segWindowTitle: windowTitle || 'Application Window',
+    }
+  }
+
+  return {
+    type: 'NEUTRAL',
+    segAppName: appName || 'Active Application',
+    segWindowTitle: windowTitle || 'Application Window',
+  }
+}
+
 function formatClockTime(date: Date, timeZone: string = 'Asia/Dhaka'): string {
   try {
     return date.toLocaleTimeString('en-US', {
@@ -199,107 +353,67 @@ export async function GET(req: Request) {
       })
     }
 
-    // Auth metadata for teams (Cached for 60 seconds)
-    if (!cachedAuthMap || nowMs - cachedAuthTime > 60000) {
-      try {
-        const { data: authData } = await supabase.auth.admin.listUsers()
-        cachedAuthMap = new Map((authData?.users || []).map((u) => [u.id, u.user_metadata || {}]))
-        cachedAuthTime = nowMs
-      } catch {
-        // Fallback to empty map if auth admin fails
-        if (!cachedAuthMap) cachedAuthMap = new Map()
-      }
-    }
-    const authMap = cachedAuthMap
-
     // Exact 24-hour boundary for targetDate in organization timezone (plus 2 hour buffer for edge overlap)
     const targetDayStartMs = getTargetTimeMs(targetDate, 0, orgTimezone) - 2 * 3600 * 1000
     const targetDayEndMs = getTargetTimeMs(targetDate, 1440, orgTimezone) + 2 * 3600 * 1000
     const targetDayStartIso = new Date(targetDayStartMs).toISOString()
     const targetDayEndIso = new Date(targetDayEndMs).toISOString()
 
-    // 2. Fetch real activity events per user in parallel with range pagination to bypass PostgREST max-rows cap
-    const userEventsMap = new Map<string, any[]>()
-
-    await Promise.all(
-      userIds.map(async (uid) => {
-        try {
-          const allUserEvents: any[] = []
-          const pageSize = 1000
-          let from = 0
-          const maxRowsPerUser = 20000 // allows up to 28+ hours of continuous tracking
-
-          while (from < maxRowsPerUser) {
-            let q = supabase
-              .from('activity_events')
-              .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
-              .eq('user_id', uid)
-              .gte('started_at', targetDayStartIso)
-              .lte('started_at', targetDayEndIso)
-              .order('started_at', { ascending: true })
-              .range(from, from + pageSize - 1)
-
-            if (session.tenantId) {
-              q = q.eq('tenant_id', session.tenantId)
-            }
-
-            const { data, error } = await q
-            if (error) {
-              console.warn(`Activity events query error for user ${uid} (range ${from}):`, error.message)
-              break
-            }
-            if (!data || data.length === 0) break
-            allUserEvents.push(...data)
-            if (data.length < pageSize) break
-            from += pageSize
-          }
-
-          userEventsMap.set(uid, allUserEvents)
-        } catch (e: any) {
-          console.warn(`Activity events query exception for user ${uid}:`, e?.message)
-          userEventsMap.set(uid, [])
-        }
-      })
-    )
-
     const startOfTodayMs = getTargetTimeMs(todayStr, 0, orgTimezone)
     const startOfTodayIso = new Date(startOfTodayMs).toISOString()
 
-    // Run session healing updates at most once every 5 minutes to avoid slamming Postgres with UPDATE queries on every GET request
+    // Non-blocking background session healing (runs at most once every 5 minutes in background without delaying GET response)
     if (nowMs - lastHealTimestamp > 300000) {
       lastHealTimestamp = nowMs
+      void (async () => {
+        try {
+          await supabase
+            .from('attendance_sessions')
+            .update({
+              status: 'CLOSED',
+              clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+            })
+            .eq('status', 'OPEN')
+            .lt('clocked_in_at', startOfTodayIso)
 
-      // Auto-close any stale OPEN sessions from previous dates so they don't leak into today
-      await supabase
-        .from('attendance_sessions')
-        .update({
-          status: 'CLOSED',
-          clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
-        })
-        .eq('status', 'OPEN')
-        .lt('clocked_in_at', startOfTodayIso)
+          await supabase
+            .from('attendance_sessions')
+            .update({
+              status: 'CLOSED',
+              clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
+            })
+            .lt('clocked_in_at', startOfTodayIso)
+            .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
 
-      // Heal any sessions that started before today but leaked clocked_out_at past yesterday's midnight
-      await supabase
-        .from('attendance_sessions')
-        .update({
-          status: 'CLOSED',
-          clocked_out_at: new Date(startOfTodayMs - 1000).toISOString(),
-        })
-        .lt('clocked_in_at', startOfTodayIso)
-        .gt('clocked_out_at', new Date(startOfTodayMs - 1000).toISOString())
-
-      // Clamp any future clocked_out_at timestamps on Today to now
-      await supabase
-        .from('attendance_sessions')
-        .update({
-          clocked_out_at: new Date(nowMs).toISOString(),
-        })
-        .gt('clocked_out_at', new Date(nowMs).toISOString())
-        .gte('clocked_in_at', startOfTodayIso)
+          await supabase
+            .from('attendance_sessions')
+            .update({
+              clocked_out_at: new Date().toISOString(),
+            })
+            .gt('clocked_out_at', new Date().toISOString())
+            .gte('clocked_in_at', startOfTodayIso)
+        } catch (healErr) {
+          console.warn('Background session healing exception:', healErr)
+        }
+      })()
     }
 
-    // 3. Fetch attendance sessions strictly for those userIds with Tenant Isolation
+    // Prepare all queries to execute in a SINGLE parallel round-trip via Promise.all:
+    // 1. Activity events (batch indexed query for all userIds in single request)
+    let activityQuery = supabase
+      .from('activity_events')
+      .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
+      .in('user_id', userIds)
+      .gte('started_at', targetDayStartIso)
+      .lte('started_at', targetDayEndIso)
+      .order('started_at', { ascending: true })
+      .limit(35000)
+
+    if (session.tenantId) {
+      activityQuery = activityQuery.eq('tenant_id', session.tenantId)
+    }
+
+    // 2. Attendance sessions
     let sessionsQuery = supabase
       .from('attendance_sessions')
       .select('*')
@@ -313,9 +427,7 @@ export async function GET(req: Request) {
       sessionsQuery = sessionsQuery.eq('tenant_id', session.tenantId)
     }
 
-    const { data: sessions } = await sessionsQuery
-
-    // 4. Fetch screenshots strictly for those userIds with Tenant Isolation
+    // 3. Screenshots
     let screenshotsQuery = supabase
       .from('screenshots')
       .select('id, user_id, taken_at')
@@ -329,7 +441,70 @@ export async function GET(req: Request) {
       screenshotsQuery = screenshotsQuery.eq('tenant_id', session.tenantId)
     }
 
-    const { data: screenshots } = await screenshotsQuery
+    // 4. Productivity rules (for dynamic classification)
+    let rulesQuery = supabase
+      .from('productivity_rules')
+      .select('pattern, classification, match_type')
+
+    if (!session.isSuperAdmin && session.tenantId) {
+      rulesQuery = rulesQuery.eq('tenant_id', session.tenantId)
+    }
+
+    // 5. Employee-specific productivity overrides
+    const userProductivityKey = session.tenantId ? `user_productivity_${session.tenantId}` : null
+    const userProductivityQuery = userProductivityKey
+      ? supabase.from('platform_settings').select('value').eq('key', userProductivityKey).maybeSingle()
+      : Promise.resolve({ data: null } as any)
+
+    // 6. Auth metadata (cached for 5 minutes)
+    const needAuthFetch = !cachedAuthMap || nowMs - cachedAuthTime > 300000
+    const authPromise = needAuthFetch
+      ? supabase.auth.admin.listUsers()
+      : Promise.resolve(null as any)
+
+    // Execute ALL database and auth requests concurrently
+    const [
+      { data: activityEvents, error: actError },
+      { data: sessions },
+      { data: screenshots },
+      { data: globalRulesData },
+      { data: userProductivityData },
+      authRes,
+    ] = await Promise.all([
+      activityQuery,
+      sessionsQuery,
+      screenshotsQuery,
+      rulesQuery,
+      userProductivityQuery,
+      authPromise,
+    ])
+
+    if (actError) {
+      console.warn('Activity events query error:', actError.message)
+    }
+
+    if (needAuthFetch && authRes?.data?.users) {
+      cachedAuthMap = new Map(authRes.data.users.map((u: any) => [u.id, u.user_metadata || {}]))
+      cachedAuthTime = nowMs
+    }
+    const authMap = cachedAuthMap || new Map()
+
+    // Parse Productivity Rules and Employee Overrides
+    const globalRules: ProductivityRuleEntry[] = (globalRulesData || []).map((r: any) => ({
+      pattern: r.pattern,
+      classification: r.classification as ActivityType,
+      match_type: r.match_type,
+    }))
+
+    const allUserOverrides = (userProductivityData?.value as Record<string, Record<string, string>>) || {}
+
+    // Group activity events by user_id in-memory (O(N) instantaneous grouping)
+    const userEventsMap = new Map<string, any[]>()
+    userIds.forEach((uid) => userEventsMap.set(uid, []))
+    ;(activityEvents || []).forEach((ev: any) => {
+      const list = userEventsMap.get(ev.user_id)
+      if (list) list.push(ev)
+    })
 
     // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {
@@ -407,6 +582,8 @@ export async function GET(req: Request) {
           })
         }
 
+        const userOverrides = allUserOverrides[user.id] || {}
+
         userEvents.forEach((ev, idx) => {
           const startMs = new Date(ev.started_at).getTime()
           let endMs = new Date(ev.ended_at).getTime()
@@ -417,44 +594,14 @@ export async function GET(req: Request) {
             if (endMs > nowMs) endMs = nowMs
           }
 
-          let type: ActivityType = 'NEUTRAL'
-          const appLower = (ev.app_name || '').toLowerCase()
-          const winLower = (ev.window_title || '').toLowerCase()
-
-          const isLockScreen =
-            appLower.includes('lockapp') ||
-            appLower.includes('logonui') ||
-            appLower.includes('screensaver') ||
-            winLower.includes('lock screen') ||
-            winLower.includes('screen lock') ||
-            winLower.includes('locked')
-
-          const isLockOrIdle =
-            isLockScreen ||
-            appLower.includes('idle') ||
-            winLower.includes('idle')
-
-          if (isLockOrIdle) {
-            type = 'IDLE'
-          } else if (ev.classification === 'PRODUCTIVE') {
-            type = 'PRODUCTIVE'
-          } else if (ev.classification === 'UNPRODUCTIVE') {
-            type = 'UNPRODUCTIVE'
-          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
-            type = 'UNTRACKED'
-          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
-            type = 'NOT_IN_WORK'
-          }
-
-          const segAppName = isLockScreen
-            ? 'Lock Screen (Idle)'
-            : isLockOrIdle
-            ? 'Idle Time'
-            : ev.app_name || 'Active Application'
-
-          const segWindowTitle = isLockScreen
-            ? 'Screen Locked / Away'
-            : ev.window_title || 'Application Window'
+          const { type, segAppName, segWindowTitle } = resolveClassification({
+            appName: ev.app_name,
+            windowTitle: ev.window_title,
+            domain: ev.domain,
+            storedClassification: ev.classification,
+            userOverrides,
+            globalRules,
+          })
 
           // Merge consecutive events if same app, same classification, and gap <= 60 seconds
           if (
@@ -543,18 +690,29 @@ export async function GET(req: Request) {
       }
 
       const name = user.full_name || user.email.split('@')[0]
+      const userOverrides = allUserOverrides[user.id] || {}
 
       const fallbackRawEvents =
         userEvents.length > 0
-          ? userEvents.map((ev) => ({
-              id: ev.id,
-              appName: ev.app_name || 'Active Application',
-              windowTitle: ev.window_title || 'Application Window',
-              startedAt: ev.started_at,
-              endedAt: ev.ended_at,
-              classification: ev.classification || 'NEUTRAL',
-              domain: ev.domain || null,
-            }))
+          ? userEvents.map((ev) => {
+              const res = resolveClassification({
+                appName: ev.app_name,
+                windowTitle: ev.window_title,
+                domain: ev.domain,
+                storedClassification: ev.classification,
+                userOverrides,
+                globalRules,
+              })
+              return {
+                id: ev.id,
+                appName: res.segAppName,
+                windowTitle: res.segWindowTitle,
+                startedAt: ev.started_at,
+                endedAt: ev.ended_at,
+                classification: res.type,
+                domain: ev.domain || null,
+              }
+            })
           : userSessions.length > 0
           ? userSessions.map((sess) => ({
               id: sess.id,

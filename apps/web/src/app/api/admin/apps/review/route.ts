@@ -175,6 +175,8 @@ export async function GET(req: Request) {
     let eventsQuery = supabase
       .from('activity_events')
       .select('user_id, app_name, domain, started_at, ended_at, classification')
+      .order('started_at', { ascending: false })
+      .limit(25000)
 
     if (!session.isSuperAdmin) {
       eventsQuery = eventsQuery.eq('tenant_id', tenantId)
@@ -184,8 +186,6 @@ export async function GET(req: Request) {
       eventsQuery = eventsQuery.eq('user_id', userId)
     }
 
-    const { data: events } = await eventsQuery
-
     // Fetch tenant employees for user lookup and attribution
     let usersQuery = supabase
       .from('users')
@@ -193,7 +193,11 @@ export async function GET(req: Request) {
     if (!session.isSuperAdmin) {
       usersQuery = usersQuery.eq('tenant_id', tenantId)
     }
-    const { data: tenantUsers } = await usersQuery
+
+    const [{ data: events }, { data: tenantUsers }] = await Promise.all([
+      eventsQuery,
+      usersQuery,
+    ])
     const userMap = new Map((tenantUsers || []).map((u) => [u.id, u.full_name || u.email?.split('@')[0] || 'Employee']))
 
     // Aggregate app usage counts and total duration in seconds
@@ -456,17 +460,25 @@ export async function POST(req: Request) {
       })
 
       // 2. Retroactively update activity_events for this specific employee
-      let updateQuery = supabase
+      const trimmedPattern = pattern.trim()
+      let updateAppQ = supabase
         .from('activity_events')
         .update({ classification })
         .eq('user_id', targetUserId)
-        .or(`app_name.ilike.${pattern},domain.ilike.${pattern}`)
+        .ilike('app_name', `%${trimmedPattern}%`)
+
+      let updateDomainQ = supabase
+        .from('activity_events')
+        .update({ classification })
+        .eq('user_id', targetUserId)
+        .ilike('domain', `%${trimmedPattern}%`)
 
       if (!session.isSuperAdmin) {
-        updateQuery = updateQuery.eq('tenant_id', tenantId)
+        updateAppQ = updateAppQ.eq('tenant_id', tenantId)
+        updateDomainQ = updateDomainQ.eq('tenant_id', tenantId)
       }
 
-      await updateQuery
+      await Promise.allSettled([updateAppQ, updateDomainQ])
 
       return NextResponse.json({
         success: true,
@@ -520,16 +532,23 @@ export async function POST(req: Request) {
       }
 
       // Retroactively update activity_events for all employees in this tenant
-      let updateEventsQuery = supabase
+      const trimmedPattern = pattern.trim()
+      let updateAppQ = supabase
         .from('activity_events')
         .update({ classification })
-        .or(`app_name.ilike.${pattern},domain.ilike.${pattern}`)
+        .ilike('app_name', `%${trimmedPattern}%`)
+
+      let updateDomainQ = supabase
+        .from('activity_events')
+        .update({ classification })
+        .ilike('domain', `%${trimmedPattern}%`)
 
       if (!session.isSuperAdmin) {
-        updateEventsQuery = updateEventsQuery.eq('tenant_id', tenantId)
+        updateAppQ = updateAppQ.eq('tenant_id', tenantId)
+        updateDomainQ = updateDomainQ.eq('tenant_id', tenantId)
       }
 
-      await updateEventsQuery
+      await Promise.allSettled([updateAppQ, updateDomainQ])
 
       return NextResponse.json({
         success: true,
