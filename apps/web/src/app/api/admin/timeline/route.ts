@@ -63,8 +63,10 @@ function resolveClassification({
 
   const isLockOrIdle =
     isLockScreen ||
-    appLower.includes('idle') ||
-    winLower.includes('idle')
+    appLower === 'idle time' ||
+    appLower.startsWith('idle') ||
+    winLower.startsWith('idle / inactive') ||
+    winLower.startsWith('idle time')
 
   if (isLockScreen) {
     return {
@@ -158,7 +160,48 @@ function resolveClassification({
     }
   }
 
-  // 4. Fallback to stored classification on the event
+  // 4. Default Work Browsers (Google Chrome, Microsoft Edge, Brave, Firefox, Safari)
+  const isWorkBrowser =
+    appLower.includes('chrome') ||
+    appLower.includes('edge') ||
+    appLower.includes('brave') ||
+    appLower.includes('firefox') ||
+    appLower.includes('safari')
+
+  if (isWorkBrowser) {
+    return {
+      type: 'PRODUCTIVE',
+      segAppName: domain ? `${domain} (${appName || 'Browser'})` : (appName || 'Browser'),
+      segWindowTitle: windowTitle || 'Web Browsing',
+    }
+  }
+
+  // 5. Default Work & Dev Tools (VS Code, Cursor, Teams, Slack, Figma, Terminal, Office)
+  const isWorkTool =
+    appLower.includes('code') ||
+    appLower.includes('cursor') ||
+    appLower.includes('visual studio') ||
+    appLower.includes('terminal') ||
+    appLower.includes('iterm') ||
+    appLower.includes('powershell') ||
+    appLower.includes('slack') ||
+    appLower.includes('teams') ||
+    appLower.includes('zoom') ||
+    appLower.includes('figma') ||
+    appLower.includes('postman') ||
+    appLower.includes('word') ||
+    appLower.includes('excel') ||
+    appLower.includes('notion')
+
+  if (isWorkTool) {
+    return {
+      type: 'PRODUCTIVE',
+      segAppName: appName || 'Work Tool',
+      segWindowTitle: windowTitle || 'Application Window',
+    }
+  }
+
+  // 6. Fallback to stored classification on the event
   if (storedClassification === 'PRODUCTIVE') {
     return {
       type: 'PRODUCTIVE',
@@ -398,20 +441,48 @@ export async function GET(req: Request) {
       })()
     }
 
-    // Prepare all queries to execute in a SINGLE parallel round-trip via Promise.all:
-    // 1. Activity events (batch indexed query for all userIds in single request)
-    let activityQuery = supabase
-      .from('activity_events')
-      .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
-      .in('user_id', userIds)
-      .gte('started_at', targetDayStartIso)
-      .lte('started_at', targetDayEndIso)
-      .order('started_at', { ascending: true })
-      .limit(35000)
+    // 1. Activity events: fetch per user in parallel with range pagination to completely bypass PostgREST 1,000-row cap
+    const userEventsMap = new Map<string, any[]>()
+    userIds.forEach((uid) => userEventsMap.set(uid, []))
 
-    if (session.tenantId) {
-      activityQuery = activityQuery.eq('tenant_id', session.tenantId)
-    }
+    const activityPromise = Promise.all(
+      userIds.map(async (uid) => {
+        try {
+          const allUserEvents: any[] = []
+          const pageSize = 1000
+          let from = 0
+
+          while (from < 10000) {
+            let q = supabase
+              .from('activity_events')
+              .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
+              .eq('user_id', uid)
+              .gte('started_at', targetDayStartIso)
+              .lte('started_at', targetDayEndIso)
+              .order('started_at', { ascending: true })
+              .range(from, from + pageSize - 1)
+
+            if (session.tenantId) {
+              q = q.eq('tenant_id', session.tenantId)
+            }
+
+            const { data, error } = await q
+            if (error) {
+              console.warn(`Activity events query error for user ${uid} (range ${from}):`, error.message)
+              break
+            }
+            if (!data || data.length === 0) break
+            allUserEvents.push(...data)
+            if (data.length < pageSize) break
+            from += pageSize
+          }
+
+          userEventsMap.set(uid, allUserEvents)
+        } catch (e: any) {
+          console.warn(`Activity events fetch exception for user ${uid}:`, e?.message)
+        }
+      })
+    )
 
     // 2. Attendance sessions
     let sessionsQuery = supabase
@@ -464,24 +535,20 @@ export async function GET(req: Request) {
 
     // Execute ALL database and auth requests concurrently
     const [
-      { data: activityEvents, error: actError },
+      _actRes,
       { data: sessions },
       { data: screenshots },
       { data: globalRulesData },
       { data: userProductivityData },
       authRes,
     ] = await Promise.all([
-      activityQuery,
+      activityPromise,
       sessionsQuery,
       screenshotsQuery,
       rulesQuery,
       userProductivityQuery,
       authPromise,
     ])
-
-    if (actError) {
-      console.warn('Activity events query error:', actError.message)
-    }
 
     if (needAuthFetch && authRes?.data?.users) {
       cachedAuthMap = new Map(authRes.data.users.map((u: any) => [u.id, u.user_metadata || {}]))
@@ -497,14 +564,6 @@ export async function GET(req: Request) {
     }))
 
     const allUserOverrides = (userProductivityData?.value as Record<string, Record<string, string>>) || {}
-
-    // Group activity events by user_id in-memory (O(N) instantaneous grouping)
-    const userEventsMap = new Map<string, any[]>()
-    userIds.forEach((uid) => userEventsMap.set(uid, []))
-    ;(activityEvents || []).forEach((ev: any) => {
-      const list = userEventsMap.get(ev.user_id)
-      if (list) list.push(ev)
-    })
 
     // Build timeline rows
     const timelineRows = (dbUsers || []).map((user) => {
@@ -641,13 +700,26 @@ export async function GET(req: Request) {
           if (isTargetToday) {
             if (startD.getTime() >= nowMs) return
             if (endD.getTime() > nowMs) endD = new Date(nowMs)
+          } else {
+            // On a past date, clamp endD to at most the targetDate end of day
+            const maxPastEndMs = getTargetTimeMs(targetDate, 1440, orgTimezone)
+            if (endD.getTime() > maxPastEndMs) {
+              endD = new Date(maxPastEndMs)
+            }
           }
 
           const startMin = getTimezoneMinutes(startD, orgTimezone)
+          let diffSec = Math.max(60, Math.round((endD.getTime() - startD.getTime()) / 1000))
 
-          const diffSec = Math.max(60, Math.round((endD.getTime() - startD.getTime()) / 1000))
+          // If session was closed at midnight with 0 activity events and 0 screenshots,
+          // it was an unclosed/abandoned session; cap it to reasonable length (e.g. 30 mins)
+          // so it does not draw a 13-hour monster bar across the timeline
+          if (diffSec > 3600 && userScreenshots.length === 0) {
+            diffSec = 1800 // 30 mins
+            endD = new Date(startD.getTime() + diffSec * 1000)
+          }
+
           const durationMin = Math.max(1, Math.round(diffSec / 60))
-
           const isOngoing = !sess.clocked_out_at || sess.status === 'OPEN' || (isTargetToday && new Date(sess.clocked_out_at).getTime() >= nowMs)
 
           segments.push({

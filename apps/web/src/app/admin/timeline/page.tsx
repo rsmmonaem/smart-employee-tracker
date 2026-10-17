@@ -231,8 +231,10 @@ export default function TimelinePage() {
 
           const isLockOrIdle =
             isLockScreen ||
-            appLower.includes('idle') ||
-            winLower.includes('idle')
+            appLower === 'idle time' ||
+            appLower.startsWith('idle') ||
+            winLower.startsWith('idle / inactive') ||
+            winLower.startsWith('idle time')
 
           if (isLockOrIdle) {
             type = 'IDLE'
@@ -244,6 +246,22 @@ export default function TimelinePage() {
             type = 'UNTRACKED'
           } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
             type = 'NOT_IN_WORK'
+          } else if (
+            appLower.includes('chrome') ||
+            appLower.includes('edge') ||
+            appLower.includes('brave') ||
+            appLower.includes('firefox') ||
+            appLower.includes('safari') ||
+            appLower.includes('code') ||
+            appLower.includes('cursor') ||
+            appLower.includes('visual studio') ||
+            appLower.includes('terminal') ||
+            appLower.includes('slack') ||
+            appLower.includes('teams') ||
+            appLower.includes('figma') ||
+            appLower.includes('postman')
+          ) {
+            type = 'PRODUCTIVE'
           }
 
           const segAppName = isLockScreen
@@ -315,12 +333,25 @@ export default function TimelinePage() {
             if (isTargetToday) {
               if (clockInDate.getTime() >= nowMs) return
               if (clockOutDate.getTime() > nowMs) clockOutDate = localNow
+            } else {
+              // On a past date, clamp clockOutDate to end of that day
+              const [y, m, d] = targetDateStr.split('-').map(Number)
+              const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999)
+              if (clockOutDate.getTime() > endOfDay.getTime()) {
+                clockOutDate = endOfDay
+              }
             }
 
             const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
-            const totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
-            const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+            let totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
 
+            // Cap abandoned sessions with zero activity events to at most 30 mins
+            if (totalDiffSec > 3600 && (!emp.rawEvents || emp.rawEvents.length === 0)) {
+              totalDiffSec = 1800
+              clockOutDate = new Date(clockInDate.getTime() + totalDiffSec * 1000)
+            }
+
+            const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
             const isOngoing = !sess.clocked_out_at || sess.status === 'OPEN' || (isTargetToday && new Date(sess.clocked_out_at).getTime() >= nowMs)
 
             clientSegments.push({
