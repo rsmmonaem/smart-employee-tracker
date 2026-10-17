@@ -346,7 +346,7 @@ export default function TimelinePage() {
             let totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
 
             // Cap abandoned sessions with zero activity events to at most 30 mins
-            if (totalDiffSec > 3600 && (!emp.rawEvents || emp.rawEvents.length === 0)) {
+            if (totalDiffSec > 3600 && !emp.hasEvents) {
               totalDiffSec = 1800
               clockOutDate = new Date(clockInDate.getTime() + totalDiffSec * 1000)
             }

@@ -331,10 +331,14 @@ export async function GET(req: Request) {
     const cacheKey = `${session.tenantId || 'global'}_${targetDateParam || 'today'}_${session.userId || 'all'}`
     const nowMs = Date.now()
 
-    // 1. Fast cache check (5 second window)
+    // 1. Fast cache check (past dates cached for 2 mins; today for 8s)
     const cachedEntry = timelineCache.get(cacheKey)
-    if (cachedEntry && nowMs - cachedEntry.timestamp < 5000) {
-      return NextResponse.json(cachedEntry.payload)
+    if (cachedEntry) {
+      const isPast = targetDateParam && targetDateParam.length === 10
+      const ttl = isPast ? 120000 : 8000
+      if (nowMs - cachedEntry.timestamp < ttl) {
+        return NextResponse.json(cachedEntry.payload)
+      }
     }
 
     const supabase = createAdminClient()
@@ -452,10 +456,10 @@ export async function GET(req: Request) {
           const pageSize = 1000
           let from = 0
 
-          while (from < 10000) {
+          while (from < 6000) {
             let q = supabase
               .from('activity_events')
-              .select('id, user_id, app_name, window_title, started_at, ended_at, classification, domain')
+              .select('app_name, window_title, started_at, ended_at, classification, domain')
               .eq('user_id', uid)
               .gte('started_at', targetDayStartIso)
               .lte('started_at', targetDayEndIso)
@@ -762,52 +766,6 @@ export async function GET(req: Request) {
       }
 
       const name = user.full_name || user.email.split('@')[0]
-      const userOverrides = allUserOverrides[user.id] || {}
-
-      const fallbackRawEvents =
-        userEvents.length > 0
-          ? userEvents.map((ev) => {
-              const res = resolveClassification({
-                appName: ev.app_name,
-                windowTitle: ev.window_title,
-                domain: ev.domain,
-                storedClassification: ev.classification,
-                userOverrides,
-                globalRules,
-              })
-              return {
-                id: ev.id,
-                appName: res.segAppName,
-                windowTitle: res.segWindowTitle,
-                startedAt: ev.started_at,
-                endedAt: ev.ended_at,
-                classification: res.type,
-                domain: ev.domain || null,
-              }
-            })
-          : userSessions.length > 0
-          ? userSessions.map((sess) => ({
-              id: sess.id,
-              appName: 'Idle Time',
-              windowTitle: 'Active Tracker Session (No active work recorded)',
-              startedAt: sess.clocked_in_at,
-              endedAt: sess.clocked_out_at || new Date(nowMs).toISOString(),
-              classification: 'IDLE',
-              domain: null,
-            }))
-          : userScreenshots.length > 0
-          ? [
-              {
-                id: `shot-${user.id}`,
-                appName: 'Idle Time',
-                windowTitle: `${userScreenshots.length} screenshots recorded (No active work)`,
-                startedAt: userScreenshots[0].taken_at,
-                endedAt: userScreenshots[userScreenshots.length - 1].taken_at,
-                classification: 'IDLE',
-                domain: null,
-              },
-            ]
-          : []
 
       return {
         id: user.id,
@@ -823,7 +781,6 @@ export async function GET(req: Request) {
           : userSessions[userSessions.length - 1]?.clocked_out_at || null,
         attendanceSessions: userSessions,
         hasEvents: userEvents.length > 0 || userSessions.length > 0 || userScreenshots.length > 0,
-        rawEvents: fallbackRawEvents,
         segments,
       }
     })
