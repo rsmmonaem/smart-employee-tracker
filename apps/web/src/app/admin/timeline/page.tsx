@@ -379,20 +379,44 @@ export default function TimelinePage() {
     []
   )
 
+  // In-memory client cache to make date switching instant (0ms)
+  const clientCacheRef = useRef<Map<string, EmployeeTimelineRow[]>>(new Map())
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   // Fetch real timeline data from API
-  const fetchTimelineData = useCallback(async (date: string) => {
+  const fetchTimelineData = useCallback(async (date: string, forceRefresh = false) => {
+    // 1. Instant client-side cache response
+    const cached = clientCacheRef.current.get(date)
+    if (cached && !forceRefresh) {
+      setTimelines(cached)
+      setLoading(false)
+      return
+    }
+
+    // 2. Abort any previous pending request to avoid request stacking in browser
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
       setLoading(true)
-      const res = await fetch(`/api/admin/timeline?date=${date}`, { cache: 'no-store' })
+      const res = await fetch(`/api/admin/timeline?date=${date}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
       const json = await res.json()
       if (json.success && json.timelines) {
         const computed = json.timelines.map((emp: EmployeeTimelineRow) => ({
           ...emp,
           segments: processEmployeeSegments(emp, date),
         }))
+        clientCacheRef.current.set(date, computed)
         setTimelines(computed)
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return
       console.error('Failed to fetch timeline data:', err)
     } finally {
       setLoading(false)
@@ -400,33 +424,40 @@ export default function TimelinePage() {
   }, [processEmployeeSegments])
 
   useEffect(() => {
-    fetchTimelineData(selectedDate)
-  }, [selectedDate, fetchTimelineData, refreshTrigger])
+    fetchTimelineData(selectedDate, refreshTrigger > 0)
+  }, [selectedDate, refreshTrigger, fetchTimelineData])
 
-  // Realtime Supabase Subscription with 15s trailing debounce to avoid slamming server
+  // Realtime Supabase Subscription: ONLY ACTIVE FOR TODAY!
+  // Past dates (e.g. Oct 15) are static historical data and MUST NOT be slammed by live activity events.
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastFetchTimeRef = useRef<number>(0)
 
   useEffect(() => {
+    const todayActual = getLocalTodayString()
+    if (selectedDate !== todayActual) {
+      // Past historical date: do not subscribe to realtime updates
+      return
+    }
+
     const supabase = createClient()
 
     const triggerDebouncedFetch = () => {
       const now = Date.now()
       if (now - lastFetchTimeRef.current > 15000) {
         lastFetchTimeRef.current = now
-        fetchTimelineData(selectedDate)
+        fetchTimelineData(selectedDate, true)
         return
       }
       if (debounceTimerRef.current) return
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null
         lastFetchTimeRef.current = Date.now()
-        fetchTimelineData(selectedDate)
+        fetchTimelineData(selectedDate, true)
       }, 15000)
     }
 
     const channel = supabase
-      .channel('timeline_realtime_sync')
+      .channel(`timeline_today_${todayActual}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'activity_events' },

@@ -779,7 +779,12 @@ export async function GET(req: Request) {
         clockedOutAt: userSessions.some((s) => !s.clocked_out_at || s.status === 'OPEN')
           ? null
           : userSessions[userSessions.length - 1]?.clocked_out_at || null,
-        attendanceSessions: userSessions,
+        attendanceSessions: userSessions.map((s) => ({
+          id: s.id,
+          clocked_in_at: s.clocked_in_at,
+          clocked_out_at: s.clocked_out_at,
+          status: s.status,
+        })),
         hasEvents: userEvents.length > 0 || userSessions.length > 0 || userScreenshots.length > 0,
         segments,
       }
