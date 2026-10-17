@@ -126,6 +126,9 @@ interface TrackSettings {
   restrictNewTasksWhenPending?: boolean
   projectCurrency?: string
   enableLeaveManagement?: boolean
+  casualLeaveQuota?: number
+  sickLeaveQuota?: number
+  earnedLeaveQuota?: number
   enableManualTimeToEveryone?: boolean
   untrackedHoursBehavior?: string
   enablePayrollCalculator?: boolean
@@ -719,13 +722,13 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
         )}
       </section>
 
-      {/* 4. Leave Management */}
-      <section className="rounded-xl border border-gray-200/80 bg-white p-5 shadow-xs dark:border-gray-800 dark:bg-gray-900">
+      {/* 4. Leave Management & Policy Quotas */}
+      <section className="rounded-xl border border-gray-200/80 bg-white p-5 shadow-xs dark:border-gray-800 dark:bg-gray-900 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-[15px] font-semibold text-gray-900 dark:text-white">Leave Management</h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Enable leave management and automated balance calculations.
+              Enable leave management and configure automated leave quota allowances.
             </p>
           </div>
           <Toggle
@@ -733,6 +736,84 @@ export default function TrackSettingsForm({ initialSettings, initialMembers = []
             onChange={() => handleToggle('enableLeaveManagement')}
           />
         </div>
+
+        {settings.enableLeaveManagement && (
+          <div className="pt-3 border-t border-gray-100 dark:border-gray-800 space-y-3">
+            <div className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+              Annual Leave Allowances (Used / Left Quotas)
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3 bg-gray-50/70 dark:bg-gray-800/50 rounded-lg border border-gray-200/60 dark:border-gray-700">
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                  Casual Leave (CL)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={settings.casualLeaveQuota ?? 12}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        casualLeaveQuota: Math.max(0, parseInt(e.target.value, 10) || 0),
+                      }))
+                    }
+                    className="w-20 px-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Days / Yr</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50/70 dark:bg-gray-800/50 rounded-lg border border-gray-200/60 dark:border-gray-700">
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                  Sick Leave (SL)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={settings.sickLeaveQuota ?? 10}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        sickLeaveQuota: Math.max(0, parseInt(e.target.value, 10) || 0),
+                      }))
+                    }
+                    className="w-20 px-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Days / Yr</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50/70 dark:bg-gray-800/50 rounded-lg border border-gray-200/60 dark:border-gray-700">
+                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 mb-1 uppercase tracking-wider">
+                  Earned Leave (EL)
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={settings.earnedLeaveQuota ?? 15}
+                    onChange={(e) =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        earnedLeaveQuota: Math.max(0, parseInt(e.target.value, 10) || 0),
+                      }))
+                    }
+                    className="w-20 px-2.5 py-1.5 text-xs font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">Days / Yr</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Live balances shown in <strong>Leave Summary (Used / Left)</strong> are dynamically calculated based on these annual quotas.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* 5. Manual Time */}

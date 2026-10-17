@@ -38,6 +38,23 @@ export async function GET(req: Request) {
       requestsQuery = requestsQuery.eq('tenant_id', targetTenant)
     }
 
+    // 3. Fetch Organization Leave Quota Settings
+    const tenantKey = targetTenant ? `organization_track_settings_${targetTenant}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+
+    const { data: settingsRows } = await supabase
+      .from('platform_settings')
+      .select('key, value')
+      .in('key', keysToFetch)
+
+    const tenantRow = settingsRows?.find((r) => r.key === tenantKey)
+    const defaultRow = settingsRows?.find((r) => r.key === 'organization_track_settings')
+    const trackSettings = (tenantRow?.value || defaultRow?.value || {}) as Record<string, any>
+
+    const clQuota = Number(trackSettings.casualLeaveQuota) > 0 ? Number(trackSettings.casualLeaveQuota) : 12
+    const slQuota = Number(trackSettings.sickLeaveQuota) > 0 ? Number(trackSettings.sickLeaveQuota) : 10
+    const elQuota = Number(trackSettings.earnedLeaveQuota) > 0 ? Number(trackSettings.earnedLeaveQuota) : 15
+
     const { data: dbUsers } = await usersQuery
     const { data: leaveRequests } = await requestsQuery
 
@@ -70,16 +87,21 @@ export async function GET(req: Request) {
         email: u.email,
         role: u.role === 'TENANT_ADMIN' ? 'Tenant Admin' : 'Employee',
         clTaken,
-        clRemaining: Math.max(0, 12 - clTaken),
+        clRemaining: Math.max(0, clQuota - clTaken),
         slTaken,
-        slRemaining: Math.max(0, 10 - slTaken),
+        slRemaining: Math.max(0, slQuota - slTaken),
         elTaken,
-        elRemaining: Math.max(0, 15 - elTaken),
+        elRemaining: Math.max(0, elQuota - elTaken),
       }
     })
 
     return NextResponse.json({
       success: true,
+      quotas: {
+        casual: clQuota,
+        sick: slQuota,
+        earned: elQuota,
+      },
       summary,
       totalEmployees: users.length,
     })

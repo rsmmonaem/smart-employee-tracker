@@ -1079,3 +1079,196 @@ export function RebrandSettingsView() {
     </div>
   )
 }
+
+// ----------------------------------------------------
+// Leave Policy & Quota Settings View
+// ----------------------------------------------------
+export function LeavePolicySettingsView() {
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [casualQuota, setCasualQuota] = useState(12)
+  const [sickQuota, setSickQuota] = useState(10)
+  const [earnedQuota, setEarnedQuota] = useState(15)
+  const [enableLeave, setEnableLeave] = useState(true)
+  const [fullSettings, setFullSettings] = useState<Record<string, any>>({})
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.settings) {
+          setFullSettings(data.settings)
+          if (typeof data.settings.casualLeaveQuota === 'number') setCasualQuota(data.settings.casualLeaveQuota)
+          if (typeof data.settings.sickLeaveQuota === 'number') setSickQuota(data.settings.sickLeaveQuota)
+          if (typeof data.settings.earnedLeaveQuota === 'number') setEarnedQuota(data.settings.earnedLeaveQuota)
+          if (typeof data.settings.enableLeaveManagement === 'boolean') setEnableLeave(data.settings.enableLeaveManagement)
+        }
+      })
+      .catch((err) => console.error('Failed to load leave settings:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      setSaving(true)
+      const updatedPayload = {
+        ...fullSettings,
+        enableLeaveManagement: enableLeave,
+        casualLeaveQuota: Math.max(0, casualQuota),
+        sickLeaveQuota: Math.max(0, sickQuota),
+        earnedLeaveQuota: Math.max(0, earnedQuota),
+      }
+
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPayload),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setSaved(true)
+        setFullSettings(updatedPayload)
+        setTimeout(() => setSaved(false), 3000)
+      } else {
+        alert(data.error || 'Failed to save leave policy')
+      }
+    } catch (err) {
+      console.error('Error saving leave policy:', err)
+      alert('Error saving leave policy')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-gray-200/80 bg-white p-6 shadow-xs dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex items-center justify-between pb-5 border-b border-gray-150 dark:border-gray-800">
+          <div>
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">
+              Annual Leave Policy & Quota Settings
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Configure default annual quotas for Casual, Sick, and Earned Leave. These directly drive the live{' '}
+              <strong className="text-gray-700 dark:text-gray-200">(Used / Left)</strong> balances in Leave Summary.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Leave Module</span>
+            <Toggle checked={enableLeave} onChange={() => setEnableLeave(!enableLeave)} />
+          </div>
+        </div>
+
+        <form onSubmit={handleSave} className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* Casual Leave Quota */}
+            <div className="p-5 rounded-xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Casual Leave (CL)
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300">
+                  Annual Quota
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Standard paid leave for urgent personal matters, family events, or unforeseen circumstances.
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-200/60 dark:border-gray-800">
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={casualQuota}
+                  onChange={(e) => setCasualQuota(parseInt(e.target.value, 10) || 0)}
+                  className="w-24 px-3 py-2 text-sm font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                  required
+                />
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Days / Year</span>
+              </div>
+            </div>
+
+            {/* Sick Leave Quota */}
+            <div className="p-5 rounded-xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Sick Leave (SL)
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300">
+                  Medical Quota
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Designated allowance for illness, medical appointments, recovery, or healthcare emergencies.
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-200/60 dark:border-gray-800">
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={sickQuota}
+                  onChange={(e) => setSickQuota(parseInt(e.target.value, 10) || 0)}
+                  className="w-24 px-3 py-2 text-sm font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+                  required
+                />
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Days / Year</span>
+              </div>
+            </div>
+
+            {/* Earned Leave Quota */}
+            <div className="p-5 rounded-xl border border-gray-200/80 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-850/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
+                  Earned Leave (EL)
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300">
+                  Annual Leave
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Accumulated annual vacation / earned privilege leave accrued through continuous service.
+              </p>
+              <div className="flex items-center gap-2 pt-2 border-t border-gray-200/60 dark:border-gray-800">
+                <input
+                  type="number"
+                  min="0"
+                  max="120"
+                  value={earnedQuota}
+                  onChange={(e) => setEarnedQuota(parseInt(e.target.value, 10) || 0)}
+                  className="w-24 px-3 py-2 text-sm font-bold font-mono bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-2xs"
+                  required
+                />
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">Days / Year</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Dynamic Example Preview */}
+          <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 flex items-start gap-3">
+            <div className="p-1 rounded-md bg-blue-600 text-white mt-0.5">
+              <Check className="w-3.5 h-3.5" />
+            </div>
+            <div className="text-xs text-blue-900 dark:text-blue-200">
+              <span className="font-bold">Live Calculation Preview:</span> When an employee uses 2 Casual Leave days, the Leave Summary will display <code className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60 font-mono font-bold">2 / {Math.max(0, casualQuota - 2)} left</code>.
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-150 dark:border-gray-800">
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-all shadow-xs disabled:opacity-50"
+            >
+              {saved ? <Check className="h-4 w-4" /> : null}
+              <span>{saved ? 'Policy Saved Successfully!' : saving ? 'Saving Policy...' : 'Save Leave Policy'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+

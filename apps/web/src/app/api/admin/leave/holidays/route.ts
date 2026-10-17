@@ -99,6 +99,63 @@ export async function POST(req: Request) {
   }
 }
 
+// PUT: Edit existing organization holiday
+export async function PUT(req: Request) {
+  try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await req.json()
+    const supabase = createAdminClient()
+    let tenantId = body.tenantId || session.tenantId
+    if (!tenantId && session.isSuperAdmin) {
+      const { data: defaultTenant } = await supabase.from('tenants').select('id').order('created_at', { ascending: false }).limit(1).maybeSingle()
+      tenantId = defaultTenant?.id || null
+    }
+
+    const { id, name, date, type } = body
+
+    if (!id || !name || !date) {
+      return NextResponse.json({ success: false, error: 'Holiday ID, Name, and Date are required' }, { status: 400 })
+    }
+
+    const d = new Date(date)
+    const day = d.toLocaleDateString('en-US', { weekday: 'long' })
+
+    let updateQuery = supabase
+      .from('holidays')
+      .update({
+        name: name.trim(),
+        date,
+        day,
+        type: type || 'Public Holiday',
+      })
+      .eq('id', id)
+
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({ success: false, error: 'Unauthorized tenant' }, { status: 401 })
+      }
+      updateQuery = updateQuery.eq('tenant_id', session.tenantId)
+    } else if (tenantId) {
+      updateQuery = updateQuery.eq('tenant_id', tenantId)
+    }
+
+    const { data, error } = await updateQuery.select('*').single()
+
+    if (error) {
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, holiday: data })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+}
+
 // DELETE: Remove organization holiday
 export async function DELETE(req: Request) {
   try {

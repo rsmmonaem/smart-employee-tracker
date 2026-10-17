@@ -27,6 +27,9 @@ const DEFAULT_TRACK_SETTINGS = {
 
   // 4. Leave Management
   enableLeaveManagement: true,
+  casualLeaveQuota: 12,
+  sickLeaveQuota: 10,
+  earnedLeaveQuota: 15,
 
   // 5. Manual Time
   enableManualTimeToEveryone: false,

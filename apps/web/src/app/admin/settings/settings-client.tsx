@@ -14,11 +14,13 @@ import {
   Terminal,
   AlertTriangle,
   ShieldAlert,
+  CalendarDays,
 } from 'lucide-react'
 import TrackSettingsForm from './track-settings-form'
 import {
   ManageTeamsView,
   ManageEmployeesView,
+  LeavePolicySettingsView,
   RiskUserSettingsView,
   EmailReportsView,
   RebrandSettingsView,
@@ -29,6 +31,7 @@ type TabKey =
   | 'manage-teams'
   | 'manage-employees'
   | 'track-settings'
+  | 'leave-policy'
   | 'risk-user'
   | 'email-reports'
   | 'rebrand'
@@ -44,6 +47,7 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { key: 'manage-teams', label: 'Manage Teams', icon: Users },
   { key: 'manage-employees', label: 'Manage Employees', icon: UserPlus },
   { key: 'track-settings', label: 'Track Settings', icon: Sliders },
+  { key: 'leave-policy', label: 'Leave Policy Settings', icon: CalendarDays },
   { key: 'risk-user', label: 'Risk User Settings', icon: Bell },
   { key: 'email-reports', label: 'Email Reports', icon: Mail },
   { key: 'rebrand', label: 'Rebrand Settings', icon: Zap },
@@ -181,6 +185,7 @@ export default function SettingsClient({ isEmployee, userRole }: SettingsClientP
         {activeTab === 'track-settings' && <TrackSettingsForm />}
         {activeTab === 'manage-teams' && <ManageTeamsView />}
         {activeTab === 'manage-employees' && <ManageEmployeesView members={members} />}
+        {activeTab === 'leave-policy' && <LeavePolicySettingsView />}
         {activeTab === 'risk-user' && <RiskUserSettingsView />}
         {activeTab === 'email-reports' && <EmailReportsView />}
         {activeTab === 'rebrand' && <RebrandSettingsView />}
