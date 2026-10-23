@@ -228,74 +228,135 @@ export function DownloadAppsView() {
           </div>
 
           {/* macOS Universal & Apple Silicon Card */}
-          <div className="flex flex-col justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-850">
+          <div className="flex flex-col justify-between rounded-xl border border-blue-200/80 bg-blue-50/20 p-5 dark:border-blue-900/40 dark:bg-gray-850">
             <div>
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">
-                  🍎 macOS Universal
+                  🍎 macOS
                 </span>
-                <span className="text-xs font-mono text-gray-500">Universal & M1/M2/M3</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                  v1.1.0 (Beta)
+                </span>
               </div>
               <h3 className="mt-3 text-lg font-bold text-gray-900 dark:text-white">macOS (Apple Silicon & Intel)</h3>
               <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                Native macOS build supporting Apple Silicon (M1/M2/M3/M4) chips and Intel x86_64 processors with automated screen capture and window tracking.
+                Native macOS desktop agent with 85% WebP screenshot compression, in-app auto-updater, and active window monitoring.
               </p>
+
+              {/* Latest Beta Section */}
+              <div className="mt-4 rounded-lg border border-blue-200 dark:border-blue-800/60 bg-white/80 dark:bg-gray-800/80 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wide">
+                    ⚡ Latest Release: v1.1.0 (Beta)
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">WebP + Auto-Updater</span>
+                </div>
+                <a
+                  href="/downloads/Smart-Employee-Tracker-AppleSilicon.dmg"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Apple Silicon (M1–M4) - v1.1.0 (.dmg) ⭐
+                </a>
+                <a
+                  href="/downloads/Smart-Employee-Tracker-macOS.dmg"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 px-3.5 py-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <Download className="h-3 w-3" />
+                  Download macOS Universal / Intel - v1.1.0 (.dmg)
+                </a>
+              </div>
+
+              {/* Previous Stable Section */}
+              <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 p-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                    🛡️ Previous Release: v1.0.0 (Stable)
+                  </span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-mono">Stable</span>
+                </div>
+                <a
+                  href="/downloads/Smart-Employee-Tracker-macOS-v1.0.0.dmg"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <Download className="h-3 w-3 text-gray-500" />
+                  Download macOS v1.0.0 Stable (.dmg - 7.4 MB)
+                </a>
+              </div>
             </div>
-            <div className="mt-5 space-y-2">
-              <a
-                href="/downloads/Smart-Employee-Tracker-AppleSilicon.dmg"
-                download
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs"
-              >
-                <Download className="h-4 w-4" />
-                Download Apple Silicon (M1/M2/M3/M4) (.dmg - 7.4 MB) ⭐ Recommended
-              </a>
-              <a
-                href="/downloads/Smart-Employee-Tracker-macOS.dmg"
-                download
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 px-4 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-gray-750 transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download macOS Universal / Intel (.dmg - 7.4 MB)
-              </a>
-            </div>
-            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
-              💡 <strong>macOS App Tracking:</strong> Make sure to enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> in <em>System Settings &gt; Privacy &amp; Security</em> so active apps and windows can be recorded.
+
+            <p className="mt-3 text-[11px] text-amber-700 dark:text-amber-400 font-medium">
+              💡 <strong>macOS Permissions:</strong> Enable <strong>Accessibility</strong> and <strong>Screen Recording</strong> in <em>System Settings &gt; Privacy &amp; Security</em>.
             </p>
           </div>
 
           {/* Windows Card */}
-          <div className="flex flex-col justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-850">
+          <div className="flex flex-col justify-between rounded-xl border border-indigo-200/80 bg-indigo-50/20 p-5 dark:border-indigo-900/40 dark:bg-gray-850">
             <div>
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300">
                   🪟 Windows (x64)
                 </span>
-                <span className="text-xs font-mono text-gray-500">Standalone Portable</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                  v1.1.0 (Beta)
+                </span>
               </div>
               <h3 className="mt-3 text-lg font-bold text-gray-900 dark:text-white">Windows 10 / 11</h3>
               <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                 Self-contained 64-bit Windows build with built-in WebView2 loader, automated background capture, and app usage monitoring.
               </p>
+
+              {/* Latest Beta Section */}
+              <div className="mt-4 rounded-lg border border-indigo-200 dark:border-indigo-800/60 bg-white/80 dark:bg-gray-800/80 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
+                    ⚡ Latest Release: v1.1.0 (Beta)
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">WebP + Auto-Updater</span>
+                </div>
+                <a
+                  href="/downloads/Smart-Employee-Tracker.exe"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors shadow-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download Windows - v1.1.0 (.exe - 41 MB) ⭐
+                </a>
+                <a
+                  href="/downloads/Smart-Employee-Tracker-Windows.zip"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-800 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <Download className="h-3 w-3" />
+                  Download Windows Bundle - v1.1.0 (.zip - 24 MB)
+                </a>
+              </div>
+
+              {/* Previous Stable Section */}
+              <div className="mt-3 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 p-2.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-semibold text-gray-700 dark:text-gray-300">
+                    🛡️ Previous Release: v1.0.0 (Stable)
+                  </span>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium font-mono">Stable</span>
+                </div>
+                <a
+                  href="/downloads/Smart-Employee-Tracker-v1.0.0.exe"
+                  download
+                  className="flex w-full items-center justify-center gap-2 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                >
+                  <Download className="h-3 w-3 text-gray-500" />
+                  Download Windows v1.0.0 Stable (.exe - 41 MB)
+                </a>
+              </div>
             </div>
-            <div className="mt-5 space-y-2">
-              <a
-                href="/downloads/Smart-Employee-Tracker.exe"
-                download
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-xs"
-              >
-                <Download className="h-4 w-4" />
-                Download Windows (.exe)
-              </a>
-              <a
-                href="/downloads/Smart-Employee-Tracker-Windows.zip"
-                download
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-gray-800 px-4 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-gray-750 transition-colors"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Download Windows Bundle (.zip - 24 MB)
-              </a>
-            </div>
+
+            <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+              💡 <strong>Compatibility:</strong> Compatible with Windows 10 & 11 (64-bit). No prerequisite installation required.
+            </p>
           </div>
         </div>
 

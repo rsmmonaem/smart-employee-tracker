@@ -1,8 +1,8 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Smart Employee Tracker Desktop Agent"
+authors = ["Rsm Monaem (https://www.linkedin.com/in/rsm-monaem/)"]
 license = ""
 repository = ""
 edition = "2021"
