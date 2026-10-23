@@ -1,134 +1,108 @@
 # Smart Employee Tracker
 
-> **Next-Generation Enterprise Employee Productivity, Activity Tracking & Proof of Work SaaS Platform**  
-> **Author:** [Rsm Monaem](https://www.linkedin.com/in/rsm-monaem/)  
-> **WhatsApp Support:** [@rsmmonaemwp](https://wa.me/message/rsmmonaemwp) (`@rsmmonaemwp`)  
-> **LinkedIn:** [https://www.linkedin.com/in/rsm-monaem/](https://www.linkedin.com/in/rsm-monaem/)  
-> **Documentation:** [Complete Installation & Setup Guide (INSTALLATION.md)](file:///Users/rsmmonaem/Downloads/smart-employee-tracker/INSTALLATION.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Latest Release](https://img.shields.io/badge/Release-v1.1.0-emerald.svg)](https://github.com/rsmmonaem/smart-employee-tracker/releases)
+[![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg?logo=next.js)](https://nextjs.org/)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-orange.svg?logo=tauri)](https://tauri.app/)
+[![Rust](https://img.shields.io/badge/Rust-1.78+-red.svg?logo=rust)](https://www.rust-lang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg?logo=postgresql)](https://www.postgresql.org/)
+[![WhatsApp Support](https://img.shields.io/badge/WhatsApp-Support-25D366.svg?logo=whatsapp)](https://wa.me/message/rsmmonaemwp)
+
+**Smart Employee Tracker** is an enterprise-grade, self-hosted **Employee Tracker** and workforce productivity monitoring platform. It combines a multi-tenant cloud management portal with native cross-platform desktop tracking agents for **Windows** and **macOS**.
+
+Whether you manage an in-office team, remote contractors, or hybrid staff, Smart Employee Tracker provides verifiable visual proof of work, automated time tracking, application telemetry, and payroll-ready timesheets without third-party vendor lock-in.
 
 ---
 
-## 🚀 Latest Release: v1.1.0 (Released: October 24, 2026)
+## ⚡ Key Highlights
 
-We are thrilled to introduce **Smart Employee Tracker v1.1.0** with major architectural enhancements focused on extreme storage efficiency, on-demand visual extraction, and automated cross-platform updates.
-
-### 🌟 What's New in v1.1.0:
-- **🗜️ Ultra-Compressed WebP Screenshot Engine:**
-  - Screen captures are now automatically converted to optimized WebP format before storage upload.
-  - **75% to 85% storage & bandwidth reduction** (slashing typical screenshot sizes from ~450 KB down to ~55 KB) while preserving crystal-clear text and window clarity.
-- **⚡ On-Demand Decompression & Streaming Proxy (`/api/admin/screenshots/view`):**
-  - Instant on-the-fly image extraction and streaming with multi-tenant security verification and immutable browser caching (`Cache-Control: public, max-age=31536000`).
-  - Seamless backward compatibility: legacy uncompressed `.jpg` and `.png` files remain 100% viewable without manual intervention.
-- **🖥️ 4K / 5K / Retina Display Downscaling:**
-  - High-resolution displays (>1920px) are automatically downscaled to crisp 1080p, preventing massive 10 MB raw bitmaps from filling server disks.
-- **🔄 1-Click In-App Auto-Updater (Windows & macOS):**
-  - Existing installed desktop clients automatically detect `v1.1.0` and can update with a single click inside the app—no manual reinstall required!
-- **🤖 Automated GitHub Actions CI/CD Pipeline (`.github/workflows/build-desktop.yml`):**
-  - Compile production Windows (`.exe` / `.msi`) and macOS (`.dmg`) desktop installers directly inside GitHub Actions.
-- **🛠️ Storage Maintenance & Lifecycle Management:**
-  - Automated retention cleanup policies to keep database and disk storage lean and efficient.
-- **📘 Marketplace-Ready Installation Documentation (`INSTALLATION.md`):**
-  - Complete, step-by-step installation guide for CodeCanyon, Codester, and private VPS deployments covering Node.js, Supabase, PM2, Nginx, CyberPanel, and SSL.
+- **Desktop Tracking Agent (macOS & Windows):** Native client built with Tauri 2 and Rust for lightweight memory footprint (<30 MB RAM) and background execution.
+- **Ultra-Efficient Screen Capture:** Automatic WebP compression engine reducing screenshot storage by **up to 85%** (50–70 KB per capture) while maintaining crisp text clarity.
+- **On-Demand Screenshot Streaming:** Secure proxied image streaming with tenant isolation and immutable browser caching.
+- **Active Window & URL Telemetry:** Real-time logging of active applications and website domains without capturing sensitive keystroke contents.
+- **Attendance & Timesheets:** Automatic shift tracking, breaks, clock-in/out, and exportable timesheets.
+- **1-Click Web-Based Installer (`/install`):** Browser-based setup wizard that runs database migrations, creates storage buckets, and configures administrator accounts with zero manual SQL.
+- **Built-in Auto Updater:** In-app updates for desktop clients on macOS and Windows with native process restart.
+- **Multi-Tenant Architecture:** Multi-organization support with Row-Level Security (RLS) and SuperAdmin management portal.
 
 ---
 
-## Overview
+## 🖥️ Desktop Agent Downloads
 
-**Smart Employee Tracker** is a complete multi-tenant SaaS ecosystem and desktop agent designed for organizations to monitor team productivity, capture verified visual proof of work, track active applications, and streamline billing and attendance.
-
-Built with a high-performance Rust backend, a modern Next.js 14 cloud management portal, and a native Tauri 2 cross-platform desktop tracking agent.
-
----
-
-## Key Features
-
-- **Automated Screen Capture**: Configurable 1-minute and 10-minute HD screenshot intervals with privacy-compliant activity logging.
-- **Input & Keyboard Tracking**: Telemetry measuring keystroke velocity (KPM), mouse click intensity, and active work ratios without storing sensitive keystroke characters.
-- **My Team & Live Dashboard**: Color-coded member state telemetry (Working, In Break, Stopped Work, On Leave, App Not Installed, Yet To Start).
-- **Pro Tier Feature Gating**: Multiple bulk screenshot deletion, 1-year data retention, and custom screenshot capture frequency gated to PRO accounts.
-- **Multi-Currency Localized Billing**:
-  - **bKash MFS Direct Checkout** (Bangladesh Mobile Financial Services)
-  - **merchant.eps.com.bd** (Electronic Payment System — Visa/Mastercard/Amex/Internet Banking)
-  - **Stripe Elements** (International credit/debit cards)
-  - Dual Currency support: **BDT (৳)** and **USD ($)** with monthly & annual discount cycles.
-- **Cross-Platform Native Desktop Client (Windows & macOS)**: Production-ready native tracking agent built with Tauri 2 + Rust, available for **Windows (`.exe`)** and **macOS (`.dmg` for Apple Silicon M1/M2/M3/M4 & Intel)**.
-- **📱 Android Mobile Tracker (Coming Soon)**: Smartphone and tablet productivity tracking app currently in active development.
-- **SuperAdmin Command Center**: Tenant management, subscription quota enforcement, dynamic package pricing, revenue analytics, and platform controls.
+| Platform | Latest Release | Previous Release | Notes |
+|---|---|---|---|
+| **macOS (Apple Silicon M1–M4)** | [v1.1.0 Beta (.dmg)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-AppleSilicon.dmg) | [v1.0.0 Stable (.dmg)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-macOS-v1.0.0.dmg) | Native ARM64 build |
+| **macOS (Intel / Universal)** | [v1.1.0 Beta (.dmg)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-macOS.dmg) | [v1.0.0 Stable (.dmg)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-macOS-v1.0.0.dmg) | x86_64 compatible |
+| **Windows 10 / 11 (64-bit)** | [v1.1.0 Beta (.exe)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker.exe) | [v1.0.0 Stable (.exe)](https://app.tracmatrix.com/downloads/Smart-Employee-Tracker-v1.0.0.exe) | Portable & Installer |
+| **Android (Mobile)** | *Coming Soon* | — | Mobile attendance tracking |
 
 ---
 
-## Technology Stack
+## 🏗️ Architecture
 
-| Layer | Technology |
-|---|---|
-| **Author** | **Rsm Monaem** ([LinkedIn](https://www.linkedin.com/in/rsm-monaem/)) |
-| **Frontend Web** | Next.js 14 (App Router, React 18, TypeScript, Tailwind CSS) |
-| **Desktop Client** | Tauri 2 + Rust + Vite + React (`Smart-Employee-Tracker.exe`) |
-| **Backend REST API** | Rust (Axum 0.7 + Tokio + SQLx 0.7) |
-| **Database & Auth** | Supabase (PostgreSQL 15 + RLS + JWT Auth) |
-| **Payment Gateways** | bKash, EPS (merchant.eps.com.bd), Stripe |
-
----
-
-## 💻 Cross-Platform Native Desktop Clients (Windows & macOS)
-
-Smart Employee Tracker includes high-performance, native desktop tracking agents built with **Tauri 2 + Rust**:
-
-### 🪟 Windows Client:
-- Pre-compiled release binary: **`dist-windows/Smart-Employee-Tracker.exe`** (31 MB optimized release binary)
-- Also available as standalone executable and NSIS installer.
-
-### 🍎 macOS Client (Apple Silicon & Intel):
-- Pre-compiled release installer: **`dist-mac/Smart-Employee-Tracker-macOS.dmg`**
-- Universal binary supporting **Apple Silicon (M1/M2/M3/M4)** and **Intel x86_64** processors.
-
-### 📱 Android Tracker (Coming Soon):
-- Mobile application for smartphone and tablet attendance tracking is currently in active development.
-
----
-
-## Quick Start
-
-### 1. Prerequisites
-- Node.js 20+
-- Rust stable (1.78+)
-- Supabase account or local CLI
-
-### 2. Environment Setup
-```bash
-cp .env.example .env
 ```
-
-### 3. Run Web Application
-```bash
-cd apps/web
-npm install
-npm run dev
-# Accessible at http://localhost:3000
-```
-
-### 4. Run Desktop Agent (Dev)
-```bash
-cd apps/desktop-agent
-npm install
-npm run tauri dev
+┌────────────────────────────────────────────────────────┐
+│             Web Dashboard & SuperAdmin                 │
+│         Next.js 14 (App Router, Tailwind CSS)          │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+             ┌─────────────┴─────────────┐
+             ▼                           ▼
+┌───────────────────────────┐ ┌──────────────────────────┐
+│   PostgreSQL / Supabase   │ │ Native Desktop Agents    │
+│  - RLS Tenant Isolation   │ │ - macOS (.dmg)           │
+│  - Storage (Screenshots)  │ │ - Windows (.exe)         │
+│  - Timesheet & Telemetry  │ │ - Rust + Tauri v2 Engine │
+└───────────────────────────┘ └──────────────────────────┘
 ```
 
 ---
 
-## Access & Roles
+## 🚀 Quick Setup & Installation
 
-- **Platform SuperAdmin**: `/superadmin` (Requires `SUPER_ADMIN` role)
-- **Tenant Client Admin**: `/admin/dashboard` (Requires `TENANT_ADMIN` role)
-- **Team Management**: `/my-teams` & `/admin/employees`
-- **Activity & Input Reports**: `/reports` & `/admin/reports`
-- **Screenshots Proof of Work**: `/admin/screenshots`
+Smart Employee Tracker supports both automated 1-click web installation and standard manual deployments.
+
+### Option 1: 1-Click Web Installer (Recommended)
+1. Deploy the web application to your server (VPS, cPanel, or Docker).
+2. Visit `https://your-domain.com/install` in your browser.
+3. Follow the 3-step setup wizard:
+   - System environment check
+   - Automated database migration & Supabase bucket initialization
+   - SuperAdmin profile provisioning
+4. Your complete employee tracking system is live and secured!
+
+### Option 2: Step-by-Step Manual Deployment
+For complete deployment guides including **cPanel Setup**, **Ubuntu VPS Setup**, **PM2 Configuration**, and **Nginx Reverse Proxy**, see:  
+👉 **[Read Full Installation Guide (INSTALLATION.md)](INSTALLATION.md)**
 
 ---
 
-## Author & Support
+## 🛠️ Tech Stack
 
-- **Creator & Lead Engineer**: **Rsm Monaem**
-- **WhatsApp Support**: **[@rsmmonaemwp](https://wa.me/message/rsmmonaemwp)** (`@rsmmonaemwp`)
-- **LinkedIn**: [https://www.linkedin.com/in/rsm-monaem/](https://www.linkedin.com/in/rsm-monaem/)
-- **License**: MIT
+- **Web Application:** Next.js 14, React 18, TypeScript, Tailwind CSS, Lucide Icons
+- **Desktop Client:** Tauri 2, Rust, Vite, React
+- **Database & Storage:** PostgreSQL 15, Supabase Storage (WebP screenshots)
+- **Image Processing:** Sharp (high-performance WebP encoder)
+- **Deployment Targets:** Linux VPS (Ubuntu/Debian), cPanel with Node.js selector, CyberPanel, Docker
+
+---
+
+## 🔐 Security & Privacy
+
+- **Row-Level Security (RLS):** Strict multi-tenant data separation enforced at the database level.
+- **Privacy-Compliant Telemetry:** Tracks app titles and activity levels without recording private keystrokes or sensitive input.
+- **Quarantine & Gatekeeper Support:** Self-contained bundles with clear permission guidelines for macOS Screen Recording and Accessibility.
+
+---
+
+## 👨‍💻 Author & Support
+
+- **Author & Architect:** **Rsm Monaem** ([LinkedIn Profile](https://www.linkedin.com/in/rsm-monaem/))
+- **Direct WhatsApp Support:** **[@rsmmonaemwp](https://wa.me/message/rsmmonaemwp)** (`@rsmmonaemwp`)
+- **Issues & Contributions:** Open a ticket on GitHub or reach out via WhatsApp for onboarding and deployment support.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
