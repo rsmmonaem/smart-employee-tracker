@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Smart Employee Tracker captures periodic desktop activity to track productive work sessions.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Smart Employee Tracker needs access to monitor active applications and work titles.</string>
+</dict>
+</plist>

@@ -1,0 +1,9 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Force HTTPS and redirect tracmatrix.com or www.tracmatrix.com to https://app.tracmatrix.com
+  RewriteCond %{HTTPS} off [OR]
+  RewriteCond %{HTTP_HOST} ^tracmatrix\.com$ [NC,OR]
+  RewriteCond %{HTTP_HOST} ^www\.tracmatrix\.com$ [NC]
+  RewriteRule ^(.*)$ https://app.tracmatrix.com/$1 [L,R=301]
+</IfModule>

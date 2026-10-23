@@ -1,0 +1,15 @@
+[package]
+name = "timeguard_api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+timeguard-shared = { workspace = true }
+dotenvy = "0.15.7"
+jsonwebtoken.workspace = true
+uuid.workspace = true
+sqlx.workspace = true

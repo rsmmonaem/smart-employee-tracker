@@ -1,0 +1,814 @@
+'use client'
+
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { createClient } from '@/utils/supabase/client'
+import { useAdminFilter } from '../admin-filter-context'
+import AdminHeader from '../admin-header'
+import { getLocalTodayString, getLocalYesterdayString } from '@/utils/date'
+
+// Timeline Activity Classification
+type ActivityType =
+  | 'PRODUCTIVE'
+  | 'UNPRODUCTIVE'
+  | 'NEUTRAL'
+  | 'IDLE'
+  | 'NOT_IN_WORK'
+  | 'UNTRACKED'
+
+interface RawEvent {
+  id: string
+  appName: string
+  windowTitle?: string
+  startedAt: string
+  endedAt: string
+  classification: string
+  domain?: string | null
+}
+
+interface TimelineSegment {
+  id: string
+  startMin: number // minutes from axis start
+  durationMin: number
+  type: ActivityType
+  appName: string
+  windowTitle?: string
+  startTimeStr: string
+  endTimeStr: string
+  durationStr: string
+}
+
+interface EmployeeTimelineRow {
+  id: string
+  name: string
+  email: string
+  role: string
+  team: string
+  teams?: string[]
+  hasClockedIn: boolean
+  clockedInAt?: string | null
+  clockedOutAt?: string | null
+  attendanceSessions?: Array<{
+    id: string
+    clocked_in_at: string
+    clocked_out_at: string | null
+    status: string
+  }>
+  hasEvents: boolean
+  rawEvents?: RawEvent[]
+  segments: TimelineSegment[]
+}
+
+// Activity Color Config matching Screenshot 4
+const TYPE_CONFIG: Record<
+  ActivityType,
+  { label: string; dotColor: string; bgHex: string }
+> = {
+  PRODUCTIVE: {
+    label: 'Productive Apps Time',
+    dotColor: 'bg-[#22c55e]',
+    bgHex: '#22c55e',
+  },
+  UNPRODUCTIVE: {
+    label: 'Unproductive Apps Time',
+    dotColor: 'bg-[#ef4444]',
+    bgHex: '#ef4444',
+  },
+  NEUTRAL: {
+    label: 'Neutral Apps Time',
+    dotColor: 'bg-[#3b82f6]',
+    bgHex: '#3b82f6',
+  },
+  IDLE: {
+    label: 'Idle Time',
+    dotColor: 'bg-[#f97316]',
+    bgHex: '#f97316',
+  },
+  NOT_IN_WORK: {
+    label: 'Not In Work',
+    dotColor: 'bg-[#eab308]',
+    bgHex: '#eab308',
+  },
+  UNTRACKED: {
+    label: 'Untracked',
+    dotColor: 'bg-[#d4c5a9]',
+    bgHex: '#d4c5a9',
+  },
+}
+
+// Standard 24 Hours Timeline (00:00 to 24:00 = 1440 mins)
+const TOTAL_MINUTES_24H = 1440
+const TIME_TICKS_24H = [
+  { min: 0, label: '00:00' },
+  { min: 120, label: '02:00' },
+  { min: 240, label: '04:00' },
+  { min: 360, label: '06:00' },
+  { min: 480, label: '08:00' },
+  { min: 600, label: '10:00' },
+  { min: 720, label: '12:00' },
+  { min: 840, label: '14:00' },
+  { min: 960, label: '16:00' },
+  { min: 1080, label: '18:00' },
+  { min: 1200, label: '20:00' },
+  { min: 1320, label: '22:00' },
+  { min: 1440, label: '24:00' },
+]
+
+function formatClockTime(d: Date): string {
+  return d.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+function formatDurationSec(totalSec: number): string {
+  const hours = Math.floor(totalSec / 3600)
+  const minutes = Math.floor((totalSec % 3600) / 60)
+  const seconds = totalSec % 60
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+  }
+  return `${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}s`
+}
+
+export default function TimelinePage() {
+  const { searchQuery, selectedDate, selectedTeam, refreshTrigger, currentUser } = useAdminFilter()
+  const [timelines, setTimelines] = useState<EmployeeTimelineRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Interactive Hover Tooltip State
+  const [hoveredSegment, setHoveredSegment] = useState<{
+    segment: TimelineSegment
+    employeeName: string
+    x: number
+    y: number
+  } | null>(null)
+
+  // Compute Client-Local Timezone Segments for full 24h day accurately
+  const processEmployeeSegments = useCallback(
+    (emp: EmployeeTimelineRow, targetDateStr: string): TimelineSegment[] => {
+      // Prioritize full-day server computed segments if present
+      if (emp.segments && emp.segments.length > 0) {
+        return emp.segments
+      }
+
+      const clientSegments: TimelineSegment[] = []
+      const localTodayStr = getLocalTodayString()
+      const isTargetToday = targetDateStr === localTodayStr
+      const nowMs = Date.now()
+      const localNow = new Date(nowMs)
+
+      // 1. Process real rawEvents from activity_events if present
+      if (emp.rawEvents && emp.rawEvents.length > 0) {
+        // Filter events that fall on the targetDate in user's browser local timezone and sort ascending
+        const matchingEvents = emp.rawEvents
+          .filter((ev) => {
+            const d = new Date(ev.startedAt)
+            // Match local date (YYYY-MM-DD)
+            const localDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            return localDateStr === targetDateStr
+          })
+          .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime())
+
+        let currentSeg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        } | null = null
+
+        const commitSegment = (seg: {
+          id: string
+          startMs: number
+          endMs: number
+          type: ActivityType
+          appName: string
+          windowTitle: string
+        }) => {
+          const startD = new Date(seg.startMs)
+          const endD = new Date(seg.endMs)
+          const startMin = startD.getHours() * 60 + startD.getMinutes() + startD.getSeconds() / 60
+          const diffSec = Math.max(5, Math.round((seg.endMs - seg.startMs) / 1000))
+          const durationMin = Math.max(0.08, diffSec / 60)
+
+          clientSegments.push({
+            id: seg.id,
+            startMin,
+            durationMin,
+            type: seg.type,
+            appName: seg.appName,
+            windowTitle: seg.windowTitle,
+            startTimeStr: formatClockTime(startD),
+            endTimeStr: formatClockTime(endD),
+            durationStr: formatDurationSec(diffSec),
+          })
+        }
+
+        matchingEvents.forEach((ev, idx) => {
+          const startMs = new Date(ev.startedAt).getTime()
+          let endMs = new Date(ev.endedAt).getTime()
+          if (endMs <= startMs) endMs = startMs + 5000
+
+          if (isTargetToday) {
+            if (startMs >= nowMs) return
+            if (endMs > nowMs) endMs = nowMs
+          }
+
+          let type: ActivityType = 'NEUTRAL'
+          const appLower = (ev.appName || '').toLowerCase()
+          const winLower = (ev.windowTitle || '').toLowerCase()
+
+          const isLockScreen =
+            appLower.includes('lockapp') ||
+            appLower.includes('logonui') ||
+            appLower.includes('screensaver') ||
+            winLower.includes('lock screen') ||
+            winLower.includes('screen lock') ||
+            winLower.includes('locked')
+
+          const isLockOrIdle =
+            isLockScreen ||
+            appLower === 'idle time' ||
+            appLower.startsWith('idle') ||
+            winLower.startsWith('idle / inactive') ||
+            winLower.startsWith('idle time')
+
+          if (isLockOrIdle) {
+            type = 'IDLE'
+          } else if (ev.classification === 'PRODUCTIVE') {
+            type = 'PRODUCTIVE'
+          } else if (ev.classification === 'UNPRODUCTIVE') {
+            type = 'UNPRODUCTIVE'
+          } else if (appLower.includes('untracked') || winLower.includes('offline') || winLower.includes('away')) {
+            type = 'UNTRACKED'
+          } else if (appLower.includes('lunch') || winLower.includes('lunch') || winLower.includes('break period')) {
+            type = 'NOT_IN_WORK'
+          } else if (
+            appLower.includes('chrome') ||
+            appLower.includes('edge') ||
+            appLower.includes('brave') ||
+            appLower.includes('firefox') ||
+            appLower.includes('safari') ||
+            appLower.includes('code') ||
+            appLower.includes('cursor') ||
+            appLower.includes('visual studio') ||
+            appLower.includes('terminal') ||
+            appLower.includes('slack') ||
+            appLower.includes('teams') ||
+            appLower.includes('figma') ||
+            appLower.includes('postman')
+          ) {
+            type = 'PRODUCTIVE'
+          }
+
+          const segAppName = isLockScreen
+            ? 'Lock Screen (Idle)'
+            : isLockOrIdle
+            ? 'Idle Time'
+            : ev.appName || 'Active Application'
+
+          const segWindowTitle = isLockScreen
+            ? 'Screen Locked / Away'
+            : ev.windowTitle || 'Application Window'
+
+          // Merge if same app, same classification, and gap between events <= 60 seconds
+          if (
+            currentSeg &&
+            currentSeg.type === type &&
+            currentSeg.appName === segAppName &&
+            startMs <= currentSeg.endMs + 60000
+          ) {
+            currentSeg.endMs = Math.max(currentSeg.endMs, endMs)
+          } else {
+            if (currentSeg) {
+              commitSegment(currentSeg)
+            }
+
+            // Ensure startMs does not precede currentSeg.endMs to guarantee zero overlapping segments
+            const adjustedStartMs = currentSeg ? Math.max(startMs, currentSeg.endMs) : startMs
+            currentSeg = {
+              id: ev.id || `seg-${idx}`,
+              startMs: adjustedStartMs,
+              endMs: Math.max(adjustedStartMs + 5000, endMs),
+              type,
+              appName: segAppName,
+              windowTitle: segWindowTitle,
+            }
+          }
+        })
+
+        if (currentSeg) {
+          commitSegment(currentSeg)
+        }
+      }
+
+      // 2. Fallback: If clientSegments is empty but user clocked in on targetDate, render attendance sessions matching targetDateStr
+      if (clientSegments.length === 0) {
+        const sessionsToUse =
+          emp.attendanceSessions && emp.attendanceSessions.length > 0
+            ? emp.attendanceSessions
+            : emp.clockedInAt
+            ? [
+                {
+                  id: `session-${emp.id}`,
+                  clocked_in_at: emp.clockedInAt,
+                  clocked_out_at: emp.clockedOutAt || null,
+                  status: 'CLOSED',
+                },
+              ]
+            : []
+
+        sessionsToUse.forEach((sess, sIdx) => {
+          const clockInDate = new Date(sess.clocked_in_at)
+          const localClockInDateStr = `${clockInDate.getFullYear()}-${String(clockInDate.getMonth() + 1).padStart(2, '0')}-${String(clockInDate.getDate()).padStart(2, '0')}`
+
+          // Strictly check localClockInDateStr matches targetDateStr
+          if (localClockInDateStr === targetDateStr) {
+            let clockOutDate = sess.clocked_out_at ? new Date(sess.clocked_out_at) : localNow
+
+            // On Today, strictly discard future sessions and clamp to now
+            if (isTargetToday) {
+              if (clockInDate.getTime() >= nowMs) return
+              if (clockOutDate.getTime() > nowMs) clockOutDate = localNow
+            } else {
+              // On a past date, clamp clockOutDate to end of that day
+              const [y, m, d] = targetDateStr.split('-').map(Number)
+              const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999)
+              if (clockOutDate.getTime() > endOfDay.getTime()) {
+                clockOutDate = endOfDay
+              }
+            }
+
+            const startMin = clockInDate.getHours() * 60 + clockInDate.getMinutes()
+            let totalDiffSec = Math.max(60, Math.round((clockOutDate.getTime() - clockInDate.getTime()) / 1000))
+
+            // Cap abandoned sessions with zero activity events to at most 30 mins
+            if (totalDiffSec > 3600 && !emp.hasEvents) {
+              totalDiffSec = 1800
+              clockOutDate = new Date(clockInDate.getTime() + totalDiffSec * 1000)
+            }
+
+            const durationMin = Math.max(1, Math.round(totalDiffSec / 60))
+            const isOngoing = !sess.clocked_out_at || sess.status === 'OPEN' || (isTargetToday && new Date(sess.clocked_out_at).getTime() >= nowMs)
+
+            clientSegments.push({
+              id: sess.id || `session-${emp.id}-${sIdx}`,
+              startMin,
+              durationMin,
+              type: 'IDLE',
+              appName: 'Idle Time',
+              windowTitle: 'Active Tracker Session (No active app activity recorded)',
+              startTimeStr: formatClockTime(clockInDate),
+              endTimeStr: isOngoing ? 'In Progress' : formatClockTime(clockOutDate),
+              durationStr: formatDurationSec(totalDiffSec),
+            })
+          }
+        })
+      }
+
+      // 3. Fallback to server computed segments only if employee has activity events on targetDate
+      if (clientSegments.length === 0 && emp.hasEvents && emp.segments && emp.segments.length > 0) {
+        return emp.segments
+      }
+
+      return clientSegments
+    },
+    []
+  )
+
+  // In-memory client cache to make date switching instant (0ms)
+  const clientCacheRef = useRef<Map<string, EmployeeTimelineRow[]>>(new Map())
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Fetch real timeline data from API
+  const fetchTimelineData = useCallback(async (date: string, forceRefresh = false) => {
+    // 1. Instant client-side cache response
+    const cached = clientCacheRef.current.get(date)
+    if (cached && !forceRefresh) {
+      setTimelines(cached)
+      setLoading(false)
+      return
+    }
+
+    // 2. Abort any previous pending request to avoid request stacking in browser
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/admin/timeline?date=${date}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      const json = await res.json()
+      if (json.success && json.timelines) {
+        const computed = json.timelines.map((emp: EmployeeTimelineRow) => ({
+          ...emp,
+          segments: processEmployeeSegments(emp, date),
+        }))
+        clientCacheRef.current.set(date, computed)
+        setTimelines(computed)
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return
+      console.error('Failed to fetch timeline data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [processEmployeeSegments])
+
+  useEffect(() => {
+    fetchTimelineData(selectedDate, refreshTrigger > 0)
+  }, [selectedDate, refreshTrigger, fetchTimelineData])
+
+  // Realtime Supabase Subscription: ONLY ACTIVE FOR TODAY!
+  // Past dates (e.g. Oct 15) are static historical data and MUST NOT be slammed by live activity events.
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastFetchTimeRef = useRef<number>(0)
+
+  useEffect(() => {
+    const todayActual = getLocalTodayString()
+    if (selectedDate !== todayActual) {
+      // Past historical date: do not subscribe to realtime updates
+      return
+    }
+
+    const supabase = createClient()
+
+    const triggerDebouncedFetch = () => {
+      const now = Date.now()
+      if (now - lastFetchTimeRef.current > 15000) {
+        lastFetchTimeRef.current = now
+        fetchTimelineData(selectedDate, true)
+        return
+      }
+      if (debounceTimerRef.current) return
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null
+        lastFetchTimeRef.current = Date.now()
+        fetchTimelineData(selectedDate, true)
+      }, 15000)
+    }
+
+    const channel = supabase
+      .channel(`timeline_today_${todayActual}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'activity_events' },
+        () => {
+          triggerDebouncedFetch()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users' },
+        () => {
+          triggerDebouncedFetch()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+      supabase.removeChannel(channel)
+    }
+  }, [selectedDate, fetchTimelineData])
+
+  const filteredTimelines = timelines.filter((emp) => {
+    const matchesSearch =
+      emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.email.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesTeam =
+      selectedTeam === 'All Team' ||
+      emp.team === selectedTeam ||
+      (emp.teams && emp.teams.includes(selectedTeam))
+    return matchesSearch && matchesTeam
+  })
+
+  const todayActual = getLocalTodayString()
+  const yesterdayActual = getLocalYesterdayString()
+
+  const dayTitle =
+    selectedDate === todayActual
+      ? 'Today Activities'
+      : selectedDate === yesterdayActual
+      ? 'Yesterday Activities'
+      : `${selectedDate} Activities`
+
+  const [timelineMode, setTimelineMode] = useState<'OFFICE' | '24H'>('OFFICE')
+
+  const activeTotalMinutes = timelineMode === '24H' ? 1440 : 540
+  const activeTicks =
+    timelineMode === '24H'
+      ? TIME_TICKS_24H
+      : [
+          { min: 0, label: '10:00' },
+          { min: 60, label: '11:00' },
+          { min: 120, label: '12:00' },
+          { min: 180, label: '13:00' },
+          { min: 240, label: '14:00' },
+          { min: 300, label: '15:00' },
+          { min: 360, label: '16:00' },
+          { min: 420, label: '17:00' },
+          { min: 480, label: '18:00' },
+          { min: 540, label: '19:00' },
+        ]
+
+  return (
+    <div className="min-h-full bg-[#f8f9fa] dark:bg-gray-950 pb-16">
+      {/* Top Header Bar */}
+      <AdminHeader
+        title={currentUser?.role === 'EMPLOYEE' ? 'My Timeline' : 'Timeline'}
+        subtitle={
+          currentUser?.role === 'EMPLOYEE'
+            ? 'Your daily proof of work and tracked application activities'
+            : undefined
+        }
+        searchPlaceholder={currentUser?.role === 'EMPLOYEE' ? undefined : 'Search in timeline'}
+        showSearch={currentUser?.role !== 'EMPLOYEE'}
+        showTeamFilter={currentUser?.role !== 'EMPLOYEE'}
+        showAddUser={false}
+        loading={loading}
+        onRefresh={() => fetchTimelineData(selectedDate)}
+        onUserAdded={() => fetchTimelineData(selectedDate)}
+        extraActions={
+          <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-0.5 rounded-lg text-xs">
+            <button
+              onClick={() => setTimelineMode('OFFICE')}
+              className={`px-3 py-1 rounded-md font-medium transition-all ${
+                timelineMode === 'OFFICE'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              10:00 AM - 7:00 PM
+            </button>
+            <button
+              onClick={() => setTimelineMode('24H')}
+              className={`px-3 py-1 rounded-md font-medium transition-all ${
+                timelineMode === '24H'
+                  ? 'bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 shadow-2xs font-semibold'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+              }`}
+            >
+              24 Hours
+            </button>
+          </div>
+        }
+      />
+
+      {/* Subheader & Activity Legend Row (Screenshot 4) */}
+      <div className="px-8 pt-6 pb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h2 className="text-base font-semibold text-gray-800 dark:text-gray-100 tracking-tight">
+          {dayTitle}
+        </h2>
+
+        {/* Legend */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-600 dark:text-gray-300 font-normal">
+          {(Object.keys(TYPE_CONFIG) as ActivityType[]).map((type) => {
+            const config = TYPE_CONFIG[type]
+            return (
+              <div key={type} className="flex items-center gap-1.5">
+                <span className={`w-2.5 h-2.5 rounded-full ${config.dotColor} inline-block shadow-2xs`} />
+                <span>{config.label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Main Visual Multi-Track Timeline */}
+      <div className="px-8">
+        <div className="border border-gray-150 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-900 p-6 shadow-2xs overflow-x-auto">
+          <div className="min-w-[860px]">
+            {/* Rows for Employees */}
+            <div className="space-y-6">
+              {filteredTimelines.length === 0 ? (
+                <div className="py-12 text-center text-xs text-gray-400">
+                  No employee activities recorded for this date.
+                </div>
+              ) : (
+                filteredTimelines.map((emp) => {
+                  return (
+                    <div key={emp.id} className="grid grid-cols-12 items-center gap-4">
+                      {/* Left Column: Employee Name */}
+                      <div className="col-span-2 text-xs font-semibold text-gray-800 dark:text-gray-100 truncate">
+                        {emp.name}
+                      </div>
+
+                      {/* Right Column: Multi-segment Activity Bar */}
+                      <div className="col-span-10 relative">
+                        {/* Background Track Bar */}
+                        <div className="h-9 w-full bg-gray-50 dark:bg-gray-800/60 rounded-xs relative overflow-hidden flex items-stretch">
+                          {emp.segments.length === 0 ? (
+                            <div className="w-full h-full flex items-center justify-center text-[11px] text-gray-400 dark:text-gray-500 font-normal">
+                              No activity tracked
+                            </div>
+                          ) : (
+                            emp.segments.map((seg) => {
+                              let leftPct = 0
+                              let widthPct = 0
+                              let isVisible = true
+
+                              if (timelineMode === '24H') {
+                                const segStart = seg.startMin
+                                let segEnd = seg.startMin + seg.durationMin
+                                if (selectedDate === todayActual) {
+                                  const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                                  segEnd = Math.min(segEnd, nowMin)
+                                }
+                                if (segEnd <= segStart) {
+                                  isVisible = false
+                                } else {
+                                  leftPct = (segStart / 1440) * 100
+                                  widthPct = ((segEnd - segStart) / 1440) * 100
+                                }
+                              } else {
+                                const officeStartMin = 600 // 10:00 AM
+                                const officeTotalMin = 540 // 10:00 to 19:00 (9 hours: 10:00 AM - 7:00 PM)
+                                const segStart = seg.startMin
+                                let segEnd = seg.startMin + seg.durationMin
+
+                                if (segEnd <= officeStartMin || segStart >= officeStartMin + officeTotalMin) {
+                                  isVisible = false
+                                } else {
+                                  const visibleStart = Math.max(officeStartMin, segStart)
+                                  let visibleEnd = Math.min(officeStartMin + officeTotalMin, segEnd)
+
+                                  // Strictly clamp visibleEnd to current time on Today so bars never exceed now!
+                                  if (selectedDate === todayActual) {
+                                    const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                                    visibleEnd = Math.min(visibleEnd, nowMin)
+                                  }
+
+                                  if (visibleEnd <= visibleStart) {
+                                    isVisible = false
+                                  } else {
+                                    const visibleDuration = visibleEnd - visibleStart
+                                    leftPct = ((visibleStart - officeStartMin) / officeTotalMin) * 100
+                                    widthPct = (visibleDuration / officeTotalMin) * 100
+                                  }
+                                }
+                              }
+
+                              if (!isVisible) return null
+
+                              const color = TYPE_CONFIG[seg.type]?.bgHex || '#3b82f6'
+
+                              return (
+                                <div
+                                  key={seg.id}
+                                  onMouseEnter={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect()
+                                    setHoveredSegment({
+                                      segment: seg,
+                                      employeeName: emp.name,
+                                      x: rect.left + rect.width / 2,
+                                      y: rect.top - 8,
+                                    })
+                                  }}
+                                  onMouseLeave={() => setHoveredSegment(null)}
+                                  className="absolute top-0 bottom-0 cursor-pointer hover:brightness-110 transition-all border-r border-black/5"
+                                  style={{
+                                    left: `${leftPct}%`,
+                                    width: `${widthPct}%`,
+                                    minWidth: '2px',
+                                    backgroundColor: color,
+                                  }}
+                                />
+                              )
+                            })
+                          )}
+
+                          {/* Current Time Line Marker on Today */}
+                          {selectedDate === todayActual && (() => {
+                            const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                            const nowPct =
+                              timelineMode === '24H'
+                                ? (nowMin / 1440) * 100
+                                : ((nowMin - 600) / 540) * 100
+                            if (nowPct >= 0 && nowPct <= 100) {
+                              return (
+                                <div
+                                  key="now-marker"
+                                  className="absolute top-0 bottom-0 w-0.5 bg-rose-500/80 z-20 pointer-events-none"
+                                  style={{ left: `${nowPct}%` }}
+                                  title="Current Time"
+                                />
+                              )
+                            }
+                            return null
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            {/* Bottom Timeline Axis & Ticks */}
+            <div className="grid grid-cols-12 items-center gap-4 mt-6 pt-3 border-t border-gray-150 dark:border-gray-800">
+              <div className="col-span-2" />
+              <div className="col-span-10 relative h-6">
+                {/* Now Badge on Axis */}
+                {selectedDate === todayActual && (() => {
+                  const nowMin = new Date().getHours() * 60 + new Date().getMinutes()
+                  const nowPct =
+                    timelineMode === '24H'
+                      ? (nowMin / 1440) * 100
+                      : ((nowMin - 600) / 540) * 100
+                  if (nowPct >= 0 && nowPct <= 100) {
+                    return (
+                      <div
+                        key="now-badge"
+                        className="absolute -translate-x-1/2 flex flex-col items-center pointer-events-none z-30"
+                        style={{ left: `${nowPct}%` }}
+                      >
+                        <span className="text-[9px] font-bold text-white bg-rose-500 px-1 py-0.5 rounded shadow-2xs">
+                          Now
+                        </span>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+
+                {activeTicks.map((tick, idx) => {
+                  const leftPct = (tick.min / activeTotalMinutes) * 100
+                  const isHour = !tick.label.startsWith(':')
+                  return (
+                    <div
+                      key={idx}
+                      className="absolute -translate-x-1/2 flex flex-col items-center"
+                      style={{ left: `${leftPct}%` }}
+                    >
+                      <span
+                        className={`text-[11px] ${
+                          isHour
+                            ? 'font-bold text-gray-800 dark:text-gray-200'
+                            : 'font-normal text-gray-400 dark:text-gray-500'
+                        }`}
+                      >
+                        {tick.label}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Interactive Tooltip (Screenshot 4) */}
+      {hoveredSegment && (
+        <div
+          className="fixed pointer-events-none z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 px-4 py-3 text-xs w-64 -translate-x-1/2 -translate-y-full mb-2 animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            left: `${hoveredSegment.x}px`,
+            top: `${hoveredSegment.y}px`,
+          }}
+        >
+          {/* Tooltip Title matching user reference */}
+          <div className="font-bold text-gray-900 dark:text-white truncate">
+            {hoveredSegment.segment.type === 'PRODUCTIVE'
+              ? `Productive App (${hoveredSegment.segment.appName})`
+              : hoveredSegment.segment.type === 'UNPRODUCTIVE'
+              ? `Unproductive App (${hoveredSegment.segment.appName})`
+              : hoveredSegment.segment.type === 'NEUTRAL'
+              ? `Neutral App (${hoveredSegment.segment.appName})`
+              : hoveredSegment.segment.type === 'IDLE'
+              ? `Idle Time (${hoveredSegment.segment.appName.includes('Lock') ? hoveredSegment.segment.appName : hoveredSegment.segment.windowTitle || 'Away'})`
+              : hoveredSegment.segment.type === 'NOT_IN_WORK'
+              ? hoveredSegment.segment.appName
+              : 'Untracked'}
+          </div>
+
+          {/* User & Time Range */}
+          <div className="text-gray-700 dark:text-gray-200 mt-1 font-medium truncate">
+            {hoveredSegment.employeeName} : {hoveredSegment.segment.startTimeStr} -{' '}
+            {hoveredSegment.segment.endTimeStr}
+          </div>
+
+          {/* Date */}
+          <div className="text-gray-500 dark:text-gray-400 mt-0.5">
+            Date : {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+          </div>
+
+          {/* Duration */}
+          <div className="text-gray-500 dark:text-gray-400 mt-0.5">
+            Duration: {hoveredSegment.segment.durationStr}
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}

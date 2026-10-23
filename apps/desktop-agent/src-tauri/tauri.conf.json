@@ -1,0 +1,49 @@
+{
+  "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Smart Employee Tracker",
+  "version": "1.1.0",
+  "identifier": "com.smartemployeetracker.app",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Smart Employee Tracker Agent v1.1.0",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "entitlements.plist",
+      "infoPlist": "Info.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://app.tracmatrix.com/api/agent/update/{{target}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGQjMxNjA3NkJGQkYxNEEKUldSSzhmdHJCeGF6ajF0NWd4dUdhNUpzbGxhK0hHemhmMVN0MjBsczJBMUJLVXFmd3NSWWxDZW8K"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "smart-employee-tracker",
+  "description": "Smart Employee Tracker - Enterprise Employee Productivity & Proof of Work Platform",
+  "author": "Rsm Monaem (https://www.linkedin.com/in/rsm-monaem/)",
+  "homepage": "https://www.linkedin.com/in/rsm-monaem/",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/desktop-agent"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:agent": "npm run tauri dev --workspace=apps/desktop-agent",
+    "build": "npm run build:web && npm run build:agent",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:agent": "npm run build --workspace=apps/desktop-agent"
+  },
+  "devDependencies": {
+    "supabase": "^2.115.0"
+  },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+}

@@ -1,0 +1,225 @@
+import { NextResponse } from 'next/server'
+import { createAdminClient } from '@/utils/supabase/admin'
+import { getSessionContext } from '@/utils/supabase/auth-context'
+
+export const dynamic = 'force-dynamic'
+
+const DEFAULT_TRACK_SETTINGS = {
+  // 1. Work Day Settings
+  workDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+
+  // 2. Work Time Settings
+  expectedWorkHours: '8 hour',
+  expectedProductiveTime: '6 hour',
+  expectedActiveTime: '8 hour (Recommended)',
+  timezone: 'Asia/Dhaka',
+  expectedClockIn: '09:00 AM',
+
+  // 3. Project Management
+  enableProjectManagement: true,
+  allowTeamAddEditDeleteTasks: true,
+  allowTeamCompleteAndHoldTasks: true,
+  allowTeamEditTaskTimes: true,
+  sendEmailOnTaskStatusChange: false,
+  autoStartEndTaskUsingCurrentTime: true,
+  restrictNewTasksWhenPending: false,
+  projectCurrency: 'United States Dollar ($)',
+
+  // 4. Leave Management
+  enableLeaveManagement: true,
+  casualLeaveQuota: 12,
+  sickLeaveQuota: 10,
+  earnedLeaveQuota: 15,
+
+  // 5. Manual Time
+  enableManualTimeToEveryone: false,
+
+  // 6. Untracked Hours Settings
+  untrackedHoursBehavior: 'exclude', // 'exclude' | 'include'
+
+  // 7. Payroll Settings
+  enablePayrollCalculator: false,
+
+  // 8. Keyboard & Mouse Activity Tracking
+  enableTrackKeypressCountWindows: true,
+  enableMouseActivityTrackingWindows: true,
+
+  // 9. Email Report Settings
+  emailReportScope: 'all', // 'all' | 'exclude_admin' | 'exclude_admin_head'
+
+  // 10. Screenshot Settings
+  enableScreenCapture: true,
+  blurScreenCapture: false,
+  screenshotInterval: 'Every 10 mins',
+  allowTimelapseVideo: true,
+  autoDeleteScreenshots: false,
+  screenshotRetentionDays: 7,
+
+  // 11. Idle Time Settings
+  idleTimeout: '1 min',
+  idleAlertSound: '',
+  idleAlertSoundName: '',
+
+  // 12. Permissions
+  hideAdminTrackingAndLeaveFromHeads: false,
+  allowEmployeeSeeScreenshot: true,
+  allowEmployeeDeleteScreenshot: false,
+  allowHeadsDeleteExportScreenshot: true,
+  allowEmployeeSeeTimesheet: true,
+  allowEmployeeSeeTimelapse: true,
+  allowHeadsReviewAppsSites: true,
+  allowEmployeeAccessWebsite: true,
+  hideAdminDataFromAllPages: false,
+  hideTeamHeadDataFromAllPages: false,
+  hideEditTrackSettingsFromHeads: true,
+
+  // 13. Holiday Settings
+  autoSendHolidayNotifications: true,
+
+  // 14. API Settings
+  enableApiAccess: false,
+
+  // 15. Real Time Alert Settings
+  enableRealTimeAlert: true,
+
+  // Member overrides
+  memberOverrides: {} as Record<string, Record<string, unknown>>,
+}
+
+export async function GET() {
+  try {
+    const session = await getSessionContext()
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Employees are restricted from reading organization configuration or member lists
+    if (session.role === 'EMPLOYEE') {
+      return NextResponse.json({
+        success: true,
+        role: 'EMPLOYEE',
+        settings: null,
+        members: [],
+      })
+    }
+
+    const supabase = createAdminClient()
+
+    // 1. Fetch saved settings with strict Tenant Isolation
+    const tenantKey = session.tenantId ? `organization_track_settings_${session.tenantId}` : null
+    const keysToFetch = tenantKey ? [tenantKey, 'organization_track_settings'] : ['organization_track_settings']
+
+    const { data: rows, error } = await supabase
+      .from('platform_settings')
+      .select('key, value, updated_at')
+      .in('key', keysToFetch)
+
+    if (error) {
+      console.warn('Could not read settings from platform_settings:', error.message)
+    }
+
+    const tenantRow = rows?.find((r) => r.key === tenantKey)
+    const defaultRow = rows?.find((r) => r.key === 'organization_track_settings')
+    const row = tenantRow || defaultRow
+
+    const savedSettings = (row?.value as Record<string, unknown>) || {}
+    const mergedSettings = {
+      ...DEFAULT_TRACK_SETTINGS,
+      ...savedSettings,
+      updated_at: row?.updated_at || null,
+    }
+
+    // 2. Fetch users for members table with strict Tenant Isolation
+    let usersQuery = supabase
+      .from('users')
+      .select('id, full_name, email, role, is_active, tracking_mode, created_at')
+      .order('created_at', { ascending: false })
+
+    if (!session.isSuperAdmin) {
+      if (!session.tenantId) {
+        return NextResponse.json({
+          success: true,
+          settings: mergedSettings,
+          members: [],
+        })
+      }
+      usersQuery = usersQuery.eq('tenant_id', session.tenantId)
+    }
+
+    const { data: users, error: usersErr } = await usersQuery
+
+    if (usersErr) {
+      console.warn('Could not read users for settings:', usersErr.message)
+    }
+
+    return NextResponse.json({
+      success: true,
+      settings: mergedSettings,
+      members: users || [],
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('Settings GET error:', err)
+    return NextResponse.json(
+      { success: false, error: message, settings: DEFAULT_TRACK_SETTINGS, members: [] },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const session = await getSessionContext()
+    if (!session || (session.role !== 'TENANT_ADMIN' && !session.isSuperAdmin)) {
+      return NextResponse.json(
+        { success: false, error: 'Forbidden: Admin access required to modify settings' },
+        { status: 403 }
+      )
+    }
+
+    const body = await req.json()
+    const supabase = createAdminClient()
+
+    const tenantId = session.tenantId
+    const targetKey = tenantId ? `organization_track_settings_${tenantId}` : 'organization_track_settings'
+
+    const { error } = await supabase
+      .from('platform_settings')
+      .upsert(
+        {
+          key: targetKey,
+          value: body,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      )
+
+    // Always keep the global fallback in sync so all desktop agents receive the updated policy
+    await supabase
+      .from('platform_settings')
+      .upsert(
+        {
+          key: 'organization_track_settings',
+          value: body,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      )
+
+    if (error) {
+      console.error('Error saving track settings:', error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Settings saved successfully',
+      settings: body,
+      updated_at: new Date().toISOString(),
+    })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    console.error('Settings POST error:', err)
+    return NextResponse.json({ success: false, error: message }, { status: 500 })
+  }
+}

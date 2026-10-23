@@ -1,0 +1,472 @@
+use xcap::Monitor;
+use active_win_pos_rs::get_active_window;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use serde::{Serialize, Deserialize};
+use tauri::WebviewWindow;
+
+#[derive(Serialize, Deserialize)]
+pub struct ActiveWindowData {
+    title: String,
+    app_name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CapturedScreen {
+    pub screen_index: usize,
+    pub screen_name: String,
+    pub is_primary: bool,
+    pub base64_image: String,
+}
+
+#[tauri::command]
+fn capture_all_screens() -> Result<Vec<CapturedScreen>, String> {
+    let monitors = match Monitor::all() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Failed to list monitors: {e}");
+            return capture_single_screen_fallback();
+        }
+    };
+
+    if monitors.is_empty() {
+        return capture_single_screen_fallback();
+    }
+
+    let mut screens = Vec::new();
+
+    for (idx, monitor) in monitors.into_iter().enumerate() {
+        let is_primary = monitor.is_primary().unwrap_or(idx == 0);
+        let name = monitor.name().unwrap_or_default();
+        let display_name = if name.trim().is_empty() {
+            format!("Screen {}", idx + 1)
+        } else {
+            name
+        };
+
+        match monitor.capture_image() {
+            Ok(image) => {
+                let mut dyn_img = image::DynamicImage::ImageRgba8(image);
+                // Downscale large 4K / 5K / Retina screens to max 1920px width to save 75%+ memory and disk space
+                if dyn_img.width() > 1920 {
+                    dyn_img = dyn_img.resize(1920, 1080, image::imageops::FilterType::Triangle);
+                }
+                let rgb_image = dyn_img.to_rgb8();
+                let mut buffer = Vec::new();
+                let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 70);
+                if rgb_image.write_with_encoder(encoder).is_ok() {
+                    let base64_image = BASE64.encode(&buffer);
+                    screens.push(CapturedScreen {
+                        screen_index: idx + 1,
+                        screen_name: display_name,
+                        is_primary,
+                        base64_image,
+                    });
+                }
+            }
+            Err(err) => {
+                eprintln!("Failed to capture monitor {idx} ({display_name}): {err}");
+            }
+        }
+    }
+
+    if screens.is_empty() {
+        return capture_single_screen_fallback();
+    }
+
+    Ok(screens)
+}
+
+fn capture_single_screen_fallback() -> Result<Vec<CapturedScreen>, String> {
+    let base64_img = capture_screen()?;
+    Ok(vec![CapturedScreen {
+        screen_index: 1,
+        screen_name: "Screen 1".to_string(),
+        is_primary: true,
+        base64_image: base64_img,
+    }])
+}
+
+#[tauri::command]
+fn capture_screen() -> Result<String, String> {
+    let monitors = Monitor::all().map_err(|e| e.to_string())?;
+    
+    // Grab the primary monitor (or first one)
+    let monitor = monitors.into_iter().next().ok_or("No monitors found")?;
+    
+    let image = monitor.capture_image().map_err(|e| e.to_string())?;
+    
+    let mut dyn_img = image::DynamicImage::ImageRgba8(image);
+    if dyn_img.width() > 1920 {
+        dyn_img = dyn_img.resize(1920, 1080, image::imageops::FilterType::Triangle);
+    }
+    let rgb_image = dyn_img.to_rgb8();
+    
+    let mut buffer = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 70);
+    rgb_image.write_with_encoder(encoder).map_err(|e| e.to_string())?;
+    
+    let base64_image = BASE64.encode(&buffer);
+    Ok(base64_image)
+}
+
+#[tauri::command]
+fn get_focused_window() -> Result<ActiveWindowData, String> {
+    match get_active_window() {
+        Ok(active_window) => {
+            Ok(ActiveWindowData {
+                title: active_window.title.clone(),
+                app_name: active_window.app_name.clone(),
+            })
+        },
+        Err(e) => {
+            #[cfg(target_os = "macos")]
+            {
+                // Robust macOS fallback: If active_win_pos_rs fails or lacks permission,
+                // query the frontmost process and window title directly via System Events.
+                // This ensures apps like Chrome, VS Code, Slack, etc. are ALWAYS captured!
+                use std::process::Command;
+                let script = r#"
+                    tell application "System Events"
+                        set frontApp to first application process whose frontmost is true
+                        set appName to name of frontApp
+                        try
+                            set winTitle to name of window 1 of frontApp
+                        on error
+                            set winTitle to appName & " Window"
+                        end try
+                        return appName & "|||" & winTitle
+                    end tell
+                "#;
+                if let Ok(output) = Command::new("osascript").args(&["-e", script]).output() {
+                    let result_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !result_str.is_empty() {
+                        let parts: Vec<&str> = result_str.split("|||").collect();
+                        let app_name = parts.get(0).unwrap_or(&"Active Session").trim().to_string();
+                        let title = parts.get(1).unwrap_or(&"Active Window").trim().to_string();
+                        if !app_name.is_empty() {
+                            return Ok(ActiveWindowData {
+                                title: if title.is_empty() { format!("{} Active", app_name) } else { title },
+                                app_name,
+                            });
+                        }
+                    }
+                }
+            }
+
+            // When there's no active window or permissions are denied
+            Err(format!("Could not get active window: {:?}", e))
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[allow(non_snake_case)]
+#[repr(C)]
+struct LASTINPUTINFO {
+    cbSize: u32,
+    dwTime: u32,
+}
+
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
+    fn GetTickCount() -> u32;
+}
+
+#[tauri::command]
+fn get_system_idle_seconds() -> Result<f64, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::process::Command;
+        let output = Command::new("ioreg")
+            .args(&["-c", "IOHIDSystem"])
+            .output();
+
+        if let Ok(out) = output {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                if line.contains("\"HIDIdleTime\" =") {
+                    if let Some(val_str) = line.split('=').nth(1) {
+                        let trimmed = val_str.trim();
+                        if let Ok(nanos) = trimmed.parse::<u64>() {
+                            let seconds = (nanos as f64) / 1_000_000_000.0;
+                            return Ok(seconds);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(0.0)
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut lii = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
+        unsafe {
+            if GetLastInputInfo(&mut lii) != 0 {
+                let current_tick = GetTickCount();
+                // Handle potential 49.7 day wrap-around with wrapping_sub
+                let elapsed_ms = current_tick.wrapping_sub(lii.dwTime);
+                let seconds = (elapsed_ms as f64) / 1000.0;
+                return Ok(seconds);
+            }
+        }
+        Ok(0.0)
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        Ok(0.0)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct NativeHttpResponse {
+    pub status: u16,
+    pub status_text: String,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body_text: Option<String>,
+    pub body_base64: Option<String>,
+}
+
+#[tauri::command]
+async fn native_request(
+    url: String,
+    method: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Option<Vec<u8>>,
+) -> Result<NativeHttpResponse, String> {
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let req_method = match method.to_uppercase().as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "PATCH" => reqwest::Method::PATCH,
+        "DELETE" => reqwest::Method::DELETE,
+        "HEAD" => reqwest::Method::HEAD,
+        "OPTIONS" => reqwest::Method::OPTIONS,
+        _ => reqwest::Method::GET,
+    };
+
+    let mut builder = client.request(req_method, &url);
+
+    for (k, v) in headers {
+        let lk = k.to_lowercase();
+        if lk == "host" || lk == "content-length" {
+            continue;
+        }
+        if let (Ok(hk), Ok(hv)) = (
+            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+            reqwest::header::HeaderValue::from_str(&v),
+        ) {
+            builder = builder.header(hk, hv);
+        }
+    }
+
+    if let Some(b) = body {
+        builder = builder.body(b);
+    }
+
+    let resp = builder.send().await.map_err(|e| format!("Network error: {}", e))?;
+
+    let status = resp.status().as_u16();
+    let status_text = resp.status().canonical_reason().unwrap_or("").to_string();
+
+    let mut res_headers = std::collections::HashMap::new();
+    for (name, val) in resp.headers() {
+        if let Ok(v_str) = val.to_str() {
+            res_headers.insert(name.as_str().to_string(), v_str.to_string());
+        }
+    }
+
+    let bytes = resp.bytes().await.map_err(|e| format!("Failed to read body: {}", e))?;
+    let (body_text, body_base64) = match String::from_utf8(bytes.to_vec()) {
+        Ok(s) => (Some(s), None),
+        Err(_) => (None, Some(BASE64.encode(&bytes))),
+    };
+
+    Ok(NativeHttpResponse {
+        status,
+        status_text,
+        headers: res_headers,
+        body_text,
+        body_base64,
+    })
+}
+
+#[tauri::command]
+fn bring_to_front(window: WebviewWindow) -> Result<(), String> {
+    // Unminimize if minimized
+    let _ = window.unminimize();
+    // Show window if hidden
+    let _ = window.show();
+    // Focus window
+    let _ = window.set_focus();
+    // Briefly set always on top to ensure it breaks through other apps, then disable
+    let _ = window.set_always_on_top(true);
+    let win_clone = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        let _ = win_clone.set_always_on_top(false);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn enable_auto_start(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let exe_path = current_exe.to_string_lossy().to_string();
+
+        if enabled {
+            let status = Command::new("reg")
+                .args(&[
+                    "add",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v",
+                    "SmartEmployeeTracker",
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    &format!("\"{}\"", exe_path),
+                    "/f",
+                ])
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err("Failed to register Windows auto-start".into());
+            }
+        } else {
+            let _ = Command::new("reg")
+                .args(&[
+                    "delete",
+                    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                    "/v",
+                    "SmartEmployeeTracker",
+                    "/f",
+                ])
+                .status();
+        }
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::fs;
+        use std::process::Command;
+
+        let home = std::env::var("HOME").map_err(|_| "HOME env not found".to_string())?;
+        let launch_agents_dir = format!("{}/Library/LaunchAgents", home);
+        let plist_path = format!("{}/com.smartemployeetracker.app.plist", launch_agents_dir);
+
+        if enabled {
+            let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exe_path = current_exe.to_string_lossy().to_string();
+
+            let plist_content = format!(
+r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.smartemployeetracker.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{}</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>"#,
+                exe_path
+            );
+
+            let _ = fs::create_dir_all(&launch_agents_dir);
+            fs::write(&plist_path, plist_content).map_err(|e| e.to_string())?;
+            let _ = Command::new("launchctl").args(&["load", "-w", &plist_path]).status();
+        } else {
+            let _ = Command::new("launchctl").args(&["unload", "-w", &plist_path]).status();
+            let _ = fs::remove_file(&plist_path);
+        }
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+fn is_auto_start_enabled() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let output = Command::new("reg")
+            .args(&[
+                "query",
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+                "/v",
+                "SmartEmployeeTracker",
+            ])
+            .output();
+
+        if let Ok(out) = output {
+            return Ok(out.status.success());
+        }
+        return Ok(false);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var("HOME").map_err(|_| "HOME env not found".to_string())?;
+        let plist_path = format!("{}/Library/LaunchAgents/com.smartemployeetracker.app.plist", home);
+        return Ok(std::path::Path::new(&plist_path).exists());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Ok(false)
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  tauri::Builder::default()
+    .plugin(tauri_plugin_os::init())
+    .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_updater::Builder::new().build())
+    .invoke_handler(tauri::generate_handler![
+        capture_all_screens,
+        capture_screen,
+        get_focused_window,
+        get_system_idle_seconds,
+        native_request,
+        bring_to_front,
+        enable_auto_start,
+        is_auto_start_enabled
+    ])
+    .setup(|app| {
+      if cfg!(debug_assertions) {
+        app.handle().plugin(
+          tauri_plugin_log::Builder::default()
+            .level(log::LevelFilter::Info)
+            .build(),
+        )?;
+      }
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error while running tauri application");
+}
+
