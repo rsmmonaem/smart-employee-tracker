@@ -307,16 +307,17 @@ To elevate your account to `SUPER_ADMIN`:
 
 ---
 
-## 8. Desktop Tracking Agent Setup (Windows & Mac)
+## 8. Desktop Tracking Agent Setup (Windows & macOS)
 
 The Desktop Tracking Agent records visual proof of work (screenshots), keyboard/mouse activity metrics, and active window titles.
 
 ### 📦 Pre-Built Downloads
 Pre-compiled production binaries are bundled inside `apps/web/public/downloads/`:
-- **Windows:** `Smart-Employee-Tracker.exe`
-- **macOS (Apple Silicon & Intel):** `Smart-Employee-Tracker-macOS.dmg`
+- **Windows:** `Smart-Employee-Tracker.exe` (31 MB optimized release binary)
+- **macOS (Apple Silicon & Intel):** `Smart-Employee-Tracker-macOS.dmg` (Universal Apple Silicon & Intel)
+- **📱 Android App:** *Coming Soon (in active development)*
 
-Employees can download the installer directly from their user dashboard!
+Employees can download the desktop client directly from their dashboard settings page!
 
 ### 🔄 In-App One-Click Auto-Updater (v1.1.0)
 The desktop client features an integrated auto-updater:

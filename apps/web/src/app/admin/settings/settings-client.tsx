@@ -209,27 +209,22 @@ export function DownloadAppsView() {
 
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Android Card */}
-          <div className="flex flex-col justify-between rounded-xl border-2 border-emerald-500/30 bg-emerald-50/20 p-5 dark:border-emerald-500/40 dark:bg-emerald-950/10">
+          <div className="flex flex-col justify-between rounded-xl border border-gray-200 bg-gray-50/50 p-5 dark:border-gray-800 dark:bg-gray-850 opacity-90">
             <div>
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
-                  📱 Mobile (New)
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                  📱 Mobile (Coming Soon)
                 </span>
-                <span className="text-xs font-mono text-gray-500">v1.0.0 (5.1 MB)</span>
+                <span className="text-xs font-mono text-gray-500">In Development</span>
               </div>
               <h3 className="mt-3 text-lg font-bold text-gray-900 dark:text-white">Android Phone & Tablet</h3>
               <p className="mt-2 text-xs text-gray-600 dark:text-gray-300">
-                Full background screenshots (MediaProjection), mobile app usage tracking (UsageStatsManager), live notification timer, and battery optimization exemption.
+                Mobile time tracking, location telemetry, and background productivity monitoring for on-the-go teams.
               </p>
             </div>
-            <a
-              href="/downloads/Smart-Employee-Tracker.apk"
-              download
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
-            >
-              <Download className="h-4 w-4" />
-              Download Android APK
-            </a>
+            <div className="mt-5 flex w-full items-center justify-center gap-2 rounded-lg bg-gray-200 dark:bg-gray-800 px-4 py-2.5 text-sm font-semibold text-gray-500 dark:text-gray-400 cursor-not-allowed">
+              🚀 Coming Soon
+            </div>
           </div>
 
           {/* macOS Universal & Apple Silicon Card */}

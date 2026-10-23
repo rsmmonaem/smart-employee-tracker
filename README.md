@@ -51,7 +51,8 @@ Built with a high-performance Rust backend, a modern Next.js 14 cloud management
   - **merchant.eps.com.bd** (Electronic Payment System — Visa/Mastercard/Amex/Internet Banking)
   - **Stripe Elements** (International credit/debit cards)
   - Dual Currency support: **BDT (৳)** and **USD ($)** with monthly & annual discount cycles.
-- **Native Windows Executable (`.exe`)**: Production-ready, optimized desktop client agent compiled for Windows (`x86_64-pc-windows-gnu`).
+- **Cross-Platform Native Desktop Client (Windows & macOS)**: Production-ready native tracking agent built with Tauri 2 + Rust, available for **Windows (`.exe`)** and **macOS (`.dmg` for Apple Silicon M1/M2/M3/M4 & Intel)**.
+- **📱 Android Mobile Tracker (Coming Soon)**: Smartphone and tablet productivity tracking app currently in active development.
 - **SuperAdmin Command Center**: Tenant management, subscription quota enforcement, dynamic package pricing, revenue analytics, and platform controls.
 
 ---
@@ -69,15 +70,20 @@ Built with a high-performance Rust backend, a modern Next.js 14 cloud management
 
 ---
 
-## Desktop Agent Executable (`.exe`)
+## 💻 Cross-Platform Native Desktop Clients (Windows & macOS)
 
-The Windows executable is pre-compiled and available in:
-- **`dist-windows/Smart-Employee-Tracker.exe`** (31 MB optimized release binary)
+Smart Employee Tracker includes high-performance, native desktop tracking agents built with **Tauri 2 + Rust**:
 
-To recompile the Windows executable on any system with the MinGW-w64 toolchain:
-```bash
-cargo build --release --target x86_64-pc-windows-gnu --manifest-path apps/desktop-agent/src-tauri/Cargo.toml
-```
+### 🪟 Windows Client:
+- Pre-compiled release binary: **`dist-windows/Smart-Employee-Tracker.exe`** (31 MB optimized release binary)
+- Also available as standalone executable and NSIS installer.
+
+### 🍎 macOS Client (Apple Silicon & Intel):
+- Pre-compiled release installer: **`dist-mac/Smart-Employee-Tracker-macOS.dmg`**
+- Universal binary supporting **Apple Silicon (M1/M2/M3/M4)** and **Intel x86_64** processors.
+
+### 📱 Android Tracker (Coming Soon):
+- Mobile application for smartphone and tablet attendance tracking is currently in active development.
 
 ---
 
