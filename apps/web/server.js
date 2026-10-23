@@ -34,12 +34,12 @@ app.prepare().then(() => {
       }
     }
 
-    // Auto redirect tracmatrix.com and HTTP -> https://app.tracmatrix.com
+    // Auto redirect www to non-www
     const rawHost = (req.headers['x-forwarded-host'] || req.headers.host || '').toLowerCase().trim();
-    const rawProto = (req.headers['x-forwarded-proto'] || 'https').toLowerCase().trim();
-    if (rawHost === 'tracmatrix.com' || rawHost === 'www.tracmatrix.com' || (rawProto === 'http' && rawHost.includes('tracmatrix.com'))) {
+    if (rawHost.startsWith('www.')) {
+      const nonWww = rawHost.replace(/^www\./, '');
       res.writeHead(301, {
-        Location: `https://app.tracmatrix.com${req.url}`,
+        Location: `https://${nonWww}${req.url}`,
       });
       res.end();
       return;

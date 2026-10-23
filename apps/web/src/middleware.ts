@@ -5,14 +5,12 @@ export async function middleware(request: NextRequest) {
   const host = (request.headers.get('x-forwarded-host') || request.headers.get('host') || '').toLowerCase().trim()
   const proto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '')).toLowerCase().trim()
 
-  // 0. Domain & HTTPS Redirection: tracmatrix.com or www.tracmatrix.com or http -> https://app.tracmatrix.com/
-  const isBareDomain = host === 'tracmatrix.com' || host === 'www.tracmatrix.com'
+  // 0. Domain & HTTPS Redirection: enforce HTTPS in production
   const isHttp = proto === 'http'
 
-  if (isBareDomain || (process.env.NODE_ENV === 'production' && isHttp && !host.includes('localhost') && !host.includes('127.0.0.1'))) {
+  if (process.env.NODE_ENV === 'production' && isHttp && !host.includes('localhost') && !host.includes('127.0.0.1')) {
     const redirectUrl = new URL(request.url)
     redirectUrl.protocol = 'https:'
-    redirectUrl.host = 'app.tracmatrix.com'
     return NextResponse.redirect(redirectUrl, 308)
   }
 

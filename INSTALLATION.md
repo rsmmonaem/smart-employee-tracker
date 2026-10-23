@@ -7,6 +7,28 @@
 
 ---
 
+## ⚡ 1-Click Fast Installation (Web Wizard)
+
+Smart Employee Tracker includes an interactive, browser-based web installer at **`/install`**!
+
+1. Clone or extract the source code on your server.
+2. Run `npm install` and start the server:
+   ```bash
+   npm run build:web
+   node apps/web/server.js
+   ```
+3. Open your browser and navigate to:
+   ```text
+   http://your-server-ip:3000/install  (or https://yourdomain.com/install)
+   ```
+4. Follow the 3-step visual wizard:
+   - **Step 1:** System health & Node.js verification
+   - **Step 2:** Paste your Database connection string (Postgres / Supabase) and click **"Test Connection"**
+   - **Step 3:** Enter your SuperAdmin email & password and click **"Install Database & Launch Platform"**
+5. The installer automatically migrates all tables, sets up RLS policies, creates the `screenshots` storage bucket, provisions your SuperAdmin account, and locks the installer!
+
+---
+
 ## 📋 Table of Contents
 1. [System Requirements & Prerequisites](#1-system-requirements--prerequisites)
 2. [Database Setup (Supabase / PostgreSQL)](#2-database-setup-supabase--postgresql)

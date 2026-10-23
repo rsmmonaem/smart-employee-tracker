@@ -13,10 +13,12 @@
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.33.0",
     "next": "14.2.35",
     "nodemailer": "^10.1.7",
+    "pg": "^8.23.1",
     "react": "^18",
     "react-dom": "^18",
     "sharp": "^0.35.5"
