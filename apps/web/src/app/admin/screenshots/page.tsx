@@ -120,6 +120,9 @@ export default function ScreenshotsPage() {
   const pageSizeRef = useRef(pageSize)
   pageSizeRef.current = pageSize
 
+  const realtimeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isFetchingRef = useRef<boolean>(false)
+
   const supabase = createClient()
   const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://supabase.tracmatrix.com'
 
@@ -148,6 +151,8 @@ export default function ScreenshotsPage() {
     team = selectedTeamRef.current,
     date = selectedDateRef.current
   ) => {
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
     try {
       setLoading(true)
       // Dedicated server API with tenant isolation, date filtering, team and employee filters
@@ -179,6 +184,7 @@ export default function ScreenshotsPage() {
     } catch (err) {
       console.error('Failed to fetch screenshots:', err)
     } finally {
+      isFetchingRef.current = false
       setLoading(false)
     }
   }, [])
@@ -203,43 +209,70 @@ export default function ScreenshotsPage() {
   useEffect(() => {
     fetchTenantPlan()
 
-    // Realtime Postgres Changes Subscription
+    const todayStr = new Date().toISOString().split('T')[0]
+
+    const triggerDebouncedFetch = () => {
+      if (realtimeTimeoutRef.current) clearTimeout(realtimeTimeoutRef.current)
+      realtimeTimeoutRef.current = setTimeout(() => {
+        fetchScreenshots(
+          currentPageRef.current,
+          pageSizeRef.current,
+          selectedUserRef.current,
+          selectedTeamRef.current,
+          selectedDateRef.current
+        )
+      }, 3000)
+    }
+
+    // Realtime Postgres Changes Subscription - Listen only to INSERT and DELETE, not UPDATE
+    // (Prevents runaway fetch loops caused by background compression script updating records)
     const channel = supabase
       .channel('realtime-screenshots-grid')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'screenshots' },
+        { event: 'INSERT', schema: 'public', table: 'screenshots' },
         () => {
-          fetchScreenshots(
-            currentPageRef.current,
-            pageSizeRef.current,
-            selectedUserRef.current,
-            selectedTeamRef.current,
-            selectedDateRef.current
-          )
+          // Only refetch on new incoming screenshots if viewing today's date or no date filter
+          if (selectedDateRef.current && selectedDateRef.current !== todayStr) {
+            return
+          }
+          triggerDebouncedFetch()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'screenshots' },
+        () => {
+          triggerDebouncedFetch()
         }
       )
       .subscribe()
 
     return () => {
+      if (realtimeTimeoutRef.current) clearTimeout(realtimeTimeoutRef.current)
       supabase.removeChannel(channel)
     }
   }, [supabase, refreshTrigger, fetchScreenshots])
 
-  // Periodic Auto-refresh when enabled (every 8 seconds) - strictly preserving current employee filter
+  // Periodic Auto-refresh when enabled (every 15 seconds) - only for today or no filter
   useEffect(() => {
     if (!autoRefresh) return
+    const todayStr = new Date().toISOString().split('T')[0]
+    if (selectedDate && selectedDate !== todayStr) return
+
     const interval = setInterval(() => {
-      fetchScreenshots(
-        currentPageRef.current,
-        pageSizeRef.current,
-        selectedUserRef.current,
-        selectedTeamRef.current,
-        selectedDateRef.current
-      )
-    }, 8000)
+      if (!isFetchingRef.current) {
+        fetchScreenshots(
+          currentPageRef.current,
+          pageSizeRef.current,
+          selectedUserRef.current,
+          selectedTeamRef.current,
+          selectedDateRef.current
+        )
+      }
+    }, 15000)
     return () => clearInterval(interval)
-  }, [autoRefresh, fetchScreenshots])
+  }, [autoRefresh, selectedDate, fetchScreenshots])
 
   const toggleSelect = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation()
