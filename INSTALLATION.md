@@ -348,7 +348,8 @@ Smart Employee Tracker **v1.1.0** features an integrated Ultra-Compressed WebP S
 
 ---
 
-## 📞 Support & Inquiries
-- **Lead Developer:** Rsm Monaem
+## 📞 Support & Direct Inquiries
+Need installation assistance, custom server deployment help, or encounter any issues? Contact the lead developer directly:
+- **WhatsApp:** **[@rsmmonaemwp](https://wa.me/message/rsmmonaemwp)** (`@rsmmonaemwp`)
 - **LinkedIn Profile:** [https://www.linkedin.com/in/rsm-monaem/](https://www.linkedin.com/in/rsm-monaem/)
 - **Repository Support:** Submit an Issue or Pull Request on GitHub.

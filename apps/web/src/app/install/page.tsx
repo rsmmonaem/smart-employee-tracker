@@ -487,6 +487,20 @@ export default function InstallPage() {
               </div>
             </div>
           )}
+          {/* WhatsApp Direct Support Contact */}
+          <div className="pt-4 text-center border-t border-gray-800/80">
+            <p className="text-[11px] text-gray-500 flex items-center justify-center gap-1.5">
+              <span>Need setup assistance or direct help? Contact on WhatsApp:</span>
+              <a
+                href="https://wa.me/message/rsmmonaemwp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-400 hover:text-emerald-300 font-semibold underline underline-offset-2 transition-colors"
+              >
+                @rsmmonaemwp
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </div>

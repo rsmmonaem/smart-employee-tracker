@@ -2,6 +2,7 @@
 
 > **Next-Generation Enterprise Employee Productivity, Activity Tracking & Proof of Work SaaS Platform**  
 > **Author:** [Rsm Monaem](https://www.linkedin.com/in/rsm-monaem/)  
+> **WhatsApp Support:** [@rsmmonaemwp](https://wa.me/message/rsmmonaemwp) (`@rsmmonaemwp`)  
 > **LinkedIn:** [https://www.linkedin.com/in/rsm-monaem/](https://www.linkedin.com/in/rsm-monaem/)  
 > **Documentation:** [Complete Installation & Setup Guide (INSTALLATION.md)](file:///Users/rsmmonaem/Downloads/smart-employee-tracker/INSTALLATION.md)
 
@@ -119,8 +120,9 @@ npm run tauri dev
 
 ---
 
-## Author & Credits
+## Author & Support
 
 - **Creator & Lead Engineer**: **Rsm Monaem**
+- **WhatsApp Support**: **[@rsmmonaemwp](https://wa.me/message/rsmmonaemwp)** (`@rsmmonaemwp`)
 - **LinkedIn**: [https://www.linkedin.com/in/rsm-monaem/](https://www.linkedin.com/in/rsm-monaem/)
 - **License**: MIT
