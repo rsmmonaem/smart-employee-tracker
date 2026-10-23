@@ -597,111 +597,115 @@ export async function handleMonthlyAttendanceReport({
     let aiArchetype = {
       id: 'steady-anchor',
       titleEn: 'The Steady Anchor',
-      titleBn: 'ধারাবাহিক ও দায়িত্বশীল কর্মী',
+      titleBn: 'Consistent & Reliable Professional',
       badgeColor: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
       icon: '⚖️',
-      tagline: 'নিয়মিত ও নির্ভরযোগ্য; অফিসে এসে নির্ধারিত দায়িত্ব সুষ্ঠুভাবে পালন করেন।',
+      tagline: 'Consistent and reliable; fulfills assigned tasks smoothly during scheduled office hours.',
     }
 
     if (daysPresent >= 12 && attendanceRate >= 90 && punctualityRate >= 80 && avgDailyWorkHours >= 7.8 && breakExcessMins === 0 && diligence >= 85) {
       aiArchetype = {
         id: 'high-performer',
         titleEn: 'The Dedicated High Performer',
-        titleBn: 'নিষ্ঠাবান ও অনুকরণীয় কর্মী',
+        titleBn: 'Exemplary & Top Contributor',
         badgeColor: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
         icon: '🌟',
-        tagline: 'সর্বদা সময়নিষ্ঠ, কাজের প্রতি গভীর নিবেদিত এবং দলের অন্যদের চেয়ে বেশি একাগ্র।',
+        tagline: 'Always punctual, highly dedicated, and demonstrates superior work focus across all tasks.',
       }
     } else if (daysLate >= 4 && (daysLate / Math.max(1, daysPresent)) >= 0.35 && avgDailyWorkHours >= 7.8) {
       aiArchetype = {
         id: 'late-sprinter',
         titleEn: 'The Late Sprinter',
-        titleBn: 'দেরিতে এলেও কাজে গভীর ফোকাস',
+        titleBn: 'Late Arrival with High Evening Output',
         badgeColor: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
         icon: '⚡',
-        tagline: 'সকালে কিছুটা দেরিতে আসলেও সন্ধ্যায় অতিরিক্ত সময় দিয়ে কাজের লক্ষ্য পূরণ করেন।',
+        tagline: 'Arrives slightly late in the morning but compensates with intense focus and evening hours to meet goals.',
       }
     } else if (breakExcessMins >= 15 || avgDailyBreakMins >= 75) {
       aiArchetype = {
         id: 'break-stretcher',
         titleEn: 'The Break Stretcher',
-        titleBn: 'অতিরিক্ত বিরতি ও ডেস্কে অনুপস্থিতি ঝুঁকি',
+        titleBn: 'Excessive Breaks & Desk Absence Risk',
         badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
         icon: '☕',
-        tagline: 'কাজের মাঝে ঘন ঘন বা অতিরিক্ত সময় বিরতি নেওয়ার স্পষ্ট প্রবণতা দেখা যায়।',
+        tagline: 'Frequent or extended break intervals exceeding designated company limits.',
       }
     } else if (daysLate >= 5 && punctualityRate < 60) {
       aiArchetype = {
         id: 'chronic-latecomer',
         titleEn: 'The Chronic Latecomer',
-        titleBn: 'নিয়মিত দেরিতে আগমনকারী',
+        titleBn: 'Recurring Tardy Pattern',
         badgeColor: 'bg-rose-500/10 text-rose-500 border-rose-500/20',
         icon: '⚠️',
-        tagline: 'মাসের অধিকাংশ দিন অফিস শুরুর নির্ধারিত সময়ের পর প্রবেশ করেন; শিফট ডিসিপ্লিন দুর্বল।',
+        tagline: 'Enters significantly past shift start on majority of working days; needs shift discipline.',
       }
     } else if (attendanceRate < 60 || daysAbsent >= 5 || diligence < 50) {
       aiArchetype = {
         id: 'disengagement-risk',
         titleEn: 'Disengagement & Slacking Risk',
-        titleBn: 'কাজে অনীহা ও ফাঁকিঝুঁকির লক্ষণ',
+        titleBn: 'Low Participation & Retention Alert',
         badgeColor: 'bg-red-500/10 text-red-500 border-red-500/20',
         icon: '🛑',
-        tagline: 'উপস্থিতি ও কর্মঘণ্টা আশঙ্কাজনকভাবে কম; কাজে উদাসীনতা ও দায়িত্ব এড়ানোর ঝুঁকি রয়েছে।',
+        tagline: 'Critically low attendance and work hours; demonstrates noticeable disengagement and slacking risk.',
       }
     }
 
-    // AI Behavioral Habit Narrative Generation (Bengali & English)
+    // Behavioral Habit Narrative Generation (100% English)
     const arrivalPunctualityNarrative =
       daysPresent === 0
-        ? `চলতি মাসে কোনো উপস্থিতির রেকর্ড নেই।`
-        : `গড় আগমন সময়: ${avgClockIn} (অফিস শিফট: ১০:০০ AM)। ${daysPresent} কার্যদিবসের মধ্যে ${daysLate} দিন দেরিতে প্রবেশ করেছেন (সময়নিষ্ঠতার হার ${punctualityRate}%)। ${
+        ? 'No attendance records recorded for the selected month.'
+        : `Average arrival time: ${avgClockIn} (Scheduled shift: 10:00 AM). Late on ${daysLate} of ${daysPresent} recorded working days (${punctualityRate}% punctuality rate). ${
             punctualityRate >= 85
-              ? 'তিনি প্রায় প্রতিদিনই সময়মতো অফিসে হাজির হন এবং সময়নিষ্ঠতার চমৎকার নজির রেখেছেন।'
+              ? 'Arrives on time almost every day and maintains an exemplary punctuality record.'
               : punctualityRate >= 65
-              ? 'বেশিরভাগ দিন সময়মতো আসলেও মাঝে মাঝে ১০-২৫ মিনিট দেরিতে আসার প্রবণতা রয়েছে।'
-              : 'দেরিতে আসার হার বেশ উদ্বেগজনক; নিয়মিত ১০:১৫ AM এর পর প্রবেশ করছেন।'
+              ? 'Punctual on most days with occasional 10–25 minute morning delays.'
+              : 'Arrival punctuality shows noticeable inconsistency with recurring morning delays.'
           }`
 
     const slackingAnalysisNarrative =
       daysPresent === 0
-        ? `উপস্থিতি না থাকায় ফাঁকিঝুঁকি পর্যালোচনা প্রযোজ্য নয়।`
-        : `ফাঁকিঝুঁকির মাত্রা: ${
-            slackingRiskLevel === 'LOW' ? 'অত্যন্ত নিম্ন (সৎ ও দায়িত্বশীল)' : slackingRiskLevel === 'MODERATE' ? 'মাঝারি (তদারকি প্রয়োজন)' : 'উচ্চ ঝুঁকি (ফাঁকি দেওয়ার প্রবণতা বিদ্যমান)'
-          }। কর্মনিষ্ঠা স্কোর (Diligence Score): ${diligence}/100। দৈনিক গড় বিরতি ${avgDailyBreak} (${
+        ? 'Slacking evaluation not applicable due to lack of presence data.'
+        : `Slacking Risk Level: ${
+            slackingRiskLevel === 'LOW'
+              ? 'Low Risk (Honest, dedicated, and active)'
+              : slackingRiskLevel === 'MODERATE'
+              ? 'Moderate Risk (Occasional lapses; monitoring recommended)'
+              : 'High Risk (Significant unproductive intervals detected)'
+          }. Diligence Score: ${diligence}/100. Average daily break: ${avgDailyBreak} (${
             avgDailyBreakMins <= 50
-              ? 'নির্ধারিত ৬০ মিনিটের চেয়েও কম বিরতি নেন'
+              ? 'Well within the allowed 60-minute window'
               : avgDailyBreakMins <= 65
-              ? 'স্বাভাবিক ও মানসম্মত বিরতি'
-              : `নির্ধারিত বিরতির চেয়ে গড়ে ${Math.round(breakExcessMins)} মিনিট অতিরিক্ত সময় অপচয় করেন`
-          })। ${
+              ? 'Standard compliant break duration'
+              : `Averages ${Math.round(breakExcessMins)} minutes over designated break allowance`
+          }). ${
             userEvents && userEvents.unprodSec > 3600
-              ? `কাজের সময় আনপ্রোডাক্টিভ সাইট/অ্যাপ ব্যবহারে দৈনিক কিছু সময় চলে যায়।`
-              : `কাজের মাঝে অযথা ডেস্ক ত্যাগের অস্বাভাবিক বা ধারাবাহিক কোনো ইতিহাস নেই।`
+              ? 'Telemetry logs indicate noticeable unproductive website or application usage during active shifts.'
+              : 'No abnormal or patterned desk absence detected during working intervals.'
           }`
 
     const workConsistencyNarrative =
       daysPresent === 0
-        ? `চলতি মাসে কর্মঘণ্টার তথ্য নেই।`
-        : `গড় কার্যকর কর্মঘণ্টা: ${avgDailyWork} (প্রত্যাশিত: ০৮h ০০m)। গড় অফিস প্রস্থান: ${avgClockOut}। ${
+        ? 'No active working hour data recorded this month.'
+        : `Average daily productive time: ${avgDailyWork} (Target: 08h 00m). Average departure: ${avgClockOut}. ${
             avgDailyWorkHours >= 8
-              ? 'পূর্ণ শিফটের দায়িত্ব পূরণ করেন এবং দায়িত্ব সম্পন্ন না হওয়া পর্যন্ত ডেস্কে সচেষ্ট থাকেন।'
+              ? 'Consistently fulfills full shift quotas and remains dedicated until targets are met.'
               : avgDailyWorkHours >= 7
-              ? 'মোটামুটি ভালো কর্মঘণ্টা পূরণ করলেও কিছুটা দ্রুত অফিস ত্যাগের অভ্যাস লক্ষ্য করা গেছে।'
-              : 'দৈনিক কর্মঘণ্টা ঘাটতি রয়েছে; প্রত্যাশিত সময়ের আগেই লগআউট করার নজির রয়েছে।'
+              ? 'Satisfactory working hours with minor early departures observed on specific days.'
+              : 'Daily productive hours fall below shift benchmarks; early logout pattern observed.'
           }`
 
     const managerRecommendationNarrative =
       aiArchetype.id === 'high-performer'
-        ? 'কর্মীর পারফরম্যান্স ও উপস্থিতি উভয়ই চমৎকার। মাসিক সম্মাননা বা প্রশংসাপত্র দিয়ে তাকে উৎসাহিত রাখুন।'
+        ? 'Performance and attendance are stellar. Recognize contributions with team appreciation or milestone incentives.'
         : aiArchetype.id === 'late-sprinter'
-        ? 'কাজে আন্তরিকতা প্রশংসনীয় হলেও সকালের শিফট ডিসিপ্লিনের জন্য ১০:০০ AM-এর মধ্যে অফিসে পৌঁছানোর পরামর্শ দিন।'
+        ? 'Strong task commitment is evident. Recommend reinforcing morning shift schedule to align better with team meetings.'
         : aiArchetype.id === 'break-stretcher'
-        ? 'লাঞ্চ ও নামাজের বিরতির সময়সীমা (সর্বোচ্চ ৬০ মিনিট) কঠোরভাবে মেনে চলতে অনুরোধ করুন এবং শিফট মনিটর করুন।'
+        ? 'Review daily lunch and personal break limits with employee to maintain healthy shift workflow.'
         : aiArchetype.id === 'chronic-latecomer'
-        ? 'নিয়মিত দেরিতে আসার বিষয়ে মৌখিক বা এইচআর নীতিমালার আলোকে সতর্কবার্তা প্রদান আবশ্যক।'
+        ? 'Address recurring late arrivals via 1-on-1 feedback session or standard company HR attendance guidelines.'
         : aiArchetype.id === 'disengagement-risk'
-        ? 'অনুপস্থিতি ও ফাঁকিঝুঁকির কারণ অনুসন্ধানে এইচআর অডিট ও জরুরি ওয়ান-অন-ওয়ান মিটিং পরিচালনা করুন।'
-        : 'কর্মীর কাজের ধারাবাহিকতা সন্তোষজনক; সাধারণ রুটিন তদারকি অব্যাহত রাখুন।'
+        ? 'Conduct an urgent check-in to investigate root causes behind absenteeism and productivity drop.'
+        : 'Work consistency is satisfactory. Maintain standard periodic operational check-ins.'
 
     employeeRecords.push({
       id: u.id,

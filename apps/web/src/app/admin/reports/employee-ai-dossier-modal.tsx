@@ -63,11 +63,11 @@ export default function EmployeeAiDossierModal({
 
   // Grade badge helper
   const getGrade = (score: number) => {
-    if (score >= 90) return { grade: 'A+', label: 'অনুকরণীয় (Exemplary)', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' }
-    if (score >= 80) return { grade: 'A', label: 'চমৎকার (Great)', color: 'text-blue-500 bg-blue-500/10 border-blue-500/20' }
-    if (score >= 70) return { grade: 'B', label: 'সন্তোষজনক (Good)', color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20' }
-    if (score >= 60) return { grade: 'C', label: 'তদারকি আবশ্যক (Fair)', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' }
-    return { grade: 'D', label: 'ফাঁকিঝুঁকি ঝুঁকি (High Risk)', color: 'text-rose-500 bg-rose-500/10 border-rose-500/20' }
+    if (score >= 90) return { grade: 'A+', label: 'Exemplary', color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' }
+    if (score >= 80) return { grade: 'A', label: 'Great', color: 'text-blue-500 bg-blue-500/10 border-blue-500/20' }
+    if (score >= 70) return { grade: 'B', label: 'Good', color: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20' }
+    if (score >= 60) return { grade: 'C', label: 'Needs Attention', color: 'text-amber-500 bg-amber-500/10 border-amber-500/20' }
+    return { grade: 'D', label: 'High Slacking Risk', color: 'text-rose-500 bg-rose-500/10 border-rose-500/20' }
   }
 
   const gradeInfo = getGrade(diligenceScore)
@@ -129,7 +129,7 @@ export default function EmployeeAiDossierModal({
             }`}
           >
             <Sparkles className="w-4 h-4" />
-            <span>AI স্বভাব ও আচরণ বিশ্লেষণ (Behavioral Dossier)</span>
+            <span>Behavioral Dossier &amp; Work Habits</span>
           </button>
           <button
             onClick={() => setActiveTab('daily-history')}
@@ -140,7 +140,7 @@ export default function EmployeeAiDossierModal({
             }`}
           >
             <Calendar className="w-4 h-4" />
-            <span>পুরো মাসের উপস্থিতি হিস্ট্রি ({dailyLogs.length} দিন)</span>
+            <span>Monthly Attendance History ({dailyLogs.length} Days)</span>
           </button>
         </div>
 
@@ -157,9 +157,6 @@ export default function EmployeeAiDossierModal({
                       <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${aiArchetype.badgeColor}`}>
                         {aiArchetype.titleEn}
                       </span>
-                      <span className="text-sm font-bold text-gray-900 dark:text-white">
-                        ({aiArchetype.titleBn})
-                      </span>
                     </div>
                     <p className="text-sm text-gray-700 dark:text-gray-300 font-medium max-w-2xl">
                       {aiArchetype.tagline}
@@ -169,7 +166,7 @@ export default function EmployeeAiDossierModal({
                   {/* Slacking Risk Indicator */}
                   <div className="flex md:flex-col items-center md:items-end justify-between gap-2 p-3 rounded-xl bg-white/80 dark:bg-gray-900/80 border border-gray-200 dark:border-gray-800 shrink-0">
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                      ফাঁকিঝুঁকির মাত্রা (Slacking Risk)
+                      Slacking Risk Level
                     </span>
                     <span
                       className={`px-3 py-1 rounded-full text-xs font-bold border ${
@@ -180,9 +177,9 @@ export default function EmployeeAiDossierModal({
                           : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
                       }`}
                     >
-                      {slackingRiskLevel === 'LOW' && '🛡️ নিম্ন ঝুঁকি (সৎ ও সক্রিয়)'}
-                      {slackingRiskLevel === 'MODERATE' && '⚠️ মাঝারি ঝুঁকি (তদারকি প্রয়োজন)'}
-                      {slackingRiskLevel === 'HIGH' && '🛑 উচ্চ ঝুঁকি (ফাঁকির প্রবণতা)'}
+                      {slackingRiskLevel === 'LOW' && '🛡️ Low Risk (Honest & Active)'}
+                      {slackingRiskLevel === 'MODERATE' && '⚠️ Moderate Risk (Supervision Recommended)'}
+                      {slackingRiskLevel === 'HIGH' && '🛑 High Risk (Slacking Detected)'}
                     </span>
                   </div>
                 </div>
@@ -193,56 +190,56 @@ export default function EmployeeAiDossierModal({
                 {/* Avg Clock In */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় আগমন (Clock In)</span>
+                    <span>Average Clock In</span>
                     <Clock className="w-4 h-4 text-indigo-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
                     {avgClockIn}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    শিফট: ১০:০০ AM • {punctualityRate}% সময়নিষ্ঠতা
+                    Shift: 10:00 AM • {punctualityRate}% Punctual
                   </div>
                 </div>
 
                 {/* Avg Clock Out */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় প্রস্থান (Clock Out)</span>
+                    <span>Average Clock Out</span>
                     <Clock className="w-4 h-4 text-blue-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
                     {avgClockOut}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    শিফট সমাপ্তি: ০৭:০০ PM
+                    Shift End: 07:00 PM
                   </div>
                 </div>
 
                 {/* Avg Daily Work */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় দৈনিক কার্যকর কাজ</span>
+                    <span>Daily Productive Time</span>
                     <Briefcase className="w-4 h-4 text-emerald-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                     {avgDailyWork}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    মোট কার্যদিবস: {daysPresent}/{totalWorkingDays} দিন
+                    Days Active: {daysPresent}/{totalWorkingDays} days
                   </div>
                 </div>
 
                 {/* Avg Daily Break */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-900/50 space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় দৈনিক বিরতি (Break)</span>
+                    <span>Average Daily Break</span>
                     <Coffee className="w-4 h-4 text-amber-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
                     {avgDailyBreak}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400">
-                    অনুমোদিত সীমা: ≤ ৬০ মিনিট
+                    Allowed Limit: ≤ 60 min
                   </div>
                 </div>
               </div>
@@ -251,7 +248,7 @@ export default function EmployeeAiDossierModal({
               <div className="space-y-4">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-indigo-500" />
-                  <span>AI স্বভাব ও কার্যকলাপে ফাঁকিঝুঁকির পূর্ণাঙ্গ রিপোর্ট (In-depth Habit Analysis)</span>
+                  <span>Comprehensive Workplace Behavioral Analysis</span>
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -259,21 +256,21 @@ export default function EmployeeAiDossierModal({
                   <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#151c2c] space-y-2.5">
                     <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-sm">
                       <Clock className="w-4 h-4" />
-                      <span>১. সময়নিষ্ঠতা ও আগমন স্বভাব (Arrival & Punctuality)</span>
+                      <span>1. Arrival &amp; Punctuality Habits</span>
                     </div>
                     <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                       {aiHabitReport.arrivalHabit}
                     </p>
                     <div className="flex items-center gap-3 pt-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800">
-                      <span>উপস্থিতি: <strong className="text-gray-900 dark:text-white">{daysPresent} দিন</strong></span>
+                      <span>Present: <strong className="text-gray-900 dark:text-white">{daysPresent} Days</strong></span>
                       <span>•</span>
-                      <span>লেট: <strong className="text-amber-600 dark:text-amber-400">{daysLate} দিন</strong></span>
+                      <span>Late: <strong className="text-amber-600 dark:text-amber-400">{daysLate} Days</strong></span>
                       <span>•</span>
-                      <span>অনুপস্থিত: <strong className="text-rose-600 dark:text-rose-400">{daysAbsent} দিন</strong></span>
+                      <span>Absent: <strong className="text-rose-600 dark:text-rose-400">{daysAbsent} Days</strong></span>
                       {daysLeave > 0 && (
                         <>
                           <span>•</span>
-                          <span>ছুটি: <strong className="text-blue-500">{daysLeave} দিন</strong></span>
+                          <span>Leave: <strong className="text-blue-500">{daysLeave} Days</strong></span>
                         </>
                       )}
                     </div>
@@ -283,15 +280,15 @@ export default function EmployeeAiDossierModal({
                   <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#151c2c] space-y-2.5">
                     <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
                       <ShieldCheck className="w-4 h-4" />
-                      <span>২. কাজের সততা ও ফাঁকিঝুঁকি মূল্যায়ন (Diligence vs Slacking)</span>
+                      <span>2. Diligence &amp; Slacking Risk Assessment</span>
                     </div>
                     <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                       {aiHabitReport.slackingAnalysis}
                     </p>
                     <div className="flex items-center gap-3 pt-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800">
-                      <span>কর্মনিষ্ঠা স্কোর: <strong className="text-indigo-600 dark:text-indigo-400">{diligenceScore}/100</strong></span>
+                      <span>Diligence Score: <strong className="text-indigo-600 dark:text-indigo-400">{diligenceScore}/100</strong></span>
                       <span>•</span>
-                      <span>দৈনিক গড় ব্রেক: <strong className="text-gray-900 dark:text-white">{avgDailyBreak}</strong></span>
+                      <span>Avg Break: <strong className="text-gray-900 dark:text-white">{avgDailyBreak}</strong></span>
                     </div>
                   </div>
 
@@ -299,15 +296,15 @@ export default function EmployeeAiDossierModal({
                   <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#151c2c] space-y-2.5">
                     <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-sm">
                       <TrendingUp className="w-4 h-4" />
-                      <span>৩. কাজের স্থায়িত্ব ও শিফট ডিসিপ্লিন (Work Consistency & Focus)</span>
+                      <span>3. Work Consistency &amp; Shift Discipline</span>
                     </div>
                     <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                       {aiHabitReport.workConsistency}
                     </p>
                     <div className="flex items-center gap-3 pt-2 text-xs text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800">
-                      <span>গড় কর্মঘণ্টা: <strong className="text-gray-900 dark:text-white">{avgDailyWork}</strong></span>
+                      <span>Avg Work Hours: <strong className="text-gray-900 dark:text-white">{avgDailyWork}</strong></span>
                       <span>•</span>
-                      <span>গড় লগআউট: <strong className="text-gray-900 dark:text-white">{avgClockOut}</strong></span>
+                      <span>Avg Logout: <strong className="text-gray-900 dark:text-white">{avgClockOut}</strong></span>
                     </div>
                   </div>
 
@@ -315,13 +312,13 @@ export default function EmployeeAiDossierModal({
                   <div className="p-5 rounded-2xl border border-indigo-200 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2.5">
                     <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-300 font-bold text-sm">
                       <Award className="w-4 h-4" />
-                      <span>৪. ম্যানেজারের জন্য এআই পরামর্শ (Actionable Recommendation)</span>
+                      <span>4. Manager Guidance &amp; Action Plan</span>
                     </div>
                     <p className="text-sm leading-relaxed text-indigo-950 dark:text-indigo-200 font-medium">
                       {aiHabitReport.managerRecommendation}
                     </p>
                     <div className="flex items-center gap-2 pt-2 text-xs text-indigo-600 dark:text-indigo-400 border-t border-indigo-200/50 dark:border-indigo-900/30">
-                      <span>অফিসিয়ালি অটো-জেনারেটেড এআই সিদ্ধান্ত</span>
+                      <span>Automated Workforce Intelligence Analysis</span>
                     </div>
                   </div>
                 </div>
@@ -333,7 +330,7 @@ export default function EmployeeAiDossierModal({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  {monthName} — তারিখ অনুযায়ী উপস্থিতির পূর্ণাঙ্গ হিস্ট্রি
+                  {monthName} — Daily Attendance Breakdown
                 </h3>
                 <div className="flex items-center gap-2 text-xs">
                   <span className="flex items-center gap-1 text-emerald-600 font-medium">
@@ -356,14 +353,14 @@ export default function EmployeeAiDossierModal({
                   <table className="w-full text-left text-sm">
                     <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <tr>
-                        <th className="py-3 px-4">তারিখ (Date)</th>
-                        <th className="py-3 px-4">দিন (Day)</th>
-                        <th className="py-3 px-4">আগমন (Clock In)</th>
-                        <th className="py-3 px-4">প্রস্থান (Clock Out)</th>
-                        <th className="py-3 px-4">কাজের সময় (Work)</th>
-                        <th className="py-3 px-4">বিরতি (Break)</th>
-                        <th className="py-3 px-4">স্ট্যাটাস (Status)</th>
-                        <th className="py-3 px-4">মন্তব্য (Notes)</th>
+                        <th className="py-3 px-4">Date</th>
+                        <th className="py-3 px-4">Day</th>
+                        <th className="py-3 px-4">Clock In</th>
+                        <th className="py-3 px-4">Clock Out</th>
+                        <th className="py-3 px-4">Work Duration</th>
+                        <th className="py-3 px-4">Break Duration</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Notes</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-[#121824]">
@@ -456,13 +453,13 @@ export default function EmployeeAiDossierModal({
         <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
           <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-            <span>AI স্বভাব বিশ্লেষণ ভিত্তিক রিপোর্ট • নির্ভুল উপস্থিতি ও কর্মঘণ্টা পরিমাপ</span>
+            <span>Workforce Intelligence Dossier • Verified Attendance &amp; Shift Analytics</span>
           </div>
           <button
             onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-sm"
+            className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-sm cursor-pointer"
           >
-            বন্ধ করুন (Close)
+            Close
           </button>
         </div>
       </div>

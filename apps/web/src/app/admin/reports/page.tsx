@@ -31,12 +31,14 @@ import {
   Coffee,
   Award,
   Briefcase,
+  Headphones,
 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import AdminHeader from '../admin-header'
 import { getLocalTodayString } from '@/utils/date'
 import { useAdminFilter } from '../admin-filter-context'
 import EmployeeAiDossierModal from './employee-ai-dossier-modal'
+import { ContactSupportModal } from '@/components/support/contact-support-modal'
 import type { MonthlyEmployeeRecord } from '@/app/api/admin/reports/monthly-attendance'
 
 type ReportCategory =
@@ -216,6 +218,7 @@ export default function ReportsPage() {
   const [monthlyLoading, setMonthlyLoading] = useState(false)
   const [selectedDossierEmployee, setSelectedDossierEmployee] = useState<MonthlyEmployeeRecord | null>(null)
   const [monthlySearchQuery, setMonthlySearchQuery] = useState('')
+  const [isSupportModalOpen, setIsSupportModalOpen] = useState(false)
 
   const fetchMonthlyAttendanceData = useCallback(async () => {
     try {
@@ -755,12 +758,21 @@ export default function ReportsPage() {
                     <span>Monthly Attendance &amp; AI Behavioral Analysis</span>
                   </h2>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    ইউজারদের মাসিক গড় উপস্থিতি (Clock In, Clock Out, Work, Break) এবং এআই দিয়ে তাদের সকল স্বভাব ও ফাঁকিঝুঁকি বিশ্লেষণ
+                    Monthly employee attendance averages (Clock In, Clock Out, Work, Break) and behavioral workforce intelligence.
                   </p>
                 </div>
 
-                {/* Month Picker & Navigation */}
-                <div className="flex items-center gap-3">
+                {/* Month Picker, Actions & Contact Support */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsSupportModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all cursor-pointer"
+                  >
+                    <Headphones className="w-3.5 h-3.5" />
+                    <span>Contact Support</span>
+                  </button>
+
                   <div className="flex items-center bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-1 shadow-sm">
                     <button
                       onClick={handlePrevMonth}
@@ -804,70 +816,70 @@ export default function ReportsPage() {
                 {/* 1. Avg Clock In */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>কোম্পানি গড় আগমন</span>
+                    <span>Company Avg Clock In</span>
                     <Clock className="w-4 h-4 text-indigo-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
                     {monthlySummary?.avgCompanyClockIn || '-'}
                   </div>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    শিফট শুরু: ১০:০০ AM
+                    Shift Start: 10:00 AM
                   </div>
                 </div>
 
                 {/* 2. Avg Clock Out */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>কোম্পানি গড় প্রস্থান</span>
+                    <span>Company Avg Clock Out</span>
                     <Clock className="w-4 h-4 text-blue-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
                     {monthlySummary?.avgCompanyClockOut || '-'}
                   </div>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    শিফট শেষ: ০৭:০০ PM
+                    Shift End: 07:00 PM
                   </div>
                 </div>
 
                 {/* 3. Avg Daily Work */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় দৈনিক কাজ</span>
+                    <span>Avg Daily Work</span>
                     <Briefcase className="w-4 h-4 text-emerald-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                     {monthlySummary?.avgCompanyWorkDuration || '00h 00m'}
                   </div>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    লক্ষ্য: ০৮h ০০m / দিন
+                    Target: 08h 00m / day
                   </div>
                 </div>
 
                 {/* 4. Avg Daily Break */}
                 <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় দৈনিক বিরতি</span>
+                    <span>Avg Daily Break</span>
                     <Coffee className="w-4 h-4 text-amber-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
                     {monthlySummary?.avgCompanyBreakDuration || '00h 00m'}
                   </div>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    অনুমোদিত সীমা: ≤ ৬০ মি.
+                    Allowed: ≤ 60 min
                   </div>
                 </div>
 
                 {/* 5. Attendance & Punctuality */}
                 <div className="col-span-2 md:col-span-1 p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400">
-                    <span>গড় উপস্থিতি ও সময়নিষ্ঠতা</span>
+                    <span>Attendance &amp; Punctuality</span>
                     <ShieldCheck className="w-4 h-4 text-purple-500" />
                   </div>
                   <div className="text-xl font-bold tracking-tight text-purple-600 dark:text-purple-400">
                     {monthlySummary?.avgAttendanceRate || 0}%
                   </div>
                   <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                    অন-টাইম হার: {monthlySummary?.avgPunctualityRate || 0}%
+                    On-Time Rate: {monthlySummary?.avgPunctualityRate || 0}%
                   </div>
                 </div>
               </div>
@@ -907,15 +919,15 @@ export default function ReportsPage() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
                         <tr>
-                          <th className="py-3.5 px-5">এমপ্লয়ি (Employee)</th>
-                          <th className="py-3.5 px-4">উপস্থিতি (Attendance)</th>
-                          <th className="py-3.5 px-4">গড় আগমন (Avg In)</th>
-                          <th className="py-3.5 px-4">গড় প্রস্থান (Avg Out)</th>
-                          <th className="py-3.5 px-4">গড় কাজ (Avg Work)</th>
-                          <th className="py-3.5 px-4">গড় বিরতি (Avg Break)</th>
-                          <th className="py-3.5 px-4">AI স্বভাব ও পারসোনা</th>
-                          <th className="py-3.5 px-4">ফাঁকিঝুঁকি (Slacking)</th>
-                          <th className="py-3.5 px-5 text-right">অ্যাকশন (AI Dossier)</th>
+                          <th className="py-3.5 px-5">Employee</th>
+                          <th className="py-3.5 px-4">Attendance</th>
+                          <th className="py-3.5 px-4">Avg In</th>
+                          <th className="py-3.5 px-4">Avg Out</th>
+                          <th className="py-3.5 px-4">Avg Work</th>
+                          <th className="py-3.5 px-4">Avg Break</th>
+                          <th className="py-3.5 px-4">Work Archetype</th>
+                          <th className="py-3.5 px-4">Slacking Risk</th>
+                          <th className="py-3.5 px-5 text-right">Dossier &amp; History</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -951,7 +963,7 @@ export default function ReportsPage() {
                               <td className="py-3.5 px-4">
                                 <div className="space-y-1">
                                   <div className="flex items-center justify-between gap-2 font-semibold text-gray-900 dark:text-white">
-                                    <span>{emp.daysPresent} / {emp.totalWorkingDays} দিন</span>
+                                    <span>{emp.daysPresent} / {emp.totalWorkingDays} days</span>
                                     <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
                                       {emp.attendanceRate}%
                                     </span>
@@ -973,7 +985,7 @@ export default function ReportsPage() {
                                       {emp.avgClockIn}
                                     </span>
                                     <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                                      {emp.punctualityRate}% অন-টাইম
+                                      {emp.punctualityRate}% on-time
                                     </div>
                                   </div>
                                 ) : (
@@ -1015,9 +1027,9 @@ export default function ReportsPage() {
                                       : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                                   }`}
                                 >
-                                  {emp.slackingRiskLevel === 'LOW' && '🛡️ নিম্ন ঝুঁকি (Good)'}
-                                  {emp.slackingRiskLevel === 'MODERATE' && '⚠️ মাঝারি ঝুঁকি'}
-                                  {emp.slackingRiskLevel === 'HIGH' && '🛑 ফাঁকিঝুঁকি (Risk)'}
+                                  {emp.slackingRiskLevel === 'LOW' && '🛡️ Low Risk (Good)'}
+                                  {emp.slackingRiskLevel === 'MODERATE' && '⚠️ Moderate Risk'}
+                                  {emp.slackingRiskLevel === 'HIGH' && '🛑 High Risk (Slacking)'}
                                 </span>
                               </td>
 
@@ -1028,7 +1040,7 @@ export default function ReportsPage() {
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 transition-all hover:scale-[1.02] shadow-xs cursor-pointer"
                                 >
                                   <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                                  <span>স্বভাব ও হিস্ট্রি</span>
+                                  <span>View Dossier</span>
                                 </button>
                               </td>
                             </tr>
@@ -1983,6 +1995,12 @@ export default function ReportsPage() {
           onClose={() => setSelectedDossierEmployee(null)}
         />
       )}
+
+      {/* Official Technical Support Modal */}
+      <ContactSupportModal
+        isOpen={isSupportModalOpen}
+        onClose={() => setIsSupportModalOpen(false)}
+      />
     </div>
   )
 }
