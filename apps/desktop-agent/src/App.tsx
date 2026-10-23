@@ -506,6 +506,14 @@ export default function App() {
               break;
           }
         });
+
+        // Trigger native application restart after update installation completes
+        setUpdateStatusText('Restarting application...');
+        try {
+          await invoke('restart_app');
+        } catch (restartErr) {
+          console.warn('Native restart command failed:', restartErr);
+        }
       } else {
         // Fallback for standalone / direct download link
         const targetUrl = updateAvailable.url || 'https://app.tracmatrix.com/downloads/Smart-Employee-Tracker.exe';

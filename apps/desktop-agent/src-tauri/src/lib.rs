@@ -440,6 +440,14 @@ fn is_auto_start_enabled() -> Result<bool, String> {
     }
 }
 
+#[tauri::command]
+fn restart_app(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        app_handle.restart();
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -454,7 +462,8 @@ pub fn run() {
         native_request,
         bring_to_front,
         enable_auto_start,
-        is_auto_start_enabled
+        is_auto_start_enabled,
+        restart_app
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
