@@ -1,5 +1,13 @@
 # Smart Employee Tracker
 
+<div align="center">
+
+<p align="center">
+  <img src="docs/screenshots/hero-banner.png" alt="Smart Employee Tracker - Enterprise Self-Hosted Workforce Productivity and Time Tracking Suite" width="100%" />
+</p>
+
+### Enterprise Self-Hosted Workforce Analytics & Employee Time Tracking Platform
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/badge/Release-v1.1.0-emerald.svg)](https://github.com/rsmmonaem/smart-employee-tracker/releases)
 [![Next.js](https://img.shields.io/badge/Next.js-14.2-black.svg?logo=next.js)](https://nextjs.org/)
@@ -8,22 +16,64 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg?logo=postgresql)](https://www.postgresql.org/)
 [![WhatsApp Support](https://img.shields.io/badge/WhatsApp-Support-25D366.svg?logo=whatsapp)](https://wa.me/message/rsmmonaemwp)
 
-**Smart Employee Tracker** is an enterprise-grade, self-hosted **Employee Tracker** and workforce productivity monitoring platform. It combines a multi-tenant cloud management portal with native cross-platform desktop tracking agents for **Windows** and **macOS**.
-
-Whether you manage an in-office team, remote contractors, or hybrid staff, Smart Employee Tracker provides verifiable visual proof of work, automated time tracking, application telemetry, and payroll-ready timesheets without third-party vendor lock-in.
+</div>
 
 ---
 
-## ⚡ Key Highlights
+**Smart Employee Tracker** is an enterprise-grade, self-hosted **Employee Tracker** and workforce productivity monitoring system. It seamlessly unifies a multi-tenant web administration portal with ultra-lightweight desktop tracking agents for **macOS** and **Windows**.
 
-- **Desktop Tracking Agent (macOS & Windows):** Native client built with Tauri 2 and Rust for lightweight memory footprint (<30 MB RAM) and background execution.
-- **Ultra-Efficient Screen Capture:** Automatic WebP compression engine reducing screenshot storage by **up to 85%** (50–70 KB per capture) while maintaining crisp text clarity.
-- **On-Demand Screenshot Streaming:** Secure proxied image streaming with tenant isolation and immutable browser caching.
-- **Active Window & URL Telemetry:** Real-time logging of active applications and website domains without capturing sensitive keystroke contents.
-- **Attendance & Timesheets:** Automatic shift tracking, breaks, clock-in/out, and exportable timesheets.
-- **1-Click Web-Based Installer (`/install`):** Browser-based setup wizard that runs database migrations, creates storage buckets, and configures administrator accounts with zero manual SQL.
-- **Built-in Auto Updater:** In-app updates for desktop clients on macOS and Windows with native process restart.
-- **Multi-Tenant Architecture:** Multi-organization support with Row-Level Security (RLS) and SuperAdmin management portal.
+Whether you manage an in-office workforce, remote global contractors, or hybrid teams, Smart Employee Tracker gives you verifiable visual proof of work, automated shift tracking, application usage telemetry, and payroll-ready timesheets with complete data sovereignty and zero vendor lock-in.
+
+---
+
+## 📸 Interface Tour & Visual Showcase
+
+### 1. Central Admin Dashboard & Team Status
+Real-time visibility into active employees, on-shift team members, daily work duration, productivity percentages, and immediate visual status across all departments.
+
+<p align="center">
+  <img src="docs/screenshots/01-dashboard-overview.jpg" alt="Smart Employee Tracker Admin Dashboard - Live Workforce Attendance and Team Activity Overview" width="100%" />
+</p>
+
+---
+
+### 2. Deep Productivity Telemetry & Activity Analytics
+Minute-by-minute breakdown of active desktop applications, visited web domains, productive vs. non-productive categories, and idle time telemetry.
+
+<p align="center">
+  <img src="docs/screenshots/02-productivity-telemetry.jpg" alt="Smart Employee Tracker Productivity Telemetry - Active Windows, Web Domains and App Usage Breakdown" width="100%" />
+</p>
+
+---
+
+### 3. Native Cross-Platform Desktop Agent
+Ultra-lightweight native client built with **Tauri 2** and **Rust** (<30 MB RAM). Features silent background capture, idle timeout detection, native system tray controls, and auto-restart updates.
+
+<p align="center">
+  <img src="docs/screenshots/03-desktop-agent-timer.png" alt="Smart Employee Tracker Desktop Agent - Lightweight Rust and Tauri Client for Windows and macOS" width="55%" />
+</p>
+
+---
+
+### 4. Timesheet & Behavioral Analytics Reports
+Exportable attendance ledgers, automated shift summaries, weekly work pattern analytics, and payroll-ready reports for HR and management.
+
+<p align="center">
+  <img src="docs/screenshots/04-analytics-reports.png" alt="Smart Employee Tracker Analytics & Reports - Department Timesheets, Work Patterns and Performance Metrics" width="100%" />
+</p>
+
+---
+
+## ⚡ Core Features & Capabilities
+
+- **Lightweight Desktop Agent (macOS & Windows):** Native client engineered in Rust & Tauri v2 with minimal system overhead, offline caching, and native OS permission handling.
+- **Ultra-Efficient Screen Capture:** Automatic WebP compression engine cutting screenshot storage by **up to 85%** (50–70 KB per screenshot) with crisp text readability.
+- **On-Demand Screenshot Streaming:** Secure proxied image streaming with tenant isolation, strict RLS enforcement, and immutable browser caching.
+- **Application & Domain Telemetry:** Tracks active application titles and browser URLs without logging intrusive keystrokes or confidential credentials.
+- **Automated Attendance & Timesheets:** Automatic shift tracking, breaks, clock-in/out stamps, and exportable CSV reports.
+- **1-Click Web-Based Installer (`/install`):** Automated setup wizard that handles database schema migrations, creates storage buckets, and initializes the SuperAdmin profile in seconds.
+- **Seamless Auto Updater:** Built-in auto-updater for macOS and Windows desktop agents with zero-friction native restart.
+- **True Multi-Tenancy:** Complete tenant isolation powered by PostgreSQL Row-Level Security (RLS) and centralized administration.
 
 ---
 
@@ -73,25 +123,25 @@ Smart Employee Tracker supports both automated 1-click web installation and stan
 
 ### Option 2: Step-by-Step Manual Deployment
 For complete deployment guides including **cPanel Setup**, **Ubuntu VPS Setup**, **PM2 Configuration**, and **Nginx Reverse Proxy**, see:  
-👉 **[Read Full Installation Guide (INSTALLATION.md)](INSTALLATION.md)**
+👉 **[Read Full Installation Guide (INSTALLATION.md)](docs/INSTALLATION.md)**
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Web Application:** Next.js 14, React 18, TypeScript, Tailwind CSS, Lucide Icons
+- **Web Application:** Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS, Lucide Icons
 - **Desktop Client:** Tauri 2, Rust, Vite, React
-- **Database & Storage:** PostgreSQL 15, Supabase Storage (WebP screenshots)
-- **Image Processing:** Sharp (high-performance WebP encoder)
-- **Deployment Targets:** Linux VPS (Ubuntu/Debian), cPanel with Node.js selector, CyberPanel, Docker
+- **Database & Storage:** PostgreSQL 15, Supabase Storage (optimized WebP screenshots)
+- **Image Processing:** Sharp (high-performance WebP compression engine)
+- **Deployment Targets:** Linux VPS (Ubuntu/Debian), cPanel with Node.js Selector, CyberPanel, Docker
 
 ---
 
 ## 🔐 Security & Privacy
 
-- **Row-Level Security (RLS):** Strict multi-tenant data separation enforced at the database level.
-- **Privacy-Compliant Telemetry:** Tracks app titles and activity levels without recording private keystrokes or sensitive input.
-- **Quarantine & Gatekeeper Support:** Self-contained bundles with clear permission guidelines for macOS Screen Recording and Accessibility.
+- **Row-Level Security (RLS):** Strict multi-tenant isolation enforced directly at the database layer.
+- **Privacy-Compliant Telemetry:** Tracks app titles and activity levels without capturing private keystrokes or sensitive input.
+- **Security & Gatekeeper Support:** Packaged bundles with clear permission onboarding for macOS Screen Recording and Accessibility.
 
 ---
 
