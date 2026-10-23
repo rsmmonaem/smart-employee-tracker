@@ -251,16 +251,39 @@ Your web application runs locally on `http://127.0.0.1:3000`. Use a reverse prox
 
 ---
 
-### Option C: Apache / cPanel
+### Option C: cPanel Hosting (Step-by-Step with "Setup Node.js App")
 
-If using cPanel with Apache:
-1. Ensure `mod_proxy` and `mod_proxy_http` are enabled.
-2. In the domain root `.htaccess`:
-   ```apache
-   RewriteEngine On
-   RewriteRule ^(.*)$ http://127.0.0.1:3000/$1 [P,L]
-   RequestHeader set X-Forwarded-Proto "https"
+Over 60% of buyers deploy on cPanel (Namecheap, Hostinger, Bluehost, GoDaddy, or any CloudLinux cPanel). Follow these simple steps:
+
+#### Step 1: Upload & Extract via File Manager
+1. Log in to your **cPanel Dashboard**.
+2. Open **File Manager** and navigate to your home directory or domain root (e.g., `/home/username/smart-employee-tracker`).
+3. Upload the project zip and click **Extract**.
+
+#### Step 2: Create Node.js Application in cPanel
+1. In cPanel, search for and open **"Setup Node.js App"** (under the Software section).
+2. Click the **"Create Application"** button:
+   - **Node.js version:** Select **`20.x`** (or `18.x LTS`).
+   - **Application mode:** Select **`Production`**.
+   - **Application root:** Enter `smart-employee-tracker` (the folder where files were extracted).
+   - **Application URL:** Select your domain or subdomain (e.g., `app.yourdomain.com`).
+   - **Application startup file:** Enter `apps/web/server.js` (or `server.js`).
+3. Click **Create** (top right).
+
+#### Step 3: Install NPM Packages
+1. Once created, in the application details page, click **"Run NPM Install"** (or open cPanel **Terminal** and run `npm install`).
+2. Click **"Restart"** application.
+
+#### Step 4: Run the 1-Click Automated Web Installer
+1. Open your browser and visit:
+   ```text
+   https://app.yourdomain.com/install
    ```
+2. The visual wizard will test your database, automatically create all tables and storage buckets, provision your SuperAdmin, and launch the platform!
+
+#### Step 5: Enable Free SSL in cPanel
+1. In cPanel, search for **"SSL/TLS Status"**.
+2. Select your domain and click **"Run AutoSSL"**. In 1–2 minutes, your domain gets a free, auto-renewing SSL certificate.
 
 ---
 
